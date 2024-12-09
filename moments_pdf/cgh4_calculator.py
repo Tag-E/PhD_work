@@ -34,6 +34,8 @@ import numpy as np #to handle matrices
 import sympy as sym #to handle symbolic computations
 from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
+from pylatex import Document, Math, Matrix, Section, Subsection, Command #to produce a pdf documents with the CG coeff
+from pylatex.utils import NoEscape #also to produce a pdf document
 
 ######################## Global Variables ###############################
 
@@ -59,7 +61,7 @@ fund_index = 10
 rep_label_list = [(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(3,1),(3,2),(3,3),(3,4),(4,1),(4,2),(4,3),(4,4),(6,1),(6,2),(6,3),(6,4),(8,1),(8,2)]
 
 #latex labels of the irrep
-rep_latex_names = [f"\tau^{i[0]}_{i[1]}" for i in rep_label_list]
+rep_latex_names = [f"\\tau^{i[0]}_{i[1]}" for i in rep_label_list]
 
 #dictionaries with irreps specifics
 irrep_index = dict(zip(rep_label_list, range(n_rep))) #each irrep has an index
@@ -455,9 +457,9 @@ gamma3_list = []
 gamma4_list = []
 
 for ir in range(n_rep):
-    b = np.reshape(beta_list[ir],(dim_rep[ir],dim_rep[ir]))
-    binv = np.reshape(beta_inv_list[ir],(dim_rep[ir],dim_rep[ir]))
-    g = np.reshape(gamma_list[ir],(dim_rep[ir],dim_rep[ir]))
+    b = np.reshape(beta_list[ir],(rep_dim_list[ir],rep_dim_list[ir]))
+    binv = np.reshape(beta_inv_list[ir],(rep_dim_list[ir],rep_dim_list[ir]))
+    g = np.reshape(gamma_list[ir],(rep_dim_list[ir],rep_dim_list[ir]))
     gamma2_list.append( binv @ binv @ binv @ g @ b @ b @ b )
     gamma3_list.append( binv @ binv @ g @ b @ b )
     gamma4_list.append( binv @ g @ b )
@@ -484,6 +486,12 @@ class cg_calc:
     #folders containing all the matrix representations for all the elements of H(4)
     h4_ele_folder = 'h4_ele'
 
+    #folders containing the database with the cg coeff
+    cg_database_folder = 'cg_database'
+
+    #folders with the pdf files
+    cg_pdf_folder = 'cg_pdf'
+
 
     #specifics of the H(4) irreps
 
@@ -500,7 +508,7 @@ class cg_calc:
     #labels of the representations
     rep_label_list = [(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(3,1),(3,2),(3,3),(3,4),(4,1),(4,2),(4,3),(4,4),(6,1),(6,2),(6,3),(6,4),(8,1),(8,2)]
     #latex labels of the irrep
-    rep_latex_names = [f"\tau^{i[0]}_{i[1]}" for i in rep_index_list]
+    rep_latex_names = [f"\\tau^{i[0]}_{i[1]}" for i in rep_label_list]
     #dictionaries with irreps specifics
     irrep_index = dict(zip(rep_label_list, range(n_rep))) #each irrep has an index
     irrep_dim = dict(zip(rep_label_list, rep_dim_list)) #a dimensionality
@@ -610,7 +618,7 @@ class cg_calc:
                                     #we add the new element
                                     self.h4_mat[ir].append(new_ele)
 
-            #once we have done the computation we save to file all the matric representations for all the elements of H(4)
+            #once we have done the computation we save to file all the matrix representations for all the elements of H(4)
 
             #info print
             if verbose==True:
@@ -647,102 +655,213 @@ class cg_calc:
                 #then for the current irrep we load all the 384 matrices
                 for i in range(self.n_ele_h4):
                     with open(f'{rep_folder}/{i}.npy', 'rb') as f:
-                         self.h4_mat[i].append( np.load(f,allow_pickle=True) )
+                         self.h4_mat[ir].append( np.load(f,allow_pickle=True) )
 
 
         ## once the matrix representations for the elements of H(4) are loaded we can do the actual computation of the CG coeff ##
 
-        #first we get the multiplicities and we store them in a class variable for later use
-        self.mul_list = get_multiplicities(*kwarg)
+        #the folder where the cg coefficients should be is
+        self.cg_folder = self.cg_database_folder + '/' + ''.join([str(ir) for ir in self.chosen_irreps])
 
-        #we then compute the dimension of the bases
-        dim=1
-        for rep in self.chosen_irreps:
-            dim *= irrep_dim[rep]
+        #we compute the cg coeff if they are not in the database or if the user force it
+        if (Path(self.cg_folder).exists() == False) or (force_computation==True): 
 
-        #then we instantiate the auxiliary symbolic matrix
-        A = sym.MatrixSymbol('A', dim, dim)
+            #info print
+            if verbose==True:
+                print("\nComputing the cg coefficients for the given tensor product ...\n")
 
-        #and we instantiate the matrix with the results
-        res_mat = np.zeros((dim,dim))
+            #first we get the multiplicities and we store them in a class variable for later use
+            self.mul_list = get_multiplicities(*kwarg)
 
-        #then we start to iterate over the group elements
+            #we then compute the dimension of the bases
+            dim=1
+            for rep in self.chosen_irreps:
+                dim *= irrep_dim[rep]
 
-        #info print
-        if verbose: print("\nLooping over group elements...\n")
+            #then we instantiate the auxiliary symbolic matrix
+            A = sym.MatrixSymbol('A', dim, dim)
 
-        #loop over elements of H(4) (with a nice loading bar)
-        for ih in tqdm(range(self.n_ele_h4)):
+            #and we instantiate the matrix with the results
+            res_mat = np.zeros((dim,dim))
 
-            #for each element first we find the matrix in the kronecker product form
-            Tp = np.eye(1)
-            for rep in kwarg:
-                Tp = np.kron(Tp,self.h4_mat[irrep_index[rep]][ih])
+            #then we start to iterate over the group elements
 
-            #then we find the matrix in the block diagonal form
-            nblocks = np.sum(self.mul_list) #number of block in the matrix
-            rows = [[] for _ in range(nblocks)] #array containing the rows of this matrix
-            #count_rep = mul_list[:]
+            #info print
+            if verbose: print("\nLooping over group elements...\n")
 
-            #let's get a list of index of the rep to use
-            rep_to_use = []
+            #loop over elements of H(4) (with a nice loading bar)
+            for ih in tqdm(range(self.n_ele_h4)):
+
+                #for each element first we find the matrix in the kronecker product form
+                Tp = np.eye(1)
+                for rep in kwarg:
+                    Tp = np.kron(Tp,self.h4_mat[irrep_index[rep]][ih])
+
+                #then we find the matrix in the block diagonal form
+                nblocks = np.sum(self.mul_list) #number of block in the matrix
+                rows = [[] for _ in range(nblocks)] #array containing the rows of this matrix
+                #count_rep = mul_list[:]
+
+                #let's get a list of index of the rep to use
+                rep_to_use = []
+                for irep,mul in enumerate(self.mul_list):
+                    for _ in range(mul):
+                        rep_to_use.append(irep) #in this list there is the index of the irre as many time as the multiplicity
+
+                #let's loop over the block rows and block columns of this mat
+                for ib in range(nblocks):
+                    #let's determine the i-th block
+                    rep_i = rep_to_use[ib]
+                    for jb in range(nblocks):
+                        rep_j = rep_to_use[jb]
+                        #on the diagonal we add the block
+                        if ib==jb:
+                            rows[ib].append(self.h4_mat[rep_i][ih])
+                        else:
+                            rows[ib].append(np.zeros((rep_dim_list[rep_i],rep_dim_list[rep_j]))) #off diag there are 0s blocks with the right dim
+
+                #matrix in the block diagonal form
+                Bd = np.block(rows)
+
+                #then we do the computation
+                res_mat = res_mat + Tp @ A @ Bd.T
+
+            #we then eliminate rounding errors
+            rounded_res = np.empty((dim,dim),dtype=object)
+
+            eps=10**(-10)
+            infth=10**20
+
+            for i in range(dim):
+                for j in range(dim):
+                    entry = sym.Add.make_args(res_mat[i,j])
+                    new_entry = 0
+                    for element in entry:
+                        coeff = element.as_coeff_Mul()[0]
+                        monom = element.as_coeff_Mul()[1]
+                        if np.abs(coeff)<eps or np.abs(coeff)>infth :
+                            coeff=0
+                        new_entry = new_entry + coeff * monom
+                    rounded_res[i,j] = new_entry
+
+            #we now construct the output dict
+            self.cg_dict = {}
+            #to obtain the output we loop over the multiplicities
+            d = 0 #we take note of the current dim
             for irep,mul in enumerate(self.mul_list):
-                for _ in range(mul):
-                    rep_to_use.append(irep) #in this list there is the index of the irre as many time as the multiplicity
+                for m in range(mul):
+                    if irep not in self.cg_dict.keys(): #we initialize the output as an empty array
+                        self.cg_dict[irep] = []
+                    #then we append to the empty list the block with the CG coeff
+                    self.cg_dict[irep].append( CGmat_from_block( rounded_res[:,d:d+rep_dim_list[irep]], m, mul ) )
+                    d += rep_dim_list[irep]
 
-            #let's loop over the block rows and block columns of this mat
-            for ib in range(nblocks):
-                #let's determine the i-th block
-                rep_i = rep_to_use[ib]
-                for jb in range(nblocks):
-                    rep_j = rep_to_use[jb]
-                    #on the diagonal we add the block
-                    if ib==jb:
-                        rows[ib].append(self.h4_mat[rep_i][ih])
+            
+            #once that we have done the computation of the cg coefficient we save them to the database for later use
+
+            #info print
+            if verbose==True:
+                print("\nSaving to file the cg coefficient to the database ...\n")
+
+            #we create the folders where to store the cg coefficients
+            Path(self.cg_folder).mkdir(parents=True, exist_ok=True)
+
+            #we loop over the items of the dict with the cg coeff
+            for k,v in self.cg_dict.items():
+                #then we loop over all the matrices with cg coefficient that there are for a given irrep (loop over the multiplcities) and we save them
+                for i,arr in enumerate(v):
+                    with open(f'{self.cg_folder}/{k}_{i}.npy', 'wb') as f:
+                        np.save(f,arr)
+
+
+        #if instead the cg coefficients are in the database we just have to load them
+        elif Path(self.cg_folder).exists() == True: 
+
+            #info print
+            if verbose==True:
+                print("\nLoading the cg coefficients for the given tensor product from the database ...\n")
+
+
+            #we load the cg coeff into the proper dictionary
+            self.cg_dict = {}
+
+            #we take the list of all the files in the folder
+            p = Path(self.cg_folder).glob('**/*')
+            files = [x for x in p if x.is_file()]
+
+            #we cycle through the files in the folder
+            for i,file in enumerate(files):
+
+                #we parse the index of the representation and the number associated with the multiplicity
+                irep = int(file.name.split(".")[0].split("_")[0])
+
+                #we open the file with the cg coeff
+                with open(f'{self.cg_folder}/{file.name}', 'rb') as f:
+
+                    #if we're loading that particular irrep for the first multiplicity then we have to add the key to the dict
+                    if irep not in self.cg_dict.keys():
+                        self.cg_dict[irep] = [np.load(f,allow_pickle=True)]
+                    #if instead the key is already there we just add the matrix to the list
                     else:
-                        rows[ib].append(np.zeros((rep_dim_list[rep_i],rep_dim_list[rep_j]))) #off diag there are 0s blocks with the right dim
+                        self.cg_dict[irep].append(np.load(f,allow_pickle=True))
 
-            #matrix in the block diagonal form
-            Bd = np.block(rows)
-
-            #then we do the computation
-            res_mat = res_mat + Tp @ A @ Bd.T
-
-        #we then eliminate rounding errors
-        rounded_res = np.empty((dim,dim),dtype=object)
-
-        eps=10**(-10)
-        infth=10**20
-
-        for i in range(dim):
-            for j in range(dim):
-                entry = sym.Add.make_args(res_mat[i,j])
-                new_entry = 0
-                for element in entry:
-                    coeff = element.as_coeff_Mul()[0]
-                    monom = element.as_coeff_Mul()[1]
-                    if np.abs(coeff)<eps or np.abs(coeff)>infth :
-                        coeff=0
-                    new_entry = new_entry + coeff * monom
-                rounded_res[i,j] = new_entry
-
-        #we now construct the output dict
-        self.cg_dict = {}
-        #to obtain the output we loop over the multiplicities
-        d = 0 #we take note of the current dim
-        for irep,mul in enumerate(self.mul_list):
-            for m in range(mul):
-                if irep not in self.cg_dict.keys(): #we initialize the output as an empty array
-                    self.cg_dict[irep] = []
-                #then we append to the empty list the block with the CG coeff
-                self.cg_dict[irep].append( CGmat_from_block( rounded_res[:,d:d+rep_dim_list[irep]], m, mul ) )
-                d += rep_dim_list[irep]
+            #then we reorder the dictionary as to have keys in increasing order
+            self.cg_dict = {k: self.cg_dict[k] for k in sorted(list(self.cg_dict.keys())) }
 
 
 
     #function returning the multiplicities in the decomposition
     def get_multiplicities(self):
         return self.mul_list
+    
+
+
+    #function to print the cg coeff in latex
+    def latex_print(self,digits=5,clean_tex=True):
+
+        
+
+        #we create the folders where to store the cg pdf  files
+        Path(self.cg_pdf_folder).mkdir(parents=True, exist_ok=True)
+
+        #that is the name we give to the document (i.e. the chosen irreps as strings)
+        doc_name = ''.join([str(ir) for ir in self.chosen_irreps])
+
+        #we instantiate the .tex file
+        doc = Document(default_filepath=f'{doc_name}.tex', documentclass='article')
+
+        #create document preamble
+        doc.preamble.append(Command("title", ' x '.join([str(ir) for ir in self.chosen_irreps])  ) )
+        #doc.preamble.append(Command("title", Math(data=['\\times'.join([irrep_texname[ir] for ir in self.chosen_irreps])]) ) )
+        doc.preamble.append(Command("author", "E.T."))
+        doc.preamble.append(Command("date", NoEscape(r"\today")))
+        doc.append(NoEscape(r"\maketitle"))
+        doc.append(NoEscape(r"\newpage"))
+
+        #we now loop over the elements of the dict with cg coefficients
+        for k,v in self.cg_dict.items():
+
+            #for every key (irrep) in the dict we make a section
+            section = Section(str(rep_label_list[k]),numbering=False)
+        
+            #then we loop over the multiplicities
+            for i,cgmat in enumerate(v):
+
+                #we print a matrix to the pdf
+                matrix = Matrix( np.matrix(np.round(np.asarray(cgmat).astype(np.float64),digits)) , mtype="b")
+                math = Math(data=[f"M_{i+1}=", matrix])
+
+                #we append the equation to the section
+                section.append(math)
+
+            #then we append the section to the document
+            doc.append(section)
+            doc.append(NoEscape(r"\newpage"))
+
+
+        #then we generate the pdf
+        doc.generate_pdf(self.cg_pdf_folder + '/'  + doc_name, clean_tex=clean_tex)
+
 
 
 
