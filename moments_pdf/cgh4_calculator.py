@@ -817,9 +817,11 @@ class cg_calc:
 
 
     #function to print the cg coeff in latex
-    def latex_print(self,digits=5,clean_tex=True):
+    def latex_print(self,digits=5,verbose=True, title=None, author="E.T.", clean_tex=True):
 
-        
+        #we set the title param to the default value
+        if title is None:
+            title = ' x '.join([str(ir) for ir in self.chosen_irreps])
 
         #we create the folders where to store the cg pdf  files
         Path(self.cg_pdf_folder).mkdir(parents=True, exist_ok=True)
@@ -831,9 +833,8 @@ class cg_calc:
         doc = Document(default_filepath=f'{doc_name}.tex', documentclass='article')
 
         #create document preamble
-        doc.preamble.append(Command("title", ' x '.join([str(ir) for ir in self.chosen_irreps])  ) )
-        #doc.preamble.append(Command("title", Math(data=['\\times'.join([irrep_texname[ir] for ir in self.chosen_irreps])]) ) )
-        doc.preamble.append(Command("author", "E.T."))
+        doc.preamble.append(Command("title", title))
+        doc.preamble.append(Command("author", author))
         doc.preamble.append(Command("date", NoEscape(r"\today")))
         doc.append(NoEscape(r"\maketitle"))
         doc.append(NoEscape(r"\newpage"))
@@ -861,6 +862,10 @@ class cg_calc:
 
         #then we generate the pdf
         doc.generate_pdf(self.cg_pdf_folder + '/'  + doc_name, clean_tex=clean_tex)
+
+        #info print
+        if verbose==True:
+            print(f"\nPdf files containing the cg coefficients located in {self.cg_pdf_folder}/{doc_name}\n")
 
 
 
