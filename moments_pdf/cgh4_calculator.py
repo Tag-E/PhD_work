@@ -660,6 +660,9 @@ class cg_calc:
 
         ## once the matrix representations for the elements of H(4) are loaded we can do the actual computation of the CG coeff ##
 
+        #first we get the multiplicities and we store them in a class variable for later use
+        self.mul_list = get_multiplicities(*kwarg)
+
         #the folder where the cg coefficients should be is
         self.cg_folder = self.cg_database_folder + '/' + ''.join([str(ir) for ir in self.chosen_irreps])
 
@@ -669,9 +672,6 @@ class cg_calc:
             #info print
             if verbose==True:
                 print("\nComputing the cg coefficients for the given tensor product ...\n")
-
-            #first we get the multiplicities and we store them in a class variable for later use
-            self.mul_list = get_multiplicities(*kwarg)
 
             #we then compute the dimension of the bases
             dim=1
