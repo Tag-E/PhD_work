@@ -487,7 +487,7 @@ class cg_calc:
     h4_ele_folder = 'h4_ele'
 
     #folders containing the database with the cg coeff
-    cg_database_folder = 'cg_database'
+    #cg_database_folder = 'cg_database'
 
     #folders with the pdf files
     cg_pdf_folder = 'cg_pdf'
@@ -514,12 +514,15 @@ class cg_calc:
     irrep_dim = dict(zip(rep_label_list, rep_dim_list)) #a dimensionality
     irrep_texname  = dict(zip(rep_label_list, rep_latex_names)) #and a character in latex
 
-    def __init__(self, *kwarg, force_computation=False, force_h4gen=False, verbose=True):
+    def __init__(self, *kwarg, cgdatabase='cg_database',force_computation=False, force_h4gen=False, verbose=True):
 
         #we store in a class variable the irreps chosen for the decomposition
         self.chosen_irreps = kwarg
         
         ## first we have to either load or compute all the elements of H(4) ##
+
+        #the folder where we store the cg coefficient is
+        self.cg_database_folder = cgdatabase
 
         #we do the computation if the elements are not saved or if the user force it
         if (Path(self.h4_ele_folder).exists() == False) or (force_h4gen==True): 
