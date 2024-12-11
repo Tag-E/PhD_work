@@ -475,7 +475,7 @@ for ir in range(n_rep):
 class cg_calc:
 
     '''
-    Create one class instance to obtain the cg coeff realted to the
+    Create one class instance to obtain the cg coeff related to the
     tensor product specified in input
     '''
 
