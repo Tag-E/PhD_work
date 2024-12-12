@@ -79,6 +79,14 @@ gamma4_s = sym.Symbol("gamma_4")
 gamma_mu = [gamma1,gamma2,gamma3,gamma4]#,gamma_5]
 gamma_mu_s = [gamma1_s,gamma2_s,gamma3_s,gamma4_s]#,sym_gamma_5]
 
+#we will need also gamma 5
+gamma5 = sym.Matrix([
+                    [1,0,0,0],
+                    [0,1,0,0],
+                    [0,0,-1,0],
+                    [0,0,0,-1]])
+gamma5_s = sym.Symbol("gamma_5")
+
 #also the identity in 4 dimension will be useful
 Id_4 = sym.Matrix([
                     [1,0,0,0],
@@ -156,10 +164,34 @@ class K_calc:
     irrep_dim = dict(zip(rep_label_list, rep_dim_list)) #a dimensionality
     irrep_texname  = dict(zip(rep_label_list, rep_latex_names)) #and a character in latex
 
-    def __init__(self, *kwarg, verbose=True):
+    def __init__(self, X: str, n: int, verbose=True):
 
-        #we store in a class variable the irreps chosen for the decomposition
-        self.chosen_irreps = kwarg
+        '''
+        X = 'V', 'A', 'T'
+        n = 1,2,3,...
+        '''
+
+        #TO DO: add input check
+
+        #we store the type of structure: vector, axial or tensor
+        self.structure = X
+
+        #we also store the rank (number of indices) of the operator
+        self.n = n
+
+        #then we store in a class variable the irreps chosen for the decomposition
+        self.chosen_irreps = []
+
+        if X=='V':
+            self.chosen_irreps.append((4,1))
+        elif X=='A':
+            self.chosen_irreps.append((4,4))
+        elif X=='T':
+            self.chosen_irreps.append((4,1))
+            self.chosen_irreps.append((4,1))
+
+        while(len(self.chosen_irreps)!=n):
+            self.chosen_irreps.append((4,1))
 
 
         ## cg coefficient computation
@@ -209,7 +241,7 @@ class K_calc:
 
                     #now that we have the cg matrix we compute the operator as the sum of combinations of the type: CGcoeff x gammaMat x momentum
                     #operator = np.einsum('ij,ikl,j -> kl',cg_mat,gamma_mu,p_mu)
-                    operator = construct_operator(cg_mat,len(self.chosen_irreps))
+                    operator = construct_operator(cg_mat,self.chosen_irreps,self.structure)
 
                     #we compute the kinematic factor with the function implementing its formula and we store it
                     self.kin_dict[k][imul].append( Kfactor(operator) )
@@ -220,13 +252,15 @@ class K_calc:
 
         #we set the title param to the default value
         if title is None:
-            title = ' x '.join([str(ir) for ir in self.chosen_irreps]) + ": Operators and Kinematic Factors"
+            #title = ' x '.join([str(ir) for ir in self.chosen_irreps]) + ": Operators and Kinematic Factors"
+            title = f"X={self.structure}, n={self.n} : Operators and Kinematic Factors"
 
         #we create the folders where to store the cg pdf  files
         Path(self.kfact_pdf_folder).mkdir(parents=True, exist_ok=True)
 
         #that is the name we give to the document (i.e. the chosen irreps as strings)
-        doc_name = "Kfact_"+''.join([str(ir) for ir in self.chosen_irreps])
+        #doc_name = "Kfact_"+''.join([str(ir) for ir in self.chosen_irreps])
+        doc_name = f"Kfact_{self.structure}_{self.n}"
 
         #we instantiate the .tex file
         doc = Document(default_filepath=f'{doc_name}.tex', documentclass='article')#, font_size='' )
@@ -286,7 +320,7 @@ class K_calc:
 
                     new_op_print = str(new_op.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
                 
-                    agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(iop+1,'{'+f"{self.rep_label_list[k]},{imul+1}"+'}',new_op_print))
+                    agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(iop+1,'{'+f"{self.structure}{self.rep_label_list[k]},{imul+1}"+'}',new_op_print))
 
 
 
@@ -298,7 +332,7 @@ class K_calc:
                         op_print = "\\frac{" + op_print.split('/')[0] + "}{ " + op_print.split('/')[1]  + "}"
                         #print(op_print)
 
-                    agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(iop+1,'{'+f"{self.rep_label_list[k]},{imul+1}"+'}',op_print))
+                    agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(iop+1,'{'+f"{self.structure}{self.rep_label_list[k]},{imul+1}"+'}',op_print))
                    
 
 
@@ -354,10 +388,13 @@ def Kfactor(operator):
     num =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
 
     #we obtain the result as numerator divided by denominator
-    return num/den
+    return (num/den).simplify(rational=True)
 
 #function used to construct the operator from the matrices of cg coefficients
-def construct_operator(cgmat,n):
+def construct_operator(cgmat,irreps,X: str):
+
+    #we first get the number of irreps in the tensor product
+    n = len(irreps)
 
     #we first instantiate the operator as the zero matrix in Dirac space
     op = np.zeros((4,4))
@@ -365,13 +402,25 @@ def construct_operator(cgmat,n):
     #we then loop over all the possible indices combinations (we have the implicit assumption that all the irrep we are considering are 4 dim)
     for indices in it.product(range(4),repeat=n):
 
-        #we first compute the product of all the gamma matrices
-        gamma_prod=Id_4
-        for i in indices[:-1]:
-            gamma_prod = gamma_prod @ gamma_mu[i]
 
-        #then once we have this product we have the structure in dirac space, so we just have to multiply by cg and p that are numbers in dirac space
-        op += cgmat[indices] * p_mu[indices[-1]] *  gamma_prod
+        #we first compute the product of the gamma matrices according to the structure of the operator
+        if X=='V':
+            gamma_prod = gamma_mu[indices[0]]
+            start_ind = 1
+        elif X=='A':
+            gamma_prod = gamma_mu[indices[0]] @ gamma5
+            start_ind = 1
+        elif X=='T':
+            gamma_prod = gamma_mu[indices[0]] @ gamma_mu[indices[1]] - gamma_mu[indices[1]] @ gamma_mu[indices[0]]
+            start_ind = 2
+
+        #then we compute the product of all the momenta
+        p_prod = 1
+        for ind in indices[start_ind:]:
+            p_prod *= p_mu[ind]
+
+        #then once we have these product we have the structure in dirac space, so we just have to multiply by cg and p that are numbers in dirac space
+        op += cgmat[indices] * p_prod *  gamma_prod
 
     #we send back the operator just constructed (it is a matrix in Dirac space)
     return op
