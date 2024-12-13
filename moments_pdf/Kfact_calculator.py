@@ -182,6 +182,7 @@ class K_calc:
         #then we store in a class variable the irreps chosen for the decomposition
         self.chosen_irreps = []
 
+        #we use the right irrep according to the structure (vector,axial or tensor)
         if X=='V':
             self.chosen_irreps.append((4,1))
         elif X=='A':
@@ -190,6 +191,7 @@ class K_calc:
             self.chosen_irreps.append((4,1))
             self.chosen_irreps.append((4,1))
 
+        #all the other indices transform according to the fundamental
         while(len(self.chosen_irreps)!=n):
             self.chosen_irreps.append((4,1))
 
@@ -219,9 +221,6 @@ class K_calc:
             self.cg_dict[k] = [[] for _ in range(len(v))]
             self.kin_dict[k] = [[] for _ in range(len(v))]
 
-            #print(k)
-            #print(len(v))
-
             #then we loop over all the blocks we have in that irrep (i.e. we do as much iteration as the multiplicity of the current irrep)
             for imul,block in enumerate(v):
 
@@ -240,7 +239,6 @@ class K_calc:
                     self.cg_dict[k][imul].append(cg_mat)
 
                     #now that we have the cg matrix we compute the operator as the sum of combinations of the type: CGcoeff x gammaMat x momentum
-                    #operator = np.einsum('ij,ikl,j -> kl',cg_mat,gamma_mu,p_mu)
                     operator = construct_operator(cg_mat,self.chosen_irreps,self.structure)
 
                     #we compute the kinematic factor with the function implementing its formula and we store it
@@ -252,21 +250,16 @@ class K_calc:
 
         #we set the title param to the default value
         if title is None:
-            #title = ' x '.join([str(ir) for ir in self.chosen_irreps]) + ": Operators and Kinematic Factors"
             title = f"X={self.structure}, n={self.n} : Operators and Kinematic Factors"
 
         #we create the folders where to store the cg pdf  files
         Path(self.kfact_pdf_folder).mkdir(parents=True, exist_ok=True)
 
-        #that is the name we give to the document (i.e. the chosen irreps as strings)
-        #doc_name = "Kfact_"+''.join([str(ir) for ir in self.chosen_irreps])
+        #that is the name we give to the document (i.e. V,A or T and the number of indices)
         doc_name = f"Kfact_{self.structure}_{self.n}"
 
         #we instantiate the .tex file
         doc = Document(default_filepath=f'{doc_name}.tex', documentclass='article')#, font_size='' )
-        
-
-        #doc.packages.append(Package("pdflscape"))
 
         #create document preamble
         doc.preamble.append(Command("title", title))
@@ -287,67 +280,73 @@ class K_calc:
             #then we loop over the multiplicities
             for imul,base in enumerate(v):
 
-                #we print a matrix to the pdf
-                #matrix = Matrix( np.matrix(np.round(np.asarray(cgmat).astype(np.float64),digits)) , mtype="b")
-                #math = Math(data=[f"M_{i+1}=", matrix])
-
                 #for every block the given irrep we make a subsection
-                subsection = Subsection(f"Block {imul+1}, C={Csymm(self.cg_dict[k][imul],self.structure,self.n)}",numbering=False)
+
+                #we compute the characteristics of the block
+                
+                #C symmetry
+                C = Csymm(self.cg_dict[k][imul],self.structure,self.n)
+                #trace condition
+                trace = trace_symm(self.cg_dict[k][imul])
+                #index symm
+                symm = index_symm(self.cg_dict[k][imul],self.n)
+
+                #we make a title for each block
+                subsection = Subsection(f"(Block {imul+1})  Trace {trace}, {symm}, C = {C}",numbering=False)
 
 
 
-                #we print the operator basis
-                #O = sym.MatrixSymbol('A', 4, 4)
-                n=len(self.chosen_irreps)
-                O = ArraySymbol("O", (5,)*n)
+                #to print to latex the operators we use an array with with n indices, ranging from 0 to 4 (and we just use 1,2,3,4 and discard 0)
+                O = ArraySymbol("O", (5,)*self.n)
 
                  
-
+                #we instantiate the math environmant where we print the operators
                 agn = Alignat(numbering=False, escape=False)
 
                 #for each time the given irrep appear in the decomposition we have a basis
                 for iop,op in enumerate(base):
-                    #math = Math(data=[f"M_{imul}_{iop}=", r"{}".format(str(op).replace('**','^'))])
 
-
-
+                    #we take the cg matrix for the given operator
                     cgmat = self.cg_dict[k][imul][iop]
 
 
+                    #we now construct the latex symbol for the new operator using sympy
+
+                    #we instantiate it to 0
                     new_op = 0
 
-                    for indices in it.product(range(4),repeat=n):
+                    #we loop over the indicies to construct the operator
+                    for indices in it.product(range(4),repeat=self.n):
 
-                        shifted_indices = [sum(x) for x in zip(indices,(1,)*n)]
+                        #we shift the indices so that we can print 1234 instead of 0123
+                        shifted_indices = [sum(x) for x in zip(indices,(1,)*self.n)]
 
+                        #we construct symbolically the operator to print
                         new_op += cgmat[indices] * O[shifted_indices]
 
+                    #we do some string manipulation to obtain a nicer output
                     new_op_print = str(new_op.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
                 
+                    #we append the output to the mathematical latex environment
                     agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(iop+1,'{'+f"{self.structure}{self.rep_label_list[k]},{imul+1}"+'}',new_op_print))
 
 
-
+                    #we make a nicer output also for the kinematic factor
                     op_print = str(op).replace('**','^').replace('*','').replace('I','i')
 
-                    #if len(op_print>50):
+                    #if len(op_print>50): #TO DO: handle long string output
 
+                    #we try to use \frac{}{} instead of just a slash
                     if '/' in op_print:
                         op_print = "\\frac{" + op_print.split('/')[0] + "}{ " + op_print.split('/')[1]  + "}"
-                        #print(op_print)
 
+                    #we append the kinematic factor to the math environment
                     agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(iop+1,'{'+f"{self.structure}{self.rep_label_list[k]},{imul+1}"+'}',op_print))
                    
 
-
-
-
-                    #we append the equation to the section
-                    #section.append(math)
-                #section.append(agn)
-
                 #we append the math expression to the subsection
                 subsection.append(agn)
+
                 #and we append the subsection to the section
                 section.append(subsection) 
 
@@ -368,6 +367,7 @@ class K_calc:
 
 
 ######################## Auxiliary Functions ################################
+
 
 #function used to remap the cg coefficients from a 4**n column to a n rank matrix of dimension 4 (with n number of tensors in the product)
 def cg_remapping(raw_cg,n: int):
@@ -398,6 +398,7 @@ def Kfactor(operator):
 
     #we obtain the result as numerator divided by denominator
     return (num/den).simplify(rational=True)
+
 
 #function used to construct the operator from the matrices of cg coefficients
 def construct_operator(cgmat,irreps,X: str):
@@ -491,3 +492,99 @@ def Csymm(block,X, n):
 
     #then we return the C parity
     return C_new
+
+
+#function used to check the trace condition of a given block
+def trace_symm(block):
+
+    #we have to check that for all the operators the trace is the same, so we store the last computed trace
+    tr_old=0
+
+    #then we cycle over the operators
+    for iop,cgmat in enumerate(block):
+
+        #for each we compute the trace
+        tr_new = np.trace(cgmat)
+
+        #we check whether the traces are all equal
+        if iop>0:
+            if (tr_new!=tr_old).all():
+                return "mixed"
+        tr_old=tr_new
+
+    #we look at the value of the trace
+    if tr_new.all() == 0:
+        tr_condition= "= 0"
+    elif tr_new.all() != 0:
+        tr_condition = "!= 0"
+    
+    #we return the trace condition
+    return tr_condition
+
+
+#function used to check the symmetry condition of a given block
+def index_symm(block,n):
+
+    #we have to check that all the operators have the same index symmetry, so we initialize it to a certain value
+    symm_old=0
+
+    #then we cycle over the operators
+    for iop,cgmat in enumerate(block):
+
+        
+        #then we loop over all the possible permutations of the indices of the operators
+        for ip,p in enumerate(it.permutations(range(n))):
+
+            #we skip the trivial permutation as it yields no information
+            if ip==0:
+                continue
+
+            
+            #then we construct the permuted matrix
+
+            #we instantiate it
+            cgmat_p = np.empty(shape=np.shape(cgmat))
+
+            #we fill it according to the permutations
+            for indices in it.product(range(4),repeat=n):
+                cgmat_p[indices] = cgmat[ *[indices[p[i]] for i in range(n)] ]
+
+            #we check for a particular symmetry
+            if (cgmat==cgmat_p).all() or  (cgmat==-cgmat_p).all(): #this means either symmetric or antisymmetric...
+                if parity(p)==-1:                                  #... but we can only tell if the permutation is odd
+                    if (cgmat==cgmat_p).all():
+                        symm_new="Symmetric"
+                    elif (cgmat==-cgmat_p).all():
+                        symm_new="Antisymmetric"
+            else:                                                  #in every other case there is mixed symmetry
+                return "Mixed Symmetry"
+            
+            #if we are past the first iteration and the symmetry changed we conclude that it is mixed
+            if symm_old!=0 and (symm_new!=symm_old):
+                return "Mixed Symmetry"
+            
+            #we update the values of the previous symmetry so that we can check during the next iteration
+            symm_old = symm_new
+
+
+    #if the symm was always the same we return it
+    return symm_new
+
+
+
+
+#fucton used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+def parity(permutation):
+    permutation = list(permutation)
+    length = len(permutation)
+    elements_seen = [False] * length
+    cycles = 0
+    for index, already_seen in enumerate(elements_seen):
+        if already_seen:
+            continue
+        cycles += 1
+        current = index
+        while not elements_seen[current]:
+            elements_seen[current] = True
+            current = permutation[current]
+    return (-1)**( (length-cycles) % 2 ) # even,odd are 1,-1
