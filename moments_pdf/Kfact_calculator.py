@@ -291,6 +291,10 @@ class K_calc:
                 #matrix = Matrix( np.matrix(np.round(np.asarray(cgmat).astype(np.float64),digits)) , mtype="b")
                 #math = Math(data=[f"M_{i+1}=", matrix])
 
+                #for every block the given irrep we make a subsection
+                subsection = Subsection(f"Block {imul+1}, C={Csymm(self.cg_dict[k][imul],self.structure,self.n)}",numbering=False)
+
+
 
                 #we print the operator basis
                 #O = sym.MatrixSymbol('A', 4, 4)
@@ -340,7 +344,12 @@ class K_calc:
 
                     #we append the equation to the section
                     #section.append(math)
-                section.append(agn)
+                #section.append(agn)
+
+                #we append the math expression to the subsection
+                subsection.append(agn)
+                #and we append the subsection to the section
+                section.append(subsection) 
 
             #then we append the section to the document
             doc.append(section)
@@ -424,3 +433,61 @@ def construct_operator(cgmat,irreps,X: str):
 
     #we send back the operator just constructed (it is a matrix in Dirac space)
     return op
+
+
+#function used to check the Charge conjugation symmetry
+def Csymm(block,X, n):
+
+    #to check the symmetry we have to cycle over all the cg coefficients and see if they respect the correct conditions
+
+    #we cycle first over all the operators
+
+    #to check that the C parity are all equal we take track of the last C parity computed
+    C_old = ""
+
+    #then we cycle over the operators
+    for iop,cgmat in enumerate(block):
+
+        #we initialize the charge conjugation value to be mixed
+        C_new="mixed"
+
+        #let'instantiate the cgmat matrix under C
+        cgmat_C = np.empty(shape=np.shape(cgmat))
+
+        #let's cycle over the indices to obtain the cgmat under charge conjugation
+        for indices in it.product(range(4),repeat=n):
+
+            #and we consider construct its conjugated counterpart
+            if X=='V' or X=='A':
+                cgmat_C[indices] = cgmat[(indices[0],)+indices[-1:0:-1]]
+            else:
+                cgmat_C[indices] = cgmat[(indices[0],indices[1],)+indices[-1:1:-1]] 
+
+        
+        #then we check if the two matrices are equal
+        if (cgmat==cgmat_C).all():
+            C_new=1
+        elif (cgmat==-cgmat_C).all():
+            C_new=-1
+        else:
+            C_new="mixed"
+
+        #we check whether the C parity are all equal
+        if iop>0:
+            if C_new!=C_old:
+                C_new="mixed"
+                break
+        C_old=C_new
+
+           
+
+    #now we just have to take into account the number of indices
+    if C_new!="mixed":
+
+        if X=="V":
+            C_new*=(-1)**n
+        elif X=="A" or X=="T":
+            C_new*=(-1)**(n+1)      #TO DO: check with some literature
+
+    #then we return the C parity
+    return C_new
