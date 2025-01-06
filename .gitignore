@@ -169,4 +169,4 @@ moments_pdf/requirements.txt
 moments_pdf/cg_pdf
 moments_pdf/test_notebooks/h4_ele/
 moments_pdf/test_notebooks/cg_database/
-moments_pdf/Kfact_pdf
+#moments_pdf/Kfact_pdf
