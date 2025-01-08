@@ -387,6 +387,8 @@ def cg_remapping(raw_cg,n: int):
 
 #function used to round the raw CG matrix obtained from the calculator
 def round_CG(cgmat,digits=2):
+    #ok = np.asarray(cgmat)
+    #print(np.shape(ok))
     return np.round(np.asarray(cgmat).astype(np.float64),digits)
 
 

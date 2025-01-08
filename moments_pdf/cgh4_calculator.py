@@ -749,6 +749,7 @@ class cg_calc:
 
             #we now construct the output dict
             self.cg_dict = {}
+            self.raw_cg = {} #raw cg mat, without CGmat_from_block function
             #to obtain the output we loop over the multiplicities
             d = 0 #we take note of the current dim
             for irep,mul in enumerate(self.mul_list):
@@ -757,6 +758,7 @@ class cg_calc:
                         self.cg_dict[irep] = []
                     #then we append to the empty list the block with the CG coeff
                     self.cg_dict[irep].append( CGmat_from_block( rounded_res[:,d:d+rep_dim_list[irep]], m, mul ) )
+                    self.raw_cg[(irep,m)] = rounded_res[:,d:d+rep_dim_list[irep]] #raw cg coeff
                     d += rep_dim_list[irep]
 
             
