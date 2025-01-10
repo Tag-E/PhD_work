@@ -34,6 +34,7 @@ import numpy as np #to handle matrices
 import h5py as h5 #to read the correlator
 from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
+import itertools as it #for fancy iterations
 
 
 
@@ -537,6 +538,40 @@ class bulding_block:
 
         #we return the building block as calculated
         return bb_operator
+    
+
+    #function returning the building block of the specified operator
+    def operatorBB(self, cgmat:np.ndarray, X:str, isospin:str, n_mu:int) -> np.ndarray:
+        """
+        Input:
+            - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
+            - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
+            - isospin: either 'U' or 'D' (for up or down quarks) !!!! TO DO: add support for the 'isovector' choice (i.e. U-D) (or U+D??)
+            - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
+
+        Output:
+            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T))
+        """
+
+        #first thing first we fetch the building block of the basic operators
+        bb = self.get_bb(X, isospin, n_mu) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+
+        #we then compute the total number of indices (of the operators)
+        n = n_mu+1 #the number of indices is number of derivatives +1 for V and A case...
+        if X=='T':      
+            n+=1   #... +2 for the T case
+
+        #we can then instantiate the ouput array with the right dimensionality
+        opBB = np.zeros(shape=(self.nconf,self.T,) + (4,)*n, dtype=complex)
+
+        #we now loop over all the possible indices combinations 
+        for indices in it.product(range(4),repeat=n):
+
+            #using the matrix with the cg coefficients related to the operator we construct its building block
+            opBB[:,:,*indices] += cgmat[indices] * bb[:,:,*indices]
+
+        #we return the building block of the operator identified by the cgmat passed as input
+        return opBB
 
 
 
