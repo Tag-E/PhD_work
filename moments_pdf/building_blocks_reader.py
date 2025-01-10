@@ -39,7 +39,46 @@ from pathlib import Path #to check whether directories exist or not
 
 ######################## Global Variables ###############################
 
+#gamma vector
+gamma_mu = ['gamma1', 'gamma2', 'gamma3', 'gamma4']
+#identity in Dirac space
+identity = 'id'
+#gamma5 matrix
+gamma5 = 'gamma5'
 
+#dictionary translating the gamma matrices into the corresponding list of integers (in the adopted convention)
+gamma_to_list = {'gamma1': [1,0,0,0], 'gamma2': [0,1,0,0], 'gamma3': [0,0,1,0], 'gamma4': [0,0,0,1],
+                 'id': [0,0,0,0], 'gamma5': [1,1,1,1]}
+#dictionary translating the gamma matrices into the corresponding key (in the adopted convention)
+gamma_to_key = {'gamma1': 'g1', 'gamma2': 'g2', 'gamma3': 'g4', 'gamma4': 'g8',
+                 'id': 'g0', 'gamma5': 'g15'}
+
+
+
+#The adopted convention for the gamma matrices is explained in the following table (with g_n being the key in the h5 file):
+#g_n  ->  n (base 10)  -> n (base 2, with rightmost digit most significant one) ->       list       ->      gamma matrix
+#g0   ->  0            ->        0000                                           ->    [0, 0, 0, 0]  ->  (γ₁)⁰ (γ₂)⁰ (γ₃)⁰ (γ₄)⁰ = 1
+#g1   ->  1            ->        1000                                           ->    [1, 0, 0, 0]  ->  (γ₁)¹ (γ₂)⁰ (γ₃)⁰ (γ₄)⁰ = γ₁
+#g2   ->  2            ->        0100                                           ->    [0, 1, 0, 0]  ->  (γ₁)⁰ (γ₂)¹ (γ₃)⁰ (γ₄)⁰ = γ₂
+#g3   ->  3            ->        1100                                           ->    [1, 1, 0, 0]  ->  (γ₁)¹ (γ₂)¹ (γ₃)⁰ (γ₄)⁰ = γ₁ γ₂
+#g4   ->  4            ->        0010                                           ->    [0, 0, 1, 0]  ->  (γ₁)⁰ (γ₂)⁰ (γ₃)¹ (γ₄)⁰ = γ₃
+#g5   ->  5            ->        1010                                           ->    [1, 0, 1, 0]  ->  (γ₁)¹ (γ₂)⁰ (γ₃)¹ (γ₄)⁰ = γ₁ γ₃
+#g6   ->  6            ->        0110                                           ->    [0, 1, 1, 0]  ->  (γ₁)⁰ (γ₂)¹ (γ₃)¹ (γ₄)⁰ = γ₂ γ₃ 
+#g7   ->  7            ->        1110                                           ->    [1, 1, 1, 0]  ->  (γ₁)¹ (γ₂)¹ (γ₃)¹ (γ₄)⁰ = γ₁ γ₂ γ₃
+#g8   ->  8            ->        0001                                           ->    [0, 0, 0, 1]  ->  (γ₁)⁰ (γ₂)⁰ (γ₃)⁰ (γ₄)¹ = γ₄
+#g9   ->  9            ->        1001                                           ->    [1, 0, 0, 1]  ->  (γ₁)¹ (γ₂)⁰ (γ₃)⁰ (γ₄)¹ = γ₁ γ₄
+#g10  ->  10           ->        0101                                           ->    [0, 1, 0, 1]  ->  (γ₁)⁰ (γ₂)¹ (γ₃)⁰ (γ₄)¹ = γ₂ γ₄
+#g11  ->  11           ->        1101                                           ->    [1, 1, 0, 1]  ->  (γ₁)¹ (γ₂)¹ (γ₃)⁰ (γ₄)¹ = γ₁ γ₂ γ₄
+#g12  ->  12           ->        0011                                           ->    [0, 0, 1, 1]  ->  (γ₁)⁰ (γ₂)⁰ (γ₃)¹ (γ₄)¹ = γ₃ γ₄
+#g13  ->  13           ->        1011                                           ->    [1, 0, 1, 1]  ->  (γ₁)¹ (γ₂)⁰ (γ₃)¹ (γ₄)¹ = γ₁ γ₃ γ₄ 
+#g14  ->  14           ->        0111                                           ->    [0, 1, 1, 1]  ->  (γ₁)⁰ (γ₂)¹ (γ₃)¹ (γ₄)¹ = γ₂ γ₃ γ₄
+#g15  ->  15           ->        1111                                           ->    [1, 1, 1, 1]  ->  (γ₁)¹ (γ₂)¹ (γ₃)¹ (γ₄)¹ = γ₁ γ₂ γ₃ γ₄
+
+#dictionary with the full correspondence
+int_to_gamma = {0: '1', 1: 'gamma1', 2: 'gamma2', 3: 'gamma1gamma2',
+                4: 'gamma3', 5: 'gamma1gamma3', 6: 'gamma2gamma3', 7: 'gamma1gamma2gamma3',
+                8: 'gamma4', 9: 'gamma1gamma4', 10: 'gamma2gamma4', 11: 'gamma1gamma2gamma4',
+                12: 'gamma3gamma4',13: 'gamma1gamma3gamma4', 14: 'gamma2gamma3gamma4', 15: 'gamma1gamma2gamma3gamma4'}
 
 
 
@@ -387,53 +426,107 @@ class bulding_block:
         #the first two axis are nconf and time, the other ones are the indices of the operator, and they have dimensionality 4
         bb_operator = np.zeros(shape=(self.nconf, self.T, ) + (4,)*n_indices, dtype=complex)
 
+
+        #We take now care of the quark content
+
+        #first thing first we retrieve the right minus left covariant derivative
+        covD = self.covD_r1() - self.covD_l1() #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
+
+        #now we select the isospin component requested by the user
+        #the shape will change: (nconf, nquarks, ndstructures, T, 4) -> (nconf, ndstructures, T, 4) 
+
+        #if the isospin is just 'U' or 'D' we select the corresponding quark content
+        if isospin in ['U','D']:
+            qcontent = self.qcontent_list.index(isospin)
+            covD = covD[:,qcontent,:,:,:]             
+        #if otherwise it is 'U+D' we sum the two components
+        elif isospin == 'U+D':
+            qcontent_U = self.qcontent_list.index('U')
+            qcontent_D = self.qcontent_list.index('D')
+            covD = covD[:,qcontent_U,:,:,:] + covD[:,qcontent_D,:,:,:]
+        #if otherwise it is 'U-D' we subtract the two components
+        elif isospin == 'U-D':
+            qcontent_U = self.qcontent_list.index('U')
+            qcontent_D = self.qcontent_list.index('D')
+            covD = covD[:,qcontent_U,:,:,:] - covD[:,qcontent_D,:,:,:]      #now covD has shape (nconf, ndstructures, T, 4)
+
+
+
         
         #We now proceed with the actual construction of the building block, that depends on the number of covariant derivatives (=n_mu)
 
         #case with 1 covariant derivative
         if n_mu==1:
             
-            #first thing first we retrieve the right minus left covariant derivative
-            covD = self.covD_r1() - self.covD_l1() #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
-
-            #now we select the isospin component requested by the user
-            #the shape will change: (nconf, nquarks, ndstructures, T, 4) -> (nconf, ndstructures, T, 4) 
-
-            #if the isospin is just 'U' or 'D' we select the corresponding quark content
-            if isospin in ['U','D']:
-                qcontent = self.qcontent_list.index(isospin)
-                covD = covD[:,qcontent,:,:,:]             #now covD has shape (nconf, ndstructures, T, 4)
-            #if otherwise it is 'U+D' we sum the two components
-            elif isospin == 'U+D':
-                qcontent_U = self.qcontent_list.index('U')
-                qcontent_D = self.qcontent_list.index('D')
-                covD = covD[:,qcontent_U,:,:,:] + covD[:,qcontent_D,:,:,:]
-            #if otherwise it is 'U-D' we subtract the two components
-            elif isospin == 'U-D':
-                qcontent_U = self.qcontent_list.index('U')
-                qcontent_D = self.qcontent_list.index('D')
-                covD = covD[:,qcontent_U,:,:,:] - covD[:,qcontent_D,:,:,:]
-            
-            
-
             #We now build the axis corresponding to the gamma structure
             #the shape will change in the following way:
             #       (nconf, ndstructures, T, 4) -> (nconf, T, 4, 4)  for X='V' or 'A'
             #       (nconf, ndstructures, T, 4) -> (nconf, T, 4, 4, 4)  for X='T'
 
-            #we have to look at understand which gamma matrix goes into which position, and this depends on X
+            #we have to look and understand which gamma matrix goes into which position, and this depends on X
 
             #vectorial case
             if X == 'V':
 
-                #for the vector case the gamma matrices are gamma1, gamma2, gamma3, gamma4
-                gamma_list = ['g0','gx','gy','gz'] 
+                #for the vectorial case we just loop over the components of gamma_mu and add them to the building block
+                for mu, gamma in enumerate(gamma_mu):
+
+                    #the key corresponding to the gamma_mu matrix is 
+                    key = gamma_to_key[gamma]
+                    #the index of the key is 
+                    index = self.dstructure_list.index(key)
+
+                    #we now just assign the dstructure axis we want to the mu axis
+
+                    # (nconf,T,4,4)              (nconf,ndirac,T,4)
+                    bb_operator[:,:,mu,:] = covD[:,index,:,:]
+
             #axial case
             elif X == 'A':
-                pass
+                
+                #for the axial case we have to take the product of each gamma mu with gamma5
+                for mu, gamma in enumerate(gamma_mu):
+
+                    #we look at what is the result of the product gamma_mu * gamma5 (both in overall sign and in gamma structure)
+                    sign_result, list_result = gamma_prod( gamma_to_list[gamma], gamma_to_list[gamma5]  )
+
+                    #from the result about the dirac structure we find the key
+                    key = list_to_key(list_result)
+
+                    #and from the key the index
+                    index = self.dstructure_list.index(key)
+
+                    #we now just assign the dstructure axis we want to the mu axis, taking also into account the sign
+
+                    # (nconf,T,4,4)                          (nconf,ndirac,T,4)
+                    bb_operator[:,:,mu,:] = sign_result * covD[:,index,:,:]
+
             #tensorial case
             elif X == 'T':
-                pass
+                
+                #for the tensor case the gamma matrices are gamma1gamma2, gamma1gamma3, gamma1gamma4, gamma2gamma3, gamma2gamma4, gamma3gamma4
+                
+                #so we have to loop two times over gamma_mu
+                for mu1, gamma_mu1 in enumerate(gamma_mu):
+                    for mu2, gamma_mu2 in enumerate(gamma_mu):
+
+                        #we look at what is the result of the product gamma_mu1 * gamma_mu2 and of gamma_mu2 * gamma_mu1 (both in overall sign and in gamma structure)
+                        sign_result1, list_result1 = gamma_prod( gamma_to_list[gamma_mu1], gamma_to_list[gamma_mu2]  ) #gammma_mu1 * gamma_mu2
+                        sign_result2, list_result2 = gamma_prod( gamma_to_list[gamma_mu2], gamma_to_list[gamma_mu1]  ) #gammma_mu2 * gamma_mu1
+
+                        #from the results about the dirac structure we find the key
+                        key1 = list_to_key(list_result1)
+                        key2 = list_to_key(list_result2)
+
+                        #and from the key the index
+                        index1 = self.dstructure_list.index(key1)
+                        index2 = self.dstructure_list.index(key2)
+
+                        #we now just assign the dstructure axis we want to the mu1 and mu2 axis, taking also into account the sign
+                        #we also use the fact that the tensor structure has the gamma structure sigma_mu1_mu2 = i/2 * (gamma_mu1 gamma_mu2 - gamma_mu2 gamma_mu1)
+
+                        # (nconf,T,4,4,4)                          (nconf,ndirac,T,4)
+                        bb_operator[:,:,mu1,mu2,:] = 1j/2 * ( sign_result1 * covD[:,index1,:,:] - sign_result2 * covD[:,index2,:,:] )
 
 
 
@@ -442,71 +535,35 @@ class bulding_block:
             pass #TO BE IMPLEMENTED
 
 
+        #we return the building block as calculated
+        return bb_operator
+
+
 
 
 
 
 ################ Auxiliary Functions ###############################
 
-#function used to pass from base 2 to base 10 (routine used in the gamma matrices mapping)
-def determine_uint(list_of_bits):
-    r"""
-        params:
-            - list_of_bits: list[int], must contain 0th and 1st only.
+#function used to implement the product of two gamma matrices
+def gamma_prod(g1,g2):
 
-        Transforms a list of bits to an unsigned integer.
-
-        https://en.wikipedia.org/wiki/Two's_complement
     """
-    
-    # reverse the order such that the major bit comes last.
-    list_of_bits = list(reversed(list_of_bits))
-    
-    # compute the integer
-    w = 0
-    for i,a in enumerate(list_of_bits):
-        w+= a * 2**i
-
-    return w
-
-#function used to map the gamma matrices
-def Gamma_n(g_mu):
-    r"""
-        param:
-            - g_mu: list, lists the gamma matrices included in the 
-                                  product
-
-        behaviour:
-            indices list indicates which γ-matrices should be included in 
-            the product. The order is [x,y,z,t]. A 0 indicates no inclusion 
-            a 1 includes the γ-matrices.
-
-            Assuming you want Gamma = γ₄ then g_mu = [0,0,0,1]
-
-            The full table is:
-            g0  = [0, 0, 0, 0] => (γ₁)⁰ (γ₂)⁰ (γ₃)⁰ (γ₄)⁰ = 1
-            g1  = [1, 0, 0, 0] => (γ₁)¹ (γ₂)⁰ (γ₃)⁰ (γ₄)⁰ = γ₁
-            g2  = [0, 1, 0, 0] => (γ₁)⁰ (γ₂)¹ (γ₃)⁰ (γ₄)⁰ = γ₂
-            g3  = [1, 1, 0, 0] => (γ₁)¹ (γ₂)¹ (γ₃)⁰ (γ₄)⁰ = γ₁ γ₂
-            g4  = [0, 0, 1, 0] => (γ₁)⁰ (γ₂)⁰ (γ₃)¹ (γ₄)⁰ = γ₃
-            g5  = [1, 0, 1, 0] => (γ₁)¹ (γ₂)⁰ (γ₃)¹ (γ₄)⁰ = γ₁ γ₃
-            g6  = [0, 1, 1, 0] => (γ₁)⁰ (γ₂)¹ (γ₃)¹ (γ₄)⁰ = γ₂ γ₃ 
-            g7  = [1, 1, 1, 0] => (γ₁)¹ (γ₂)¹ (γ₃)¹ (γ₄)⁰ = γ₁ γ₂ γ₃
-            g8  = [0, 0, 0, 1] => (γ₁)⁰ (γ₂)⁰ (γ₃)⁰ (γ₄)¹ = γ₄
-            g9  = [1, 0, 0, 1] => (γ₁)¹ (γ₂)⁰ (γ₃)⁰ (γ₄)¹ = γ₁ γ₄
-            g10 = [0, 1, 0, 1] => (γ₁)⁰ (γ₂)¹ (γ₃)⁰ (γ₄)¹ = γ₂ γ₄
-            g11 = [1, 1, 0, 1] => (γ₁)¹ (γ₂)¹ (γ₃)⁰ (γ₄)¹ = γ₁ γ₂ γ₄
-            g12 = [0, 0, 1, 1] => (γ₁)⁰ (γ₂)⁰ (γ₃)¹ (γ₄)¹ = γ₃ γ₄
-            g13 = [1, 0, 1, 1] => (γ₁)¹ (γ₂)⁰ (γ₃)¹ (γ₄)¹ = γ₁ γ₃ γ₄ 
-            g14 = [0, 1, 1, 1] => (γ₁)⁰ (γ₂)¹ (γ₃)¹ (γ₄)¹ = γ₂ γ₃ γ₄
-            g15 = [1, 1, 1, 1] => (γ₁)¹ (γ₂)¹ (γ₃)¹ (γ₄)¹ = γ₁ γ₂ γ₃ γ₄
-
-        returns:
-            gn with n determined from g_mu.
+    - the inputs are g1 and g2 , lists of 4 bits (with the rightmost being the most significat)
+    - the output is a tuple with (sign, gamma structure), where the gamma structure is in the same format (list of 4 bits)
     """
-    # reverse the order of the [x,y,z,t] -> [t,z,y,x] array to match aboves table
-    # also perform a deep copy ;)
-    g_mu = [ i for i in reversed(g_mu) ]
 
-    # get the corresponding n for gn
-    return f"g{determine_uint(g_mu)}"
+    #the gamma multiplication is just a bit by bit addition modulo 2
+    gstructure = [ (e1+e2)%2 for e1,e2 in zip(g1,g2)]
+
+    #the sign is the tricky part, to compute it we have to count the number of swaps occuring
+    sign = 0
+    for i,e1 in enumerate(g1):
+        sign += e1 * sum(g2[:i]) #the multiplication to e1 is equivalent to count the swaps only when e1 is 1 (since e1 can only be 0 or 1)
+
+    return (-1)**sign, gstructure
+
+
+#function translating one list encoding the gamma structure into the relevant key
+def list_to_key(list):
+    return 'g'+ str(int( ''.join([str(e) for e in reversed(list)]), 2))
