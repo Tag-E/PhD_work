@@ -393,6 +393,17 @@ class bulding_block:
 
 
 
+    #The below functions to compute the covariant derivatives are based on three rules connecting the gauge link
+    #expression of the covariant derivatives to the displacements expression
+    #   1) the order of the mu indices is reversed when passing from gauge links to displacements
+    #   2) U = forward = capital mu, U dagger = backward = small mu
+    #   3) the time argument of the displacement is that of the psibar part of the gauge link expression,
+    #      so whenever psibar is shifted in time also the displacements must be, to do that in the code we
+    #      use np.roll(), which we use to shift the time axis accordingly, so e.g. to get the t+1 argument
+    #      we have to roll with a shift of -1 (so that t+1 is now in the t position) and vice vers
+    #      (the use of roll is possible because we leverage PBC conditions in time)
+
+
 
     #function used to construct the right covariant derivative of the building blocks (with the chosen keys)
     def covD_r1(self) -> np.ndarray:
@@ -463,18 +474,198 @@ class bulding_block:
             #the procedure is different for spatial and temporal components:
             #(in particular for the temporal component the temporal axis has to be shifted by -1 for backward displacement and by +1 for forward displacement)
 
-            #for the spatial components we have
-            if i<3:
-                #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_l1_array[:, :, :, :, i] = self.bb_array[:, :, idisp1, :, :] - self.bb_array[:, :, idisp2, :, :]
-            #for the temporal component we have
-            elif i==3:
-                #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_l1_array[:, :, :, :, i] = np.roll(self.bb_array[:, :, idisp1, :, :], shift=-1, axis=-1) - np.roll(self.bb_array[:, :, idisp2, :, :], shift=1, axis=-1) #axis=-1 is the time axis
+            #smart of way of getting the shift only for i==3
+            covD_l1_array[:, :, :, :, i] = np.roll(self.bb_array[:, :, idisp1, :, :], shift=-(i//3), axis=-1) - np.roll(self.bb_array[:, :, idisp2, :, :], shift=i//3, axis=-1) #axis=-1 is the time axis
             
 
         #we return the right covariant derivative
         return covD_l1_array
+
+
+
+    #function used to construct the double right-right covariant derivative of the building blocks
+    def covD_r2(self) -> np.ndarray:
+        """
+        The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
+
+        The output is an object with shape (nconf, nquarks, ndstructures, T, 4, 4), 4 being the dimensionality of each one of the two indices of the covariant derivatives
+        
+        (the code assumes the momentum to be 0)
+        """
+
+        #list with the mu indices
+        mu_list = ['x','y','z','t']
+
+        #we instatiate the np array where we will store the covariant derivative of the building blocks
+        covD_r2_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+
+        #we now loop over the two indices of the double covariant derivative
+        for i1, mu1 in enumerate(mu_list):
+            for i2, mu2 in enumerate(mu_list):
+
+                #the displacements we have to use are the following
+                disp1 = 'l2_'+mu2.upper()+mu1.upper()
+                disp2 = 'l2_'+mu2.lower()+mu1.upper()
+                disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                disp4 = 'l2_'+mu2.lower()+mu1.lower()
+                #with indices given by
+                idisp1 = self.displacement_list.index(disp1)
+                idisp2 = self.displacement_list.index(disp2)
+                idisp3 = self.displacement_list.index(disp3)
+                idisp4 = self.displacement_list.index(disp4)
+
+                 #knowing which displacements to use we can now compute the right-right covariant derivative as follows
+
+                #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
+                covD_r2_array[:, :, :, :, i1, i2] = self.bb_array[:, :, idisp1, :, :] - self.bb_array[:, :, idisp2, :, :] - self.bb_array[:, :, idisp3, :, :] + self.bb_array[:, :, idisp4, :, :]
+
+        #we return the right-right covariant derivative
+        return covD_r2_array
+
+    
+    #function used to construct the double left-left covariant derivative of the building blocks
+    def covD_l2(self) -> np.ndarray:
+        """
+        The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
+
+        The output is an object with shape (nconf, nquarks, ndstructures, T, 4, 4), 4 being the dimensionality of each one of the two indices of the covariant derivatives
+        
+        (the code assumes the momentum to be 0)
+        """
+
+        #list with the mu indices
+        mu_list = ['x','y','z','t']
+
+        #we instatiate the np array where we will store the covariant derivative of the building blocks
+        covD_l2_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+
+        #we now loop over the two indices of the double covariant derivative
+        for i1, mu1 in enumerate(mu_list):
+            for i2, mu2 in enumerate(mu_list):
+
+                #the displacements we have to use are the following
+                disp1 = 'l2_'+mu2.lower()+mu1.lower()
+                disp2 = 'l2_'+mu2.lower()+mu1.upper()
+                disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                disp4 = 'l2_'+mu2.upper()+mu1.upper()
+                #with indices given by
+                idisp1 = self.displacement_list.index(disp1)
+                idisp2 = self.displacement_list.index(disp2)
+                idisp3 = self.displacement_list.index(disp3)
+                idisp4 = self.displacement_list.index(disp4)
+                #and the related building blocks have to be shifted on the time axis by (smart way of computing the shift)
+                shift1 = -(i1//3) -(i2//3)
+                shift2 = +i1//3 -(i2//3)
+                shift3 = -(i1//3) +i2//3
+                shift4 = +i1//3 +i2//3
+
+                 #knowing which displacements to use we can now compute the left-left covariant derivative as follows
+
+                #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
+                covD_l2_array[:, :, :, :, i1, i2] = np.roll( self.bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                                                     -  np.roll( self.bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
+                                                     -  np.roll( self.bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
+                                                     +  np.roll( self.bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1)
+        #we return the left-left covariant derivative
+        return covD_l2_array
+    
+
+
+    #function used to construct the double left-right covariant derivative of the building blocks
+    def covD_l1_r1(self) -> np.ndarray:
+        """
+        The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
+
+        The output is an object with shape (nconf, nquarks, ndstructures, T, 4, 4), 4 being the dimensionality of each one of the two indices of the covariant derivatives
+        
+        (the code assumes the momentum to be 0)
+        """
+
+        #list with the mu indices
+        mu_list = ['x','y','z','t']
+
+        #we instatiate the np array where we will store the covariant derivative of the building blocks
+        covD_l1_r1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+
+        #we now loop over the two indices of the double covariant derivative
+        for i1, mu1 in enumerate(mu_list):
+            for i2, mu2 in enumerate(mu_list):
+
+                #the displacements we have to use are the following
+                disp1 = 'l2_'+mu2.upper()+mu1.upper()
+                disp2 = 'l2_'+mu2.upper()+mu1.lower()
+                disp3 = 'l2_'+mu2.lower()+mu1.upper()
+                disp4 = 'l2_'+mu2.lower()+mu1.lower()
+                #with indices given by
+                idisp1 = self.displacement_list.index(disp1)
+                idisp2 = self.displacement_list.index(disp2)
+                idisp3 = self.displacement_list.index(disp3)
+                idisp4 = self.displacement_list.index(disp4)
+                #and the related building blocks have to be shifted on the time axis by (smart way of computing the shift)
+                shift1 = +i1//3
+                shift2 = -(i1//3)
+                shift3 = +i1//3
+                shift4 = -(i1//3)
+
+                 #knowing which displacements to use we can now compute the left-left covariant derivative as follows
+
+                #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
+                covD_l1_r1_array[:, :, :, :, i1, i2] = -( np.roll( self.bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                                                            -  np.roll( self.bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
+                                                            -  np.roll( self.bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
+                                                            +  np.roll( self.bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
+        #we return the left-left covariant derivative
+        return covD_l1_r1_array
+    
+
+    #function used to construct the double right-left covariant derivative of the building blocks
+    def covD_r1_l1(self) -> np.ndarray:
+        """
+        The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
+
+        The output is an object with shape (nconf, nquarks, ndstructures, T, 4, 4), 4 being the dimensionality of each one of the two indices of the covariant derivatives
+        
+        (the code assumes the momentum to be 0)
+        """
+
+        #list with the mu indices
+        mu_list = ['x','y','z','t']
+
+        #we instatiate the np array where we will store the covariant derivative of the building blocks
+        covD_r1_l1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+
+        #we now loop over the two indices of the double covariant derivative
+        for i1, mu1 in enumerate(mu_list):
+            for i2, mu2 in enumerate(mu_list):
+
+                #the displacements we have to use are the following
+                disp1 = 'l2_'+mu2.upper()+mu1.upper()
+                disp2 = 'l2_'+mu2.lower()+mu1.upper()
+                disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                disp4 = 'l2_'+mu2.lower()+mu1.lower()
+                #with indices given by
+                idisp1 = self.displacement_list.index(disp1)
+                idisp2 = self.displacement_list.index(disp2)
+                idisp3 = self.displacement_list.index(disp3)
+                idisp4 = self.displacement_list.index(disp4)
+                #and the related building blocks have to be shifted on the time axis by (smart way of computing the shift)
+                shift1 = +i2//3
+                shift2 = -(i2//3)
+                shift3 = +i2//3
+                shift4 = -(i2//3)
+
+                 #knowing which displacements to use we can now compute the left-left covariant derivative as follows
+
+                #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
+                covD_r1_l1_array[:, :, :, :, i1, i2] = -( np.roll( self.bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                                                             -  np.roll( self.bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
+                                                             -  np.roll( self.bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
+                                                             +  np.roll( self.bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
+        #we return the left-left covariant derivative
+        return covD_r1_l1_array
+
+
+
 
 
     #function used to obtain the building block of the relevant operators
