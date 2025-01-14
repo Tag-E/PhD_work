@@ -505,9 +505,14 @@ class bulding_block:
 
                 #the displacements we have to use are the following
                 disp1 = 'l2_'+mu2.upper()+mu1.upper()
-                disp2 = 'l2_'+mu2.lower()+mu1.upper()
-                disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                if i1!=i2:                                  #the mixed cases have to be treated with care: tT,Tt,xX,Xx,.. ecc. all give rise to UUdagger=1, hence l0_
+                    disp2 = 'l2_'+mu2.lower()+mu1.upper()
+                    disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                else:
+                    disp2 = 'l0_'
+                    disp3 = 'l0_'
                 disp4 = 'l2_'+mu2.lower()+mu1.lower()
+
                 #with indices given by
                 idisp1 = self.displacement_list.index(disp1)
                 idisp2 = self.displacement_list.index(disp2)
@@ -545,8 +550,12 @@ class bulding_block:
 
                 #the displacements we have to use are the following
                 disp1 = 'l2_'+mu2.lower()+mu1.lower()
-                disp2 = 'l2_'+mu2.lower()+mu1.upper()
-                disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                if i1!=i2:                                  #the mixed cases have to be treated with care: tT,Tt,xX,Xx,.. ecc. all give rise to UUdagger=1, hence l0_
+                    disp2 = 'l2_'+mu2.lower()+mu1.upper()
+                    disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                else:
+                    disp2 = 'l0_'
+                    disp3 = 'l0_'
                 disp4 = 'l2_'+mu2.upper()+mu1.upper()
                 #with indices given by
                 idisp1 = self.displacement_list.index(disp1)
@@ -593,8 +602,12 @@ class bulding_block:
 
                 #the displacements we have to use are the following
                 disp1 = 'l2_'+mu2.upper()+mu1.upper()
-                disp2 = 'l2_'+mu2.upper()+mu1.lower()
-                disp3 = 'l2_'+mu2.lower()+mu1.upper()
+                if i1!=i2:                                  #the mixed cases have to be treated with care: tT,Tt,xX,Xx,.. ecc. all give rise to UUdagger=1, hence l0_
+                    disp2 = 'l2_'+mu2.upper()+mu1.lower()
+                    disp3 = 'l2_'+mu2.lower()+mu1.upper()
+                else:
+                    disp2 = 'l0_'
+                    disp3 = 'l0_'
                 disp4 = 'l2_'+mu2.lower()+mu1.lower()
                 #with indices given by
                 idisp1 = self.displacement_list.index(disp1)
@@ -640,8 +653,12 @@ class bulding_block:
 
                 #the displacements we have to use are the following
                 disp1 = 'l2_'+mu2.upper()+mu1.upper()
-                disp2 = 'l2_'+mu2.lower()+mu1.upper()
-                disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                if i1!=i2:                                  #the mixed cases have to be treated with care: tT,Tt,xX,Xx,.. ecc. all give rise to UUdagger=1, hence l0_
+                    disp2 = 'l2_'+mu2.lower()+mu1.upper()
+                    disp3 = 'l2_'+mu2.upper()+mu1.lower()
+                else:
+                    disp2 = 'l0_'
+                    disp3 = 'l0_'
                 disp4 = 'l2_'+mu2.lower()+mu1.lower()
                 #with indices given by
                 idisp1 = self.displacement_list.index(disp1)
@@ -715,8 +732,13 @@ class bulding_block:
         #We take now care of the quark content
 
         #first thing first we retrieve the right minus left covariant derivative
-        covD = self.covD_r1() - self.covD_l1() #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
+        if n_mu==1:
+            covD = self.covD_r1() - self.covD_l1() #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
+        elif n_mu==2:
+            covD = self.covD_l2() + self.covD_r2() - self.covD_r1_l1() - self.covD_l1_r1() #shape = (nconf, nquarks, ndstructures, T, 4, 4)
 
+        #in the following we can just ignore the dimensionalities due to the mu index and everything is the same for the n+mu =1 and =2 case
+        
         #now we select the isospin component requested by the user
         #the shape will change: (nconf, nquarks, ndstructures, T, 4) -> (nconf, ndstructures, T, 4) 
 
@@ -733,91 +755,91 @@ class bulding_block:
         elif isospin == 'U-D':
             qcontent_U = self.qcontent_list.index('U')
             qcontent_D = self.qcontent_list.index('D')
-            covD = covD[:,qcontent_U,:,:,:] - covD[:,qcontent_D,:,:,:]      #now covD has shape (nconf, ndstructures, T, 4)
+            covD = covD[:,qcontent_U,:,:,:] - covD[:,qcontent_D,:,:,:]      #now covD has shape (nconf, ndstructures, T, 4) (extra 4 if n_mu=2)
 
 
 
         
         #We now proceed with the actual construction of the building block, that depends on the number of covariant derivatives (=n_mu)
 
-        #case with 1 covariant derivative
-        if n_mu==1:
+        ##case with 1 covariant derivative
+        #if n_mu==1:
             
-            #We now build the axis corresponding to the gamma structure
-            #the shape will change in the following way:
-            #       (nconf, ndstructures, T, 4) -> (nconf, T, 4, 4)  for X='V' or 'A'
-            #       (nconf, ndstructures, T, 4) -> (nconf, T, 4, 4, 4)  for X='T'
+        #We now build the axis corresponding to the gamma structure
+        #the shape will change in the following way:
+        #       (nconf, ndstructures, T, 4) -> (nconf, T, 4, 4)  for X='V' or 'A'
+        #       (nconf, ndstructures, T, 4) -> (nconf, T, 4, 4, 4)  for X='T'
 
-            #we have to look and understand which gamma matrix goes into which position, and this depends on X
+        #we have to look and understand which gamma matrix goes into which position, and this depends on X
 
-            #vectorial case
-            if X == 'V':
+        #vectorial case
+        if X == 'V':
 
-                #for the vectorial case we just loop over the components of gamma_mu and add them to the building block
-                for mu, gamma in enumerate(gamma_mu):
+            #for the vectorial case we just loop over the components of gamma_mu and add them to the building block
+            for mu, gamma in enumerate(gamma_mu):
 
-                    #the key corresponding to the gamma_mu matrix is 
-                    key = gamma_to_key[gamma]
-                    #the index of the key is 
-                    index = self.dstructure_list.index(key)
+                #the key corresponding to the gamma_mu matrix is 
+                key = gamma_to_key[gamma]
+                #the index of the key is 
+                index = self.dstructure_list.index(key)
 
-                    #we now just assign the dstructure axis we want to the mu axis
+                #we now just assign the dstructure axis we want to the mu axis
 
-                    # (nconf,T,4,4)              (nconf,ndirac,T,4)
-                    bb_operator[:,:,mu,:] = covD[:,index,:,:]
+                # (nconf,T,4,4)              (nconf,ndirac,T,4)
+                bb_operator[:,:,mu,:] = covD[:,index,:,:]
 
-            #axial case
-            elif X == 'A':
-                
-                #for the axial case we have to take the product of each gamma mu with gamma5
-                for mu, gamma in enumerate(gamma_mu):
+        #axial case
+        elif X == 'A':
+            
+            #for the axial case we have to take the product of each gamma mu with gamma5
+            for mu, gamma in enumerate(gamma_mu):
 
-                    #we look at what is the result of the product gamma_mu * gamma5 (both in overall sign and in gamma structure)
-                    sign_result, list_result = gamma_prod( gamma_to_list[gamma], gamma_to_list[gamma5]  )
+                #we look at what is the result of the product gamma_mu * gamma5 (both in overall sign and in gamma structure)
+                sign_result, list_result = gamma_prod( gamma_to_list[gamma], gamma_to_list[gamma5]  )
 
-                    #from the result about the dirac structure we find the key
-                    key = list_to_key(list_result)
+                #from the result about the dirac structure we find the key
+                key = list_to_key(list_result)
+
+                #and from the key the index
+                index = self.dstructure_list.index(key)
+
+                #we now just assign the dstructure axis we want to the mu axis, taking also into account the sign
+
+                # (nconf,T,4,4)                          (nconf,ndirac,T,4)
+                bb_operator[:,:,mu,:] = sign_result * covD[:,index,:,:]
+
+        #tensorial case
+        elif X == 'T':
+            
+            #for the tensor case the gamma matrices are gamma1gamma2, gamma1gamma3, gamma1gamma4, gamma2gamma3, gamma2gamma4, gamma3gamma4
+            
+            #so we have to loop two times over gamma_mu
+            for mu1, gamma_mu1 in enumerate(gamma_mu):
+                for mu2, gamma_mu2 in enumerate(gamma_mu):
+
+                    #we look at what is the result of the product gamma_mu1 * gamma_mu2 and of gamma_mu2 * gamma_mu1 (both in overall sign and in gamma structure)
+                    sign_result1, list_result1 = gamma_prod( gamma_to_list[gamma_mu1], gamma_to_list[gamma_mu2]  ) #gammma_mu1 * gamma_mu2
+                    sign_result2, list_result2 = gamma_prod( gamma_to_list[gamma_mu2], gamma_to_list[gamma_mu1]  ) #gammma_mu2 * gamma_mu1
+
+                    #from the results about the dirac structure we find the key
+                    key1 = list_to_key(list_result1)
+                    key2 = list_to_key(list_result2)
 
                     #and from the key the index
-                    index = self.dstructure_list.index(key)
+                    index1 = self.dstructure_list.index(key1)
+                    index2 = self.dstructure_list.index(key2)
 
-                    #we now just assign the dstructure axis we want to the mu axis, taking also into account the sign
+                    #we now just assign the dstructure axis we want to the mu1 and mu2 axis, taking also into account the sign
+                    #we also use the fact that the tensor structure has the gamma structure sigma_mu1_mu2 = i/2 * (gamma_mu1 gamma_mu2 - gamma_mu2 gamma_mu1)
 
-                    # (nconf,T,4,4)                          (nconf,ndirac,T,4)
-                    bb_operator[:,:,mu,:] = sign_result * covD[:,index,:,:]
-
-            #tensorial case
-            elif X == 'T':
-                
-                #for the tensor case the gamma matrices are gamma1gamma2, gamma1gamma3, gamma1gamma4, gamma2gamma3, gamma2gamma4, gamma3gamma4
-                
-                #so we have to loop two times over gamma_mu
-                for mu1, gamma_mu1 in enumerate(gamma_mu):
-                    for mu2, gamma_mu2 in enumerate(gamma_mu):
-
-                        #we look at what is the result of the product gamma_mu1 * gamma_mu2 and of gamma_mu2 * gamma_mu1 (both in overall sign and in gamma structure)
-                        sign_result1, list_result1 = gamma_prod( gamma_to_list[gamma_mu1], gamma_to_list[gamma_mu2]  ) #gammma_mu1 * gamma_mu2
-                        sign_result2, list_result2 = gamma_prod( gamma_to_list[gamma_mu2], gamma_to_list[gamma_mu1]  ) #gammma_mu2 * gamma_mu1
-
-                        #from the results about the dirac structure we find the key
-                        key1 = list_to_key(list_result1)
-                        key2 = list_to_key(list_result2)
-
-                        #and from the key the index
-                        index1 = self.dstructure_list.index(key1)
-                        index2 = self.dstructure_list.index(key2)
-
-                        #we now just assign the dstructure axis we want to the mu1 and mu2 axis, taking also into account the sign
-                        #we also use the fact that the tensor structure has the gamma structure sigma_mu1_mu2 = i/2 * (gamma_mu1 gamma_mu2 - gamma_mu2 gamma_mu1)
-
-                        # (nconf,T,4,4,4)                          (nconf,ndirac,T,4)
-                        bb_operator[:,:,mu1,mu2,:] = 1j/2 * ( sign_result1 * covD[:,index1,:,:] - sign_result2 * covD[:,index2,:,:] )
+                    # (nconf,T,4,4,4)                          (nconf,ndirac,T,4)
+                    bb_operator[:,:,mu1,mu2,:] = 1j/2 * ( sign_result1 * covD[:,index1,:,:] - sign_result2 * covD[:,index2,:,:] )
 
 
 
-        #case with 2 covariant derivatives
-        elif n_mu==2:
-            pass #TO BE IMPLEMENTED
+        ##case with 2 covariant derivatives
+        #elif n_mu==2:
+        #    pass #TO BE IMPLEMENTED
 
         
         #we normalize the operator if the user requested so (in this case the output will be the ratio giving the matrix element)
