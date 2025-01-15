@@ -94,6 +94,17 @@ class bulding_block:
 
     ## Global variable shared by all class instances
 
+    #variables we use to avoid reading multiple times the 2p corr for various class instances
+
+    #folder of the 2p correlators read by the last class instance
+    last_2p_folder = ''
+    #keys of the 2p correlators read by the last class instance
+    last_2p_parms = []
+    #last number of read configurations
+    last_nconf = 0
+    #values of the 2p corr read by the last class instance 
+    last_2p_corr = 0
+
 
 
     #Initialization function
@@ -255,6 +266,11 @@ class bulding_block:
 
                 #we read the 2-point correlator
                 self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
+
+    
+        #we update the variables shared by all the class instances
+        #TO DO: continue from here, and then go some lines above and add a check before reading the 2p corr
+
 
 
 
