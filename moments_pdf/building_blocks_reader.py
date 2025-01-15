@@ -733,9 +733,9 @@ class bulding_block:
 
         #first thing first we retrieve the right minus left covariant derivative
         if n_mu==1:
-            covD = self.covD_r1() - self.covD_l1() #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
+            covD = 1/2 * ( self.covD_r1() - self.covD_l1() ) #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
         elif n_mu==2:
-            covD = self.covD_l2() + self.covD_r2() - self.covD_r1_l1() - self.covD_l1_r1() #shape = (nconf, nquarks, ndstructures, T, 4, 4)
+            covD = 1/4 * ( self.covD_l2() + self.covD_r2() - self.covD_r1_l1() - self.covD_l1_r1() ) #shape = (nconf, nquarks, ndstructures, T, 4, 4)
 
         #in the following we can just ignore the dimensionalities due to the mu index and everything is the same for the n+mu =1 and =2 case
         
