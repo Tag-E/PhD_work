@@ -40,6 +40,7 @@ from pylatex import Document, Math, Matrix, Section, Subsection, Command, Aligna
 from pylatex.utils import NoEscape #also to produce a pdf document
 from pylatex.package import Package
 import itertools as it
+from typing import List, Dict #to use strong typing in function definitions
 
 
 
@@ -590,3 +591,131 @@ def parity(permutation):
             elements_seen[current] = True
             current = permutation[current]
     return (-1)**( (length-cycles) % 2 ) # even,odd are 1,-1
+
+
+
+#function used to obtain the dictionary with the cg coefficients in matrix from
+def get_CGdict(X: str, n: int) -> Dict[tuple,List[np.ndarray]]:
+    """
+    Input:
+        - X: either 'V', 'A' or 'T'
+        - n: the number of indices of the operators we want the cg coeff of
+
+    Output:
+        - a dictionary, the keys being the irreps in the cg decomposition,
+          and the values being lists (one for each time the given irrep appears)
+          filled with the matrices of the cg coefficients
+    """
+
+    #first thing first we construct the list of irreps we need
+
+    #we istantiate the list with the irreps we have to use
+    irreps = []
+
+    #we use the right irreps according to the structure (vector,axial or tensor)
+    if X=='V':
+        irreps.append((4,1))
+    elif X=='A':
+        irreps.append((4,4))
+    elif X=='T':
+        irreps.append((4,1))
+        irreps.append((4,1))
+
+    #all the other indices transform according to the fundamental, so we fill the list accordingly
+    while(len(irreps)!=n):
+        irreps.append((4,1))
+
+
+    
+    #we then compute the cg coefficient using the ad hoc class and we store them in a tmp dictionary
+    cg_dict_tmp = cg_calc(*irreps,verbose=False).cg_dict
+
+    #we insantiate the output dict
+    CGdict = {}
+
+
+    #we construc the output dict according to the cg dict obtained from the class
+    for k,v in cg_dict_tmp.items():
+
+        #we then loop over the elements in the list (loop over the multiplicities)
+        for imul,block in enumerate(v):
+
+            #for each couple (k,imul) = (irrep,multiplicity) we start by instantiating an empty list
+            CGdict[(k,imul)] = []
+
+            #we round the cg coeff
+            block = round_CG(block)
+
+            #then we loop over the column of the block (loop over the operators)
+            for icol in range(np.shape(block)[1]):
+
+                #we  obtain the cgmat corresponding to the given operator
+                cg_mat = cg_remapping(block[:,icol],len(irreps))
+
+                #we add the cgmat to the list in the dict
+                CGdict[(k,imul)].append(cg_mat)
+
+    #we return the constructed dictionary
+    return CGdict
+
+
+#function used to obtain the dictionary with the cg coefficients in matrix from
+def get_CGlist(X: str, n: int) -> List[np.ndarray]:
+    """
+    Input:
+        - X: either 'V', 'A' or 'T'
+        - n: the number of indices of the operators we want the cg coeff of
+
+    Output:
+        - a list, each element being the cg matrices corresponding to one
+          of the operators appearing in the decompositions, given in order
+          of irreps of increasing dimensionality
+    """
+
+    #first thing first we construct the list of irreps we need
+
+    #we istantiate the list with the irreps we have to use
+    irreps = []
+
+    #we use the right irreps according to the structure (vector,axial or tensor)
+    if X=='V':
+        irreps.append((4,1))
+    elif X=='A':
+        irreps.append((4,4))
+    elif X=='T':
+        irreps.append((4,1))
+        irreps.append((4,1))
+
+    #all the other indices transform according to the fundamental, so we fill the list accordingly
+    while(len(irreps)!=n):
+        irreps.append((4,1))
+
+
+    
+    #we then compute the cg coefficient using the ad hoc class and we store them in a tmp dictionary
+    cg_dict_tmp = cg_calc(*irreps,verbose=False).cg_dict
+
+    #we insantiate the output list
+    CGlist = []
+
+
+    #we construc the output dict according to the cg dict obtained from the class
+    for k,v in cg_dict_tmp.items():
+
+        #we then loop over the elements in the list (loop over the multiplicities)
+        for imul,block in enumerate(v):
+
+            #we round the cg coeff
+            block = round_CG(block)
+
+            #then we loop over the column of the block (loop over the operators)
+            for icol in range(np.shape(block)[1]):
+
+                #we  obtain the cgmat corresponding to the given operator
+                cg_mat = cg_remapping(block[:,icol],len(irreps))
+
+                #we add the cgmat to the list
+                CGlist.append(cg_mat)
+
+    #we return the constructed list
+    return CGlist
