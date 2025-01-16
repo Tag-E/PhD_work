@@ -110,7 +110,7 @@ class bulding_block:
     #Initialization function
     def __init__(self, bb_folder, p2_folder,
                  tag='bb',hadron='proton_3', tag_2p='hspectrum',
-                 maxConf=None, verbose=False):
+                 maxConf=None, force_2preading=False, verbose=False):
         
         """
         Input description:...
@@ -249,27 +249,46 @@ class bulding_block:
         #we can now initialize the np array with the 2 point correlators
         self.p2_corr = np.zeros(shape=(self.nconf, self.latticeT),dtype=complex)
 
-        #looping over the configurations we read every 2 point correlators
 
-        #info print
-        if verbose:
-            print("\nLooping over the configurations to read the 2-point correlators from the h5 files...\n")
+        #We now read the 2p correlator, to do so there are two cases:
+        #   1) the same 2p correlator was read the last time the class was called, so we just have to read it from the shared class variable
+        #   2) we have to read another 2p correlator
 
-        #we loop over the configurations
-        for iconf, file in enumerate(tqdm(files[:self.nconf])):
+        #so first thing first we check wheteher the 2p corr is different this time or not
 
-            #we open the h5 file corresponding too the current configuration
-            with h5.File(p2_folder+file.name, 'r') as h5f:
+        #if all the specifics of the 2pcorr match (case 1)
+        if self.__class__.last_2p_folder==p2_folder and self.__class__.last_2p_parms==[self.tag_2p, self.momentum_2p] and self.__class__.last_nconf==self.nconf:
+            #we just copy it
+            self.p2_corr = self.last_2p_corr[:]
+            #info print
+            if verbose:
+                print("\nTwo-point correlators retrieved from previous class instance...\n")
+        #if instead this does not happen (case 2)
+        else:
+            #looping over the configurations we read every 2 point correlators
 
-                #id of the given configuration (this is equal to firstconf)
-                cfgid = list(h5f.keys())[0]
+            #info print
+            if verbose:
+                print("\nLooping over the configurations to read the 2-point correlators from the h5 files...\n")
 
-                #we read the 2-point correlator
-                self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
+            #we loop over the configurations
+            for iconf, file in enumerate(tqdm(files[:self.nconf])):
+
+                #we open the h5 file corresponding too the current configuration
+                with h5.File(p2_folder+file.name, 'r') as h5f:
+
+                    #id of the given configuration (this is equal to firstconf)
+                    cfgid = list(h5f.keys())[0]
+
+                    #we read the 2-point correlator
+                    self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
 
     
-        #we update the variables shared by all the class instances
-        #TO DO: continue from here, and then go some lines above and add a check before reading the 2p corr
+        #in the end we update the variables shared by all the class instances
+        self.__class__.last_2p_folder = p2_folder
+        self.__class__.last_2p_parms = [self.tag_2p, self.momentum_2p]
+        self.__class__.last_nconf = self.nconf
+        self.__class__.last_2p_corr = self.p2_corr[:]
 
 
 
