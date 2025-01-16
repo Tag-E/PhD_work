@@ -64,9 +64,6 @@ class moments_toolkit:
     #list of available structures = vector,axial,tensor
     X_list = ['V', 'A', 'T']
 
-    #list with the available indices
-    n_list = [2]
-
 
 
 
@@ -75,7 +72,7 @@ class moments_toolkit:
     #Initialization function
     def __init__(self, p3_folder:str, p2_folder:str,
                  tag_3p='bb',hadron='proton_3', tag_2p='hspectrum',
-                 maxConf=None, verbose=False):
+                 maxConf=None,max_n=3, verbose=False):
         
         """
         Input description:...
@@ -90,6 +87,9 @@ class moments_toolkit:
         #we store the folder variables
         self.p3_folder=p3_folder
         self.p2_folder=p2_folder
+
+        #we initialize a list with all the available number of indices #TO DO: add input check
+        self.n_list = [i for i in range(2,max_n+1)] 
 
         
         #First we look into the given p3 folder to see how many different subfolders we have
@@ -120,6 +120,44 @@ class moments_toolkit:
 
         #list with operators selected for the analysis, initialized as empty
         self.selected_op = []
+
+        ##We build the list of all the available operators
+
+        #we initialize the list as empty
+        self.operator_list = []
+
+        #we also store the classes related to the kinematic factors, we also initialize them as empty
+        self.kclass_list = []
+
+        #we loop over X and n, store the K classes and the operators
+
+        #we count the number of operators
+        op_count=1
+
+        #we loop over the available indices
+        for n in self.n_list:
+            #we loop over the V,A,T structures
+            for X in self.X_list:
+
+                #safety measure to avoid the bug present in the cg calc class: TO BE REMOVED after fixing it (TO DO)
+                if n>2 and X=='T': break
+
+                #the actual number of indices depends on X
+                actual_n = n
+                if X == 'T':
+                    actual_n += 1
+                
+                #we instantiate the related Kfactor class
+                self.kclass_list.append( K_calc(X,actual_n,verbose=False) )
+
+                #we append the operators
+                for op in self.kclass_list[-1].get_opList(first_op=op_count):
+                    self.operator_list.append(op)
+
+                #we update the operator count
+                op_count += 4**actual_n 
+
+
 
 
 
@@ -157,11 +195,14 @@ class moments_toolkit:
         #we instantiate the operator count to 1
         op_count = 1
 
-        #we loop over the available indices
+        #we loop over the available indices (TO DO: collapse this loop for another one over self.kclass_list)
         for n in self.n_list:
 
             #we loop over the V,A,T structures
             for X in self.X_list:
+
+                #safety measure to avoid the bug present in the cg calc class: TO BE REMOVED after fixing it (TO DO)
+                if n>2 and X=='T': break
 
                 #the actual number of indices depends on X
                 actual_n = n
@@ -217,9 +258,24 @@ class moments_toolkit:
             print(f"\nOperators catalogue available in {file_name}\n")
 
 
-        #we destroy the 
+    
+    #function used to select which operators we want to study
+    def select_operator(self, *kwarg):
+        """
+        Input:
+            - the int corresponding to the operators selected, as shown in the operator catalogue (accessible via the method operator_show)
+        """
 
+        #the chosen ids are
+        chosen_ids = kwarg
+
+        #for every id we append the corresponding operator to the list of chosen ones
+        for id in chosen_ids:
+            self.selected_op.append(self.operator_list[id-1]) #-1 because in the pdf the numbering starts from 1
                 
+
+
+
 
 
 

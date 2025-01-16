@@ -30,17 +30,21 @@
 
 ######################## Library Imports ################################
 
+##general libraries
 import sympy as sym #to handle symbolic computations
 from sympy import I # = imaginary unit
 from sympy.tensor.array.expressions import ArraySymbol
 import numpy as np #to handle just everything
-from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
 from pathlib import Path #to check whether directories exist or not
 from pylatex import Document, Math, Matrix, Section, Subsection, Command, Alignat #to produce a pdf documents with the CG coeff
 from pylatex.utils import NoEscape #also to produce a pdf document
 from pylatex.package import Package
 import itertools as it
 from typing import List, Dict #to use strong typing in function definitions
+
+##personal libraries
+from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
+from moments_operator import Operator
 
 
 
@@ -475,6 +479,72 @@ class K_calc:
         #info print
         if verbose==True:
             print(f"\nOperator list updated for the X={self.structure}, n={self.n} case\n")
+
+    
+    #function returning a list of all the operator with all their specifics
+    def get_opList(self,first_op=1):
+
+        #we instantiate the list as empty
+        op_list = []
+
+        #the take count of the operator count 
+        op_count = first_op
+
+        #we loop as usual over all the operators we have
+
+        #we loop over the elements of the dict with cg coefficients
+        for k,v in self.kin_dict.items():
+            #then we loop over the multiplicities
+            for imul,base in enumerate(v):
+
+                #we compute the characteristics of the block
+                
+                #C symmetry
+                C = Csymm(self.cg_dict[k][imul],self.structure,self.n)
+                #trace condition
+                trace = trace_symm(self.cg_dict[k][imul])
+                #index symm
+                symm = index_symm(self.cg_dict[k][imul],self.n)
+
+
+                #to print to latex the operators we use an array with with n indices, ranging from 0 to 4 (and we just use 1,2,3,4 and discard 0)
+                O = ArraySymbol("O", (5,)*self.n)
+
+ 
+                #for each time the given irrep appear in the decomposition we have a basis
+                for iop,op in enumerate(base):
+
+                    #we take the cg matrix for the given operator
+                    cgmat = self.cg_dict[k][imul][iop]
+
+
+                    #we now construct the latex symbol for the new operator using sympy
+
+                    #we instantiate it to 0
+                    new_op = 0
+
+                    #we loop over the indicies to construct the operator
+                    for indices in it.product(range(4),repeat=self.n):
+
+                        #we shift the indices so that we can print 1234 instead of 0123
+                        shifted_indices = [sum(x) for x in zip(indices,(1,)*self.n)]
+
+                        #we construct symbolically the operator to print
+                        new_op += cgmat[indices] * O[shifted_indices]
+
+                    #we construct the operator and add it to the list
+                    op_list.append( Operator(cgmat=cgmat, id=op_count, K=op,
+                                             X=self.structure, n=self.n, irrep=self.rep_label_list[k],
+                                             block=imul+1, index_block=iop+1,
+                                             C=C, symm=symm, tr=trace, O = new_op)
+                                    )
+                    
+                    #we update the op_count
+                    op_count += 1
+
+        #we return the op_list
+        return op_list
+
 
 
 
