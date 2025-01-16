@@ -110,10 +110,13 @@ mN = sym.Symbol("m_N")
 E = sym.Symbol("E(p)")
 
 #4 momentum p_mu
+p1=sym.Symbol("p_1")
+p2=sym.Symbol("p_2")
+p3=sym.Symbol("p_3")
 p_mu = [
-    sym.Symbol("p_1"),
-    sym.Symbol("p_2"),
-    sym.Symbol("p_3"),
+    p1,
+    p2,
+    p3,
     I*E # = sym.Symbol("p_4")
 ]
 
@@ -366,6 +369,115 @@ class K_calc:
 
 
 
+    #function used to append to a given latex document the the list of operators typical of the class
+    def append_operators(self, doc:Document, op_number:int, digits=5, verbose=False) -> None:
+        """
+        Input:
+            - doc: the documents that will be updated with the operators produced by the class instance (supposeed to be already initialised)
+            - op_number: the number associated to the first operator
+        """
+
+        #we initialize the count of operators to the number passed as input
+        op_count = op_number
+
+        #we make a section, putting in the title the specifics common to all operators (X and n)
+        section = Section(f"X={self.structure}, n={self.n}",numbering=False)
+
+        #we loop over the elements of the dict with cg coefficients
+        for k,v in self.kin_dict.items():
+        
+            #then we loop over the multiplicities
+            for imul,base in enumerate(v):
+
+                #we compute the characteristics of the block
+                
+                #C symmetry
+                C = Csymm(self.cg_dict[k][imul],self.structure,self.n)
+                #trace condition
+                trace = trace_symm(self.cg_dict[k][imul])
+                #index symm
+                symm = index_symm(self.cg_dict[k][imul],self.n)
+
+
+                #for every tuple (irrep, block) we make a subsection
+                subsection = Subsection(f"{self.rep_label_list[k]} Block {imul+1}:  Trace {trace}, {symm}, C = {C}",numbering=False)
+
+
+                #to print to latex the operators we use an array with with n indices, ranging from 0 to 4 (and we just use 1,2,3,4 and discard 0)
+                O = ArraySymbol("O", (5,)*self.n)
+
+                 
+                #we instantiate the math environmant where we print the operators
+                agn = Alignat(numbering=False, escape=False)
+
+                #for each time the given irrep appear in the decomposition we have a basis
+                for iop,op in enumerate(base):
+
+                    #we append to the document the number of the operator
+                    #subsection.append(f"Operator {op_count}")
+                    #we update the operator count
+                    #op_count += 1
+
+                    #we take the cg matrix for the given operator
+                    cgmat = self.cg_dict[k][imul][iop]
+
+
+                    #we now construct the latex symbol for the new operator using sympy
+
+                    #we instantiate it to 0
+                    new_op = 0
+
+                    #we loop over the indicies to construct the operator
+                    for indices in it.product(range(4),repeat=self.n):
+
+                        #we shift the indices so that we can print 1234 instead of 0123
+                        shifted_indices = [sum(x) for x in zip(indices,(1,)*self.n)]
+
+                        #we construct symbolically the operator to print
+                        new_op += cgmat[indices] * O[shifted_indices]
+
+                    #we do some string manipulation to obtain a nicer output
+                    new_op_print = str(new_op.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
+
+                    #we append first the operator number (its id)
+                    agn.append(r"\text{Operator "+str(op_count)+r"}&\\")
+                    #we update the operator count
+                    op_count += 1
+                
+                    #we append the output to the mathematical latex environment
+                    agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(iop+1,'{'+f"{self.structure}{self.rep_label_list[k]},{imul+1}"+'}',new_op_print))
+
+
+                    #we make a nicer output also for the kinematic factor
+                    op_print = str(op).replace('**','^').replace('*','').replace('I','i')
+
+                    #if len(op_print>50): #TO DO: handle long string output
+
+                    #we try to use \frac{}{} instead of just a slash
+                    if '/' in op_print:
+                        op_print = "\\frac{" + op_print.split('/')[0] + "}{ " + op_print.split('/')[1]  + "}"
+
+                    #we append the kinematic factor to the math environment
+                    agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(iop+1,'{'+f"{self.structure}{self.rep_label_list[k]},{imul+1}"+'}',op_print))
+                   
+
+                #we append the math expression to the subsection
+                subsection.append(agn)
+
+                #and we append the subsection to the section
+                section.append(subsection) 
+
+        #then we append the section to the document
+        doc.append(section)
+        doc.append(NoEscape(r"\newpage"))
+
+
+        #info print
+        if verbose==True:
+            print(f"\nOperator list updated for the X={self.structure}, n={self.n} case\n")
+
+
+
 
 ######################## Auxiliary Functions ################################
 
@@ -399,8 +511,8 @@ def Kfactor(operator):
     #at the numerator of the kin factor there is the following term
     num =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
 
-    #we obtain the result as numerator divided by denominator
-    return (num/den).simplify(rational=True)
+    #we obtain the result as numerator divided by denominator (we explicit the dispersion relation to obtain a nicer output)
+    return (num/den).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2})
 
 
 #function used to construct the operator from the matrices of cg coefficients
