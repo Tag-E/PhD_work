@@ -39,7 +39,8 @@ from pylatex import Document, Command  #to produce a pdf documents with the CG c
 from pylatex.utils import NoEscape #also to produce a pdf document
 import subprocess #to open pdf files
 import time #to use sleep and pause the code
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt #to plot stuff
+from typing import Any, Callable, List #to use annotations for functions
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
@@ -425,3 +426,109 @@ class moments_toolkit:
 
 
 ######################## Auxiliary Functions ##########################
+
+
+#function implementing the jackknife analysis
+def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, time_axis=-1, binsize=1,first_conf=0,last_conf=None) -> List[np.ndarray]:
+    """
+    Input:
+        - in_array: input array to be jackknifed
+        - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it)
+        - jack_axis: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations),
+        - time_axis: axis over to which look for the autocorrelation
+        - binsize: binning of the jackknife procedure
+        - first_conf: index of the first configuration taken into account while performing the jackknife procedure
+        - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
+
+    Output:
+        - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one, and the cov has one extra time dimension (the new time dimension is now the last one)
+    """
+
+    #we set last conf to its default value
+    if last_conf is None:
+        last_conf = np.shape(in_array)[jack_axis]
+
+    #step 1: creation of the jackknife resamples
+    jack_resamples = np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=jack_axis) for iconf in range(first_conf,last_conf,binsize)] ) #shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
+    print("jack resamples")
+    print(np.shape(jack_resamples))
+
+    #the number of resamples is len(jack_resmaples[0]) or also
+    #nresamp = int((last_conf-first_conf)/binsize)
+    nresamp = np.shape(jack_resamples)[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
+
+    #step 2; for each resample we compute the observable of interest
+    #we use the resampled input array to compute the observable we want, and we have nresamp of them
+    obs_resamp = np.asarray( [observable(jack_resamples[i]) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + shape(in_array) - jack_dimension
+    print("obs resamples")
+    print(np.shape(obs_resamp))
+
+    #step 3: we compute the observable also on the whole dataset
+    obs = observable(in_array)                                                                                                                                   #shape = shape(in_array) - jack_dimension
+    print("obs")
+    print(np.shape(obs))
+
+    #step4: compute estimate, bias and std according to the jackknife method
+    
+    #the estimate is the mean of the resamples
+    jack_mean = np.mean(obs_resamp,axis=0) #axis 0 is the resamples one                                                                                         #shape = shape(in_array) - jack_dimension
+    print("jack mean")
+    print(np.shape(jack_mean))
+
+    #the jackknife bias is given by the following formula 
+    bias = (nresamp-1) * (jack_mean - obs)                                                                                                                     #shape = shape(in_array) - jack_dimension
+    print("bias")
+    print(np.shape(bias))
+
+    #the jack std is given by the following formula
+    obs_std = np.sqrt( (nresamp-1)/nresamp * np.sum( (obs_resamp - jack_mean)**2, axis=0 ) ) #the axis is the resamples one                                        #shape = shape(in_array) - jack_dimension
+    print("obs std")
+    print(np.shape(obs_std))
+
+    #to obtain the final estimate we correct the jack mean by the bias
+    obs_mean = jack_mean - bias                                                                                                                                  #shape = shape(in_array) - jack_dimension
+
+
+    #step 5: covariance matrix computation
+
+    #to account for the fact that we have removed the jackknife dimension we change the time dimension
+
+    #first we compute the lenght in the time dimension
+    lenT = np.shape(in_array)[time_axis]
+
+    #the time axis is translated to a positive value
+    if time_axis<0:
+        time_axis = lenT+time_axis
+
+    #then we check if the time dimension has to be reduced by one (i.e. if the just deleted jack axis causes the time axis to be smaller by 1)
+    if jack_axis < time_axis :
+        new_time_axis = time_axis - 1
+
+    #we the instantiate the covariance matrix
+    covmat = np.zeros(shape = np.shape(obs_mean) + (lenT,), dtype=float )
+
+    #we then loop over the times and fill the covariance matrix
+    for t1 in range(lenT):
+        for t2 in range(lenT):
+
+            #we do a little of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
+            s = [slice(None)] * len(np.shape(covmat))
+            axe1 = new_time_axis #position of the first time axis
+            s[axe1] = slice(t1,t1+1)
+            axe2 =  len(np.shape(covmat))-1 #because the new time axis is at the end of the array
+            s[axe2] = slice(t2,t2+1)
+
+            #we update the covariance matrix
+            covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(obs,t1,axis=time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(obs,t2,axis=time_axis) ), axis=0 ),
+                                               [axe1,axe2])
+
+    ##let's now also obtain the covariance matrix for the time direction
+    #covmat = np.zeros(shape = np.shape(obs_mean) +np.shape(obs_mean)[time_axis]) ) #(np.delete(np.shape(obs_mean),time_axis),) + (np.shape(obs_mean)[time_axis],np.shape(obs_mean)[time_axis],) ) ###ACHTUNG: here valid only for time_axis=-1
+    #for t1 in range(np.shape(obs_mean)[time_axis]):
+    #    for t2 in range(np.shape(obs_mean)[time_axis]):
+    #        ##########ADJUST DIMENSIONSSS
+    #        covmat[t1,t2] = (nresamp-1)/nresamp * np.sum( (obs_resamp[:,t1] - obs[t1]) * (obs_resamp[:,t2] - obs[t2]),axis=0 )
+
+
+    #we return mean and std 
+    return [obs_mean, obs_std, covmat]
