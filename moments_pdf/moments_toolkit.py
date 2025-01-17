@@ -268,7 +268,10 @@ class moments_toolkit:
         #the chosen ids are
         chosen_ids = kwarg
 
-        #for every id we append the corresponding operator to the list of chosen ones
+        #first we reset the list of selected operators
+        self.selected_op = []
+
+        #then for every id we append the corresponding operator to the list of chosen ones
         for id in chosen_ids:
             self.selected_op.append(self.operator_list[id-1]) #-1 because in the pdf the numbering starts from 1
 
@@ -366,8 +369,47 @@ class moments_toolkit:
 
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
-                ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"{T}")
+                ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
                 ax.legend()
+
+                ax.set_title(r"R(T,$\tau$) - Operator " + str(op.id))
+                ax.set_xlabel(r"$\tau$")
+                ax.set_ylabel('R')
+
+
+    #function used to to compute the sum of ratios S #TO DO: add jackknife analysis
+    def get_S(self, tskip, isospin='U-D'):
+        """
+        Input:
+            - tskip = \tau_skip = gap in time when performing the sum of ratios
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+        Output:
+            - S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
+        """
+        
+        #input control
+        if isospin not in ['U', 'D', 'U-D', 'U+D']:
+            print("Selected isospin not valid, defaulting to 'U-D'")
+            isospin='U-D'
+
+        
+        #we first fetch R using the dedicate method
+        R = self.get_R(isospin=isospin) #shape = (nop, nconf, nT, ntau)
+
+        #then based on the shape of R we instantiate S
+        S = np.zeros(shape=np.shape(R)[:-1], dtype=complex) #shape = (nop, nconf, nT)
+
+        #we compute S
+        for iT,T in enumerate(self.T_list):
+            S[:,:,iT] = np.sum(R[:,:,iT,tskip:T+1-tskip], axis =-1)
+
+        #ratio = ok.operatorBB(op,'V','U-D',1)
+        #ratio = ratio.mean(axis=0) #mean over cfg axis
+        #ratio = np.abs(ratio)
+
+        #we return S
+        return S
+
 
 
 
