@@ -32,13 +32,14 @@
 
 ## general libraries
 import numpy as np #to handle matrices
-import h5py as h5 #to read the correlator
-from tqdm import tqdm #for a nice view of for loops with loading bars
+#import h5py as h5 #to read the correlator
+#from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
-from pylatex import Document, Math, Matrix, Section, Subsection, Command, Alignat #to produce a pdf documents with the CG coeff
+from pylatex import Document, Command  #to produce a pdf documents with the CG coeff
 from pylatex.utils import NoEscape #also to produce a pdf document
 import subprocess #to open pdf files
 import time #to use sleep and pause the code
+import matplotlib.pyplot as plt
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
@@ -117,11 +118,19 @@ class moments_toolkit:
 
         #We initialize some other class variables
 
+        #number of configurations
+        self.nconf = self.bb_list[0].nconf
 
         #list with operators selected for the analysis, initialized as empty
         self.selected_op = []
 
+
+
         ##We build the list of all the available operators
+
+        #info print
+        if verbose:
+            print("\nBuilding the list of all available operators...\n")
 
         #we initialize the list as empty
         self.operator_list = []
@@ -157,6 +166,9 @@ class moments_toolkit:
                 #we update the operator count
                 op_count += 4**actual_n 
 
+        #info print
+        if verbose:
+            print("\nClass Initialization Complete!\n")
 
 
 
@@ -195,28 +207,14 @@ class moments_toolkit:
         #we instantiate the operator count to 1
         op_count = 1
 
-        #we loop over the available indices (TO DO: collapse this loop for another one over self.kclass_list)
-        for n in self.n_list:
+        #we loop over the instantiated kinematic classes (=loop over n and over X)
+        for kclass in self.kclass_list:
 
-            #we loop over the V,A,T structures
-            for X in self.X_list:
+            #we add the related operator to the document
+            kclass.append_operators(doc,op_count)
 
-                #safety measure to avoid the bug present in the cg calc class: TO BE REMOVED after fixing it (TO DO)
-                if n>2 and X=='T': break
-
-                #the actual number of indices depends on X
-                actual_n = n
-                if X == 'T':
-                    actual_n += 1
-                
-                #we instantiate the related Kfactor class
-                kclass = K_calc(X,actual_n,verbose=False)
-
-                #we add the related operator to the document
-                kclass.append_operators(doc,op_count)
-
-                #we update the operator count
-                op_count += 4**actual_n #this is the number of operators written to file
+            #we update the operator count
+            op_count += len(kclass.get_opList()) #= 4**actual_n
 
 
         #then we generate the pdf
@@ -239,7 +237,8 @@ class moments_toolkit:
         if show:
             #we xdg-open the pdf
             subprocess.call(["xdg-open", file_name])
-            #we wait 5 seconds so that the pdf can be seen before its deletion
+            #we wait 1.5 seconds so that the pdf can be seen before its deletion
+            time.sleep(1.5)
             #info print
             if verbose:
                 print("\nOperators catalogue shown\n")
@@ -272,6 +271,109 @@ class moments_toolkit:
         #for every id we append the corresponding operator to the list of chosen ones
         for id in chosen_ids:
             self.selected_op.append(self.operator_list[id-1]) #-1 because in the pdf the numbering starts from 1
+
+    
+
+    #function used to compute the ratio R(T,tau)
+    def get_R(self, isospin='U-D') -> np.ndarray:
+        """
+        Input:
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+        Output:
+            - R(iop,T,tau): a np array with axis (iop,T,tau) and shape [n_selected_operators, nconf, n_T, max_T] 
+        """
+        
+        #input control
+        if isospin not in ['U', 'D', 'U-D', 'U+D']:
+            print("Selected isospin not valid, defaulting to 'U-D'")
+            isospin='U-D'
+
+        #the axis have dimensionalities
+        nop = len(self.selected_op)
+        nT = len(self.T_list)
+        maxT = np.max(self.T_list) #this is the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
+
+        #we initialize the output array with zeros
+        R = np.zeros(shape=(nop, self.nconf, nT, maxT+1),dtype=complex) #+1 because tau goes from 0 to T included
+
+        #we now fill the array using the method of the building block class to extract R
+        #we have to loop over the dimensionalities to fill
+
+        #loop over the selected operators
+        for iop,op in enumerate(self.selected_op):
+
+            #we extract the relevant info from the operator
+            cgmat = op.cgmat #mat with cg coeff
+            X = op.X # 'V','A' or 'T'
+            nder = op.nder #number of derivatives in the operators = number of indices -1 (for V and A) or -2 (for T)
+
+            #loop over the available times T
+            for iT,T in enumerate(self.T_list):
+
+                #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
+                R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
+
+        #we return the ratios just computed
+        return R
+    
+
+    #function used to plot the ratio R for all the selected operators #TO DO: add jacknife analysis
+    def plot_R(self, isospin='U-D') -> None:
+        """
+        Input:
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+        Output:
+            - plots with R printed to screen
+        """
+        
+        #input control
+        if isospin not in ['U', 'D', 'U-D', 'U+D']:
+            print("Selected isospin not valid, defaulting to 'U-D'")
+            isospin='U-D'
+
+        
+        #we first fetch R using the dedicate method
+        R = self.get_R(isospin=isospin)
+
+        #TO DO: add jack analysis
+
+        #TO DO: add check on selected op
+
+
+
+        #loop over selected operators (for each we make a plot)
+        for iop,op in enumerate(self.selected_op):
+            
+            #instantiate figuer
+            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
+
+            #we loop over T and each time we add a graph to the plot
+            for iT, T in enumerate(self.T_list):
+
+                times = np.arange(-T/2+1,T/2)
+                 
+                ratio = R[iop,:,iT,:T+1]
+
+                ratio_err = np.abs(ratio[:,1:-1]).std(axis=0)/np.sqrt(np.shape(ratio)[0]-1)
+                ratio = ratio.mean(axis=0) #mean over cfg axis
+                #ratio
+                #ratio = ratio.real #cast to real
+                #ratio = ratio.imag
+                ratio = np.abs(ratio)
+
+                #we discard the endpoints
+                r = ratio[1:-1]
+
+
+                #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
+                ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"{T}")
+                ax.legend()
+
+
+
+        
+
+        
                 
 
 

@@ -22,6 +22,7 @@
 ######################## Library Imports ################################
 
 import numpy as np #to handle matrices
+import sympy as sym #for symbolic computations
 
 
 
@@ -30,15 +31,17 @@ import numpy as np #to handle matrices
 #simple container class used to store all the information related to a given operator
 class Operator:
 
+    #initialization function
     def __init__(self, cgmat:np.ndarray,
-                 id:int, K, X:str, n:int, irrep:tuple,
+                 id:int, K:sym.core.mul.Mul, X:str, n:int, irrep:tuple,
                  block:int, index_block:int,
-                 C:str, symm:str, tr:str, O):
+                 C:str, symm:str, tr:str, O:sym.core.add.Add):
         """
         Input:
             - cgmat: matrix of cg coeff
             - id: the number associated to the operator
             - K: the kinematic factor (the symbol) associated with the operator
+            - X: etiher 'V', 'A' or 'T'
             - n: the number of indices of the operator
             - irrep: the irrep the operator belongs to
             - block: the multiplicity of the selected irrep
@@ -52,6 +55,7 @@ class Operator:
         self.cgmat = cgmat[:]
         self.id = id
         self.K = K
+        self.X = X
         self.n = n
         self.irrep = irrep
         self.block = block
@@ -60,3 +64,12 @@ class Operator:
         self.symm = symm
         self.tr = tr
         self.O = O #TO DO: implement the determination of O from cgmat (look code inside Kfact_calculator)
+        self.nder = n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
+        if X=='T':
+            self.nder -=1 #..and n derivatives = n indices -2 for X=T
+
+    #overwrite of built in print methods
+    def __repr__(self):
+        return str(self.O.simplify(rational=True))
+    def __str__(self):
+        return str(self.O.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
