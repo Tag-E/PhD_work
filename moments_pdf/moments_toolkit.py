@@ -327,13 +327,15 @@ class moments_toolkit:
         return R, Rmean, Rstd, Rcovmat
     
 
-    #function used to plot the ratio R for all the selected operators #TO DO: add jacknife analysis
-    def plot_R(self, isospin='U-D') -> None:
+    #function used to plot the ratio R for all the selected operators
+    def plot_R(self, isospin='U-D', show=True, save=False, figname='plotR') -> None:
         """
         Input:
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+            - isospin: either 'U', 'D', 'U-D' or 'U+D
+            - show: bool, if True the plot with R is shown
+            - save: bool, if True the plot is saved to .png
         Output:
-            - plots with R printed to screen
+            - None (the function is used just to have the plots with R printed to screen)
         """
         
         #input control
@@ -344,8 +346,6 @@ class moments_toolkit:
         
         #we first fetch R using the dedicate method
         R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
-
-        #TO DO: add jack analysis
 
         #TO DO: add check on selected op
 
@@ -387,6 +387,14 @@ class moments_toolkit:
                 ax.set_title(r"R(T,$\tau$) - Operator " + str(op.id))
                 ax.set_xlabel(r"$\tau$")
                 ax.set_ylabel('R')
+
+            #we save the plot if the user asks for it
+            if save:
+                plt.savefig(f"{figname}_operator{op.id}.png")
+            
+            #we show the plot if the user asks for it
+            if show:
+                plt.show()
 
 
     #function used to to compute the sum of ratios S #TO DO: add jackknife analysis
