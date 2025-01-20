@@ -279,12 +279,15 @@ class moments_toolkit:
     
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin='U-D') -> np.ndarray:
+    def get_R(self, isospin='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
         Output:
-            - R(iop,T,tau): a np array with axis (iop,T,tau) and shape [n_selected_operators, nconf, n_T, max_T] 
+            - R(iop,iconf,T,tau): a np array with axis (iop,iconf,T,tau) and shape [n_selected_operators, nconf, n_T, max_T] 
+            - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed on R
+            - Rstd(iop,T,tau): the std reasulting from the jackknife analysis performed on R
+            - Rcovmat(iop,T,tau1, tau2): the whole covariance matrix reasulting from the jackknife analysis performed on R
         """
         
         #input control
@@ -317,8 +320,11 @@ class moments_toolkit:
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
                 R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
 
-        #we return the ratios just computed
-        return R
+        #we perform the jackknife analysis (the observable being the avg over the configuration axis)
+        Rmean, Rstd, Rcovmat = jackknife(R, lambda x: np.mean(x,axis=1), jack_axis=1, time_axis=-1)
+
+        #we return the ratios just computed and the results of the jackknife analysis
+        return R, Rmean, Rstd, Rcovmat
     
 
     #function used to plot the ratio R for all the selected operators #TO DO: add jacknife analysis
@@ -337,7 +343,7 @@ class moments_toolkit:
 
         
         #we first fetch R using the dedicate method
-        R = self.get_R(isospin=isospin)
+        R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
 
         #TO DO: add jack analysis
 
@@ -360,6 +366,9 @@ class moments_toolkit:
 
                 ratio_err = np.abs(ratio[:,1:-1]).std(axis=0)/np.sqrt(np.shape(ratio)[0]-1)
                 ratio = ratio.mean(axis=0) #mean over cfg axis
+
+                ratio = Rmean[iop,iT,:T+1]
+                ratio_err = Rstd[iop,iT,:T+1]
                 #ratio
                 #ratio = ratio.real #cast to real
                 #ratio = ratio.imag
@@ -367,10 +376,12 @@ class moments_toolkit:
 
                 #we discard the endpoints
                 r = ratio[1:-1]
+                r_err = ratio_err[1:-1]
 
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
-                ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
+                #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
+                ax.errorbar(times, r,yerr=r_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
                 ax.legend()
 
                 ax.set_title(r"R(T,$\tau$) - Operator " + str(op.id))
@@ -379,13 +390,14 @@ class moments_toolkit:
 
 
     #function used to to compute the sum of ratios S #TO DO: add jackknife analysis
-    def get_S(self, tskip, isospin='U-D'):
+    def get_S(self, tskip: int, isospin='U-D'):
         """
         Input:
             - tskip = \tau_skip = gap in time when performing the sum of ratios
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
         Output:
-            - S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
+            - S: the sum of ration given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t) (with shape (nop,nconf,nT))
+            - Smean, Sstd: mean and std from jackknife procedure applied on S (with shape (nop, nT))
         """
         
         #input control
@@ -395,21 +407,27 @@ class moments_toolkit:
 
         
         #we first fetch R using the dedicate method
-        R = self.get_R(isospin=isospin) #shape = (nop, nconf, nT, ntau)
+        R,_,_,_= self.get_R(isospin=isospin) #shape = (nop, nconf, nT, ntau)
 
         #then based on the shape of R we instantiate S
-        S = np.zeros(shape=np.shape(R)[:-1], dtype=complex) #shape = (nop, nconf, nT)
+        #S = np.zeros(shape=np.shape(R)[:-1], dtype=complex) #shape = (nop, nconf, nT)
 
         #we compute S
-        for iT,T in enumerate(self.T_list):
-            S[:,:,iT] = np.sum(R[:,:,iT,tskip:T+1-tskip], axis =-1)
+        #for iT,T in enumerate(self.T_list):
+            #S[:,:,iT] = np.sum(R[:,:,iT,tskip:T+1-tskip], axis =-1)
 
         #ratio = ok.operatorBB(op,'V','U-D',1)
         #ratio = ratio.mean(axis=0) #mean over cfg axis
         #ratio = np.abs(ratio)
 
+        #we compute S for each configuration
+        S = sum_ratios(R,Tlist=self.T_list, tskip=tskip)
+
+        #we compute S with the jackknife
+        Smean, Sstd, _ = jackknife(R, lambda x: np.mean( sum_ratios(x,Tlist=self.T_list, tskip=tskip), axis=1), jack_axis=1, time_axis=None)
+
         #we return S
-        return S
+        return S, Smean, Sstd
 
 
 
@@ -417,13 +435,6 @@ class moments_toolkit:
         
 
         
-                
-
-
-
-
-
-
 
 ######################## Auxiliary Functions ##########################
 
@@ -433,7 +444,7 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
     """
     Input:
         - in_array: input array to be jackknifed
-        - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it)
+        - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
         - jack_axis: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations),
         - time_axis: axis over to which look for the autocorrelation
         - binsize: binning of the jackknife procedure
@@ -450,8 +461,8 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
 
     #step 1: creation of the jackknife resamples
     jack_resamples = np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=jack_axis) for iconf in range(first_conf,last_conf,binsize)] ) #shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
-    print("jack resamples")
-    print(np.shape(jack_resamples))
+    #print("jack resamples")
+    #print(np.shape(jack_resamples))
 
     #the number of resamples is len(jack_resmaples[0]) or also
     #nresamp = int((last_conf-first_conf)/binsize)
@@ -459,31 +470,33 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
 
     #step 2; for each resample we compute the observable of interest
     #we use the resampled input array to compute the observable we want, and we have nresamp of them
-    obs_resamp = np.asarray( [observable(jack_resamples[i]) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + shape(in_array) - jack_dimension
-    print("obs resamples")
-    print(np.shape(obs_resamp))
+    obs_resamp = np.asarray( [observable(jack_resamples[i]) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + shape(in_array) - jack_dimension   (jack dimension replaced by replica dimension) (the observable function removes the jackdimension -> jack_resamp[i] has the same shape as in_array)
+    #print("obs resamples")
+    #print(np.shape(obs_resamp))
 
     #step 3: we compute the observable also on the whole dataset
-    obs = observable(in_array)                                                                                                                                   #shape = shape(in_array) - jack_dimension
-    print("obs")
-    print(np.shape(obs))
+    obs = observable(in_array)                                                                                                                                   #shape = shape(in_array) - jack_dimension (the observable function removes the jackdimension)
+    #print("obs")
+    #print(np.shape(obs))
 
     #step4: compute estimate, bias and std according to the jackknife method
     
     #the estimate is the mean of the resamples
     jack_mean = np.mean(obs_resamp,axis=0) #axis 0 is the resamples one                                                                                         #shape = shape(in_array) - jack_dimension
-    print("jack mean")
-    print(np.shape(jack_mean))
+    #print("jack mean")
+    #print(np.shape(jack_mean))
 
     #the jackknife bias is given by the following formula 
     bias = (nresamp-1) * (jack_mean - obs)                                                                                                                     #shape = shape(in_array) - jack_dimension
-    print("bias")
-    print(np.shape(bias))
+    #print("bias")
+    #print(np.shape(bias))
+
+    #TO DO: add proper cast to real
 
     #the jack std is given by the following formula
     obs_std = np.sqrt( (nresamp-1)/nresamp * np.sum( (obs_resamp - jack_mean)**2, axis=0 ) ) #the axis is the resamples one                                        #shape = shape(in_array) - jack_dimension
-    print("obs std")
-    print(np.shape(obs_std))
+    #print("obs std")
+    #print(np.shape(obs_std))
 
     #to obtain the final estimate we correct the jack mean by the bias
     obs_mean = jack_mean - bias                                                                                                                                  #shape = shape(in_array) - jack_dimension
@@ -491,44 +504,72 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
 
     #step 5: covariance matrix computation
 
-    #to account for the fact that we have removed the jackknife dimension we change the time dimension
+    #we perform such a computation only if there actually see a time axis over which to look for a correlation
+    if time_axis is not None:
 
-    #first we compute the lenght in the time dimension
-    lenT = np.shape(in_array)[time_axis]
+        #to account for the fact that we have removed the jackknife dimension we change the time dimension
 
-    #the time axis is translated to a positive value
-    if time_axis<0:
-        time_axis = lenT+time_axis
+        #first we compute the lenght in the time dimension
+        lenT = np.shape(in_array)[time_axis]
 
-    #then we check if the time dimension has to be reduced by one (i.e. if the just deleted jack axis causes the time axis to be smaller by 1)
-    if jack_axis < time_axis :
-        new_time_axis = time_axis - 1
+        #the time axis is translated to a positive value
+        if time_axis<0:
+            #time_axis = lenT+time_axis
+            time_axis = len(np.shape(in_array))+time_axis
 
-    #we the instantiate the covariance matrix
-    covmat = np.zeros(shape = np.shape(obs_mean) + (lenT,), dtype=float )
+        #then we check if the time dimension has to be reduced by one (i.e. if the just deleted jack axis causes the time axis to be smaller by 1)
+        if jack_axis < time_axis :
+            new_time_axis = time_axis - 1
 
-    #we then loop over the times and fill the covariance matrix
-    for t1 in range(lenT):
-        for t2 in range(lenT):
+        #we the instantiate the covariance matrix
+        covmat = np.zeros(shape = np.shape(obs_mean) + (lenT,), dtype=float )
 
-            #we do a little of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
-            s = [slice(None)] * len(np.shape(covmat))
-            axe1 = new_time_axis #position of the first time axis
-            s[axe1] = slice(t1,t1+1)
-            axe2 =  len(np.shape(covmat))-1 #because the new time axis is at the end of the array
-            s[axe2] = slice(t2,t2+1)
+        #TO DO: add cast to real values before computing covariance matrix
 
-            #we update the covariance matrix
-            covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(obs,t1,axis=time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(obs,t2,axis=time_axis) ), axis=0 ),
-                                               [axe1,axe2])
+        #we then loop over the times and fill the covariance matrix
+        for t1 in range(lenT):
+            for t2 in range(lenT):
 
-    ##let's now also obtain the covariance matrix for the time direction
-    #covmat = np.zeros(shape = np.shape(obs_mean) +np.shape(obs_mean)[time_axis]) ) #(np.delete(np.shape(obs_mean),time_axis),) + (np.shape(obs_mean)[time_axis],np.shape(obs_mean)[time_axis],) ) ###ACHTUNG: here valid only for time_axis=-1
-    #for t1 in range(np.shape(obs_mean)[time_axis]):
-    #    for t2 in range(np.shape(obs_mean)[time_axis]):
-    #        ##########ADJUST DIMENSIONSSS
-    #        covmat[t1,t2] = (nresamp-1)/nresamp * np.sum( (obs_resamp[:,t1] - obs[t1]) * (obs_resamp[:,t2] - obs[t2]),axis=0 )
+                #we do a little of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
+                s = [slice(None)] * len(np.shape(covmat))
+                axe1 = new_time_axis #position of the first time axis
+                s[axe1] = slice(t1,t1+1)
+                axe2 =  len(np.shape(covmat))-1 #because the new time axis is at the end of the array
+                s[axe2] = slice(t2,t2+1)
+
+                #we update the covariance matrix
+                #covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(obs,t1,axis=new_time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(obs,t2,axis=new_time_axis) ), axis=0 ),
+                 #                                  [axe1,axe2])
+                covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(jack_mean,t1,axis=new_time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(jack_mean,t2,axis=new_time_axis) ), axis=0 ),
+                                                   [axe1,axe2])
+    #if instead there is not a time axis we just send back the std in place of the covmat
+    else:
+        covmat = obs_std
 
 
     #we return mean and std 
     return [obs_mean, obs_std, covmat]
+
+
+
+
+
+#function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately)
+def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
+    """
+    Input:
+        - Ratios: the array R, with shape (nop,nconf,nT,max(ntau))
+        - Tlist: a list of all the available T corresponding the third dimensionality
+        - tskip: the tau skip used while summing the ratios
+    Output:
+        - S: the sum of ratios, with dimensionalities (nop,nconf,nT)
+    """
+    #then based on the shape of R we instantiate S
+    S = np.zeros(shape=np.shape(Ratios)[:-1], dtype=complex) #shape = (nop, nconf, nT)
+
+    #we compute S
+    for iT,T in enumerate(Tlist):
+        S[:,:,iT] = np.sum(Ratios[:,:,iT,tskip:T+1-tskip], axis =-1)
+
+    #we return S
+    return S
