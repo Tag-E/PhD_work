@@ -354,7 +354,7 @@ class moments_toolkit:
         #loop over selected operators (for each we make a plot)
         for iop,op in enumerate(self.selected_op):
             
-            #instantiate figuer
+            #instantiate figure
             fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
 
             #we loop over T and each time we add a graph to the plot
@@ -439,6 +439,70 @@ class moments_toolkit:
 
 
 
+    #function to get a value of the mass from the two point function
+    def get_m(self, show=False, save=False, zoom=0, figtitle='mass_plataux'):
+        """
+        Input:
+        
+        Output:
+        """
+
+        #first we recall the two point correlators
+        #corr_2p = self.bb_list[0].p2_corr
+        corr_2p = np.abs( self.bb_list[0].p2_corr )
+
+        #we use the jackknife to compute the effective mass (mean and std)
+        meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis=0, time_axis=-1)
+
+        #we determine the time extent of the lattice
+        Tlat = np.shape(meff)[0]
+
+        #we discard the padding coming from the effective_mass function
+        meff = meff[:-1]
+        meff_std = meff_std[:-1]
+        meff_covmat = meff_covmat[:-1,:-1]
+
+
+        #we determine the time values to be displayed on the plot
+        m_times = np.arange(np.shape(meff)[0]) + 0.5
+
+
+
+        #we compute a mean value and a std from the plateaux
+
+        #first we identify the boundaries of the plateau region
+        lcut, rcut = plateaux_search(meff,meff_covmat, chi2_treshold=1.0)
+
+        #then we get the mass from the plataux value
+        meff_plat = np.mean(meff[lcut:rcut])
+        #its std is given by the std of the mean
+        meff_plat_std = np.sqrt( np.mean( meff[lcut:rcut]**2 ) )
+
+
+
+        #we make a plot
+
+        #we instantiate the figure
+        fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
+
+        #we plot the plateau and the neighbouring effective mass values
+        plt.errorbar(m_times[lcut-zoom:rcut + zoom], meff[lcut-zoom:rcut + zoom], yerr=meff_std[lcut-zoom:rcut + zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
+        plt.hlines(meff_plat ,lcut, Tlat -1 +rcut, color='red')
+        plt.hlines(meff_plat + meff_plat_std, lcut, Tlat -1 +rcut, color='red', linestyles='dashed')
+        plt.hlines(meff_plat - meff_plat_std, lcut, Tlat -1 +rcut, color='red', linestyles='dashed')
+
+
+        #we show the figure if asked
+        if show:
+            plt.show()
+
+        #we save the figure if asked
+        if save:
+            plt.savefig(f"{figtitle}.png")
+
+
+        #we return the plateaux values
+        return meff_plat, meff_plat_std
 
         
 
@@ -483,7 +547,7 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
     #print(np.shape(obs_resamp))
 
     #step 3: we compute the observable also on the whole dataset
-    obs = observable(in_array)                                                                                                                                   #shape = shape(in_array) - jack_dimension (the observable function removes the jackdimension)
+    obs_total = observable(in_array)                                                                                                                                   #shape = shape(in_array) - jack_dimension (the observable function removes the jackdimension)
     #print("obs")
     #print(np.shape(obs))
 
@@ -495,7 +559,7 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
     #print(np.shape(jack_mean))
 
     #the jackknife bias is given by the following formula 
-    bias = (nresamp-1) * (jack_mean - obs)                                                                                                                     #shape = shape(in_array) - jack_dimension
+    bias = (nresamp-1) * (jack_mean - obs_total)                                                                                                                     #shape = shape(in_array) - jack_dimension
     #print("bias")
     #print(np.shape(bias))
 
@@ -561,7 +625,6 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, 
 
 
 
-
 #function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately)
 def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
     """
@@ -569,6 +632,7 @@ def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
         - Ratios: the array R, with shape (nop,nconf,nT,max(ntau))
         - Tlist: a list of all the available T corresponding the third dimensionality
         - tskip: the tau skip used while summing the ratios
+
     Output:
         - S: the sum of ratios, with dimensionalities (nop,nconf,nT)
     """
@@ -581,3 +645,102 @@ def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
 
     #we return S
     return S
+
+
+#function used to extract the effective mass for the two-point correlators
+def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
+    """
+    Input:
+        - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
+
+    Output:
+        - m_eff(t): the effective mass, with shape (Tlat,) (the configuration axis gets removed) (the shape is Tlat and not Tlat-1, so that the jackknife function can be used)
+    """
+
+    #we first take the gauge average of the two point correlator
+    corr_gavg = np.mean(corr_2p, axis=conf_axis)
+
+    #we get the lattice time T
+    Tlat = np.shape(corr_gavg)[0]
+
+    #we instantiate the eff mass array with first dimension of size Tlat (even tough the effective mass should have Tlat-1 time values --> the last will be a 0 of padding)
+    meff = np.zeros((Tlat))
+
+    #we compute the effective mass (the loop as it should goes up to Tlat-1, so that the last entry of meff is a 0 of padding)
+    for t in range(Tlat-1): 
+        meff[t] = np.log( (corr_gavg[t]/corr_gavg[t+1]).real )
+
+    #we send back the effective mass
+    return meff
+
+
+#function used to compute the reduced chi2 of a 1D array using the covariance matrix
+def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray) -> float:
+    """
+    Input:
+        - in_array: a 1D array, with len T
+        - fit_array: a 1D array, also with len T, representing the function we want the in_arrya fitted to
+        - covmat: a 2D array with shape (T,T), representing the covariance matrix of in_array
+
+    Output:
+        - chi2: the reduced chi2 of the fit
+    """
+
+    #first we invert the covariance array
+    cov_inv = np.linalg.inv(covmat)
+
+    #then we compute the differences between the fit and input array
+    deltas = in_array - fit_array
+
+    #then we compute the len of the plateaux
+    len_plat = np.shape(in_array)[0]
+
+    #then we compute the reduced chi2 according to its formula and we return it
+    return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / len_plat
+
+
+#function that given a 1D array returns the cut values identifying its plateaux
+def plateaux_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold=1.0) -> tuple[int,int]:
+    """
+    Input:
+        - in_array: the 1D array we want to search the plateaux of
+        - covmat: a 2D array, representing the covariance matrix of in_array
+        - chi2_treshold: the treshold for the plateaux determination
+    
+    Output:
+        - let_cut: the number of data point to be discarded from the left (beginning of the array) to arrive at the plateaux
+        - right_cut: the number of data point to be discarded from the right (end of the array) to arrive at the plateaux
+    """
+
+    #we set the max cut to be half of the allowed range for the 1D array
+    max_cut = int( np.shape(in_array)[0] / 2 )
+
+    #we loop over the cut we make (that is equal both from left and from right)
+    for icut in range(1,max_cut):
+
+        #then we also loop over the possible offset we'd like to have from the left and from the right (i.e. asymmetric cuts)
+        for l_off in range(icut):
+            for r_off in range(icut):
+
+                #if the total cut is bigger than the array we break
+                if 2*icut + l_off + r_off >= np.shape(in_array)[0]:
+                    break
+                
+                #if instead the cut is ok we go on with the chi2 computation
+
+                #the plataux region in this case is given by
+                plat = in_array[l_off+icut:-icut-r_off]
+
+                #the value of the plateau is
+                plat_value = np.mean(plat,axis=0,keepdims=True)
+
+                #we also have to reshape the covariance matrix
+                covmat_plat = covmat[l_off+icut:-icut-r_off, l_off+icut:-icut-r_off]
+
+                #we see if the chi2 meets the condition
+                if redchi2_cov(plat, plat_value, covmat_plat) < chi2_treshold:
+                    #in that case we return the values of found cuts
+                    return icut + l_off, - icut - r_off
+
+    #if by the end of the loop the chi2 condition is never met we return the cuts corresponding to the whole dataset
+    return 0, np.shape(in_array)[0]
