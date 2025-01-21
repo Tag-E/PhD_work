@@ -440,7 +440,7 @@ class moments_toolkit:
 
 
     #function to get a value of the mass from the two point function
-    def get_m(self, show=False, save=False, zoom=0, figtitle='mass_plataux'):
+    def get_m(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figtitle='mass_plataux'):
         """
         Input:
         
@@ -471,7 +471,7 @@ class moments_toolkit:
         #we compute a mean value and a std from the plateaux
 
         #first we identify the boundaries of the plateau region
-        lcut, rcut = plateaux_search(meff,meff_covmat, chi2_treshold=1.0)
+        lcut, rcut = plateaux_search(meff,meff_covmat, chi2_treshold=chi2_treshold)
 
         #then we get the mass from the plataux value
         meff_plat = np.mean(meff[lcut:rcut])
@@ -675,12 +675,13 @@ def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
 
 
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
-def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray) -> float:
+def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig=True) -> float:
     """
     Input:
         - in_array: a 1D array, with len T
         - fit_array: a 1D array, also with len T, representing the function we want the in_arrya fitted to
         - covmat: a 2D array with shape (T,T), representing the covariance matrix of in_array
+        - only_sig: bool, if True discards the whole covmat and looks just at its diagonal
 
     Output:
         - chi2: the reduced chi2 of the fit
@@ -695,9 +696,13 @@ def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray)
     #then we compute the len of the plateaux
     len_plat = np.shape(in_array)[0]
 
-    #then we compute the reduced chi2 according to its formula and we return it
-    return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / len_plat
-
+    #TO DO: fix the issue with the covmat
+    if only_sig==False:
+        #then we compute the reduced chi2 according to its formula and we return it
+        return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / len_plat
+    else:
+        sig = np.sqrt(np.diag(covmat))
+        return np.sum( (deltas/sig)**2 ) / len_plat
 
 #function that given a 1D array returns the cut values identifying its plateaux
 def plateaux_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold=1.0) -> tuple[int,int]:
