@@ -22,7 +22,7 @@ momAn = moments_toolkit(p3fold,p2fold,maxConf=nconf,verbose=True)
 
 momAn.operator_show(show=False, verbose=True)
 
-momAn.select_operator(28,32)
+momAn.select_operator(28,32, 78, 80, 81)
 
 
 momAn.plot_R(save=True,show=False)

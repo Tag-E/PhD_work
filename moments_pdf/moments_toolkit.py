@@ -45,6 +45,7 @@ from typing import Any, Callable, List #to use annotations for functions
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
 from Kfact_calculator import K_calc #to obtain the list of operators and related kinematic factors
+from moments_operator import Operator #to handle lattice operators
 
 
 
@@ -388,6 +389,8 @@ class moments_toolkit:
                 ax.set_xlabel(r"$\tau$")
                 ax.set_ylabel('R')
 
+                #ax.grid()
+
             #we save the plot if the user asks for it
             if save:
                 plt.savefig(f"{figname}_operator{op.id}.png")
@@ -506,7 +509,40 @@ class moments_toolkit:
 
         
 
+
+    #function that returns the operator according to the label given in the catalogue
+    def get_operator(self, op_number: int) -> Operator:
+        """
+        Input:
+            - op_number: the number of the operator one wants to get as given in the operator catalogue
+        Output:
+            - an instance of the Operator class with all the specifics of the selected operator
+        """
         
+        #we just select the right operator and send it back
+        return self.operator_list[op_number-1] #-1 because the numbering starts from 1 in the catalogue, not from 0
+
+
+    #function used to append an operator (not necessarily one in the catalogue) to the list of selected operators
+    def append_operator(self, new_operator: Operator) -> None:
+        """
+        Input:
+            - new_operator: an instance of the Operator class
+            
+        Output:
+            - None, but as a result of the function call the input operator is added to the list of selected operators
+        """
+
+        #input check
+        if type(new_operator) != Operator:
+            print("\nAchtung: the input must be an instance of the Operator class!\n")
+        #if the input is ok we append the input operator to the list of selected operators
+        else:
+            self.selected_op.append(new_operator)
+        
+        #we return None
+        return None
+
 
 ######################## Auxiliary Functions ##########################
 

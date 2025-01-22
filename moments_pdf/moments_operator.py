@@ -21,9 +21,10 @@
 
 ######################## Library Imports ################################
 
+##General Libraries
 import numpy as np #to handle matrices
 import sympy as sym #for symbolic computations
-
+from typing import Self #to use annotations in operator overloading
 
 
 ######################## Main Class #####################################
@@ -68,8 +69,199 @@ class Operator:
         if X=='T':
             self.nder -=1 #..and n derivatives = n indices -2 for X=T
 
+
     #overwrite of built in print methods
     def __repr__(self):
         return str(self.O.simplify(rational=True))
     def __str__(self):
         return str(self.O.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
+
+
+    #we overload the addition with other operators
+    def __add__(self, other_operator: Self) -> Self:
+        """
+        Overload of the addition of two lattice operators (operator properties that cannot be added are setted to None)
+        """
+
+        #input check: the addition is allowed only if the two operators have the same amount of indices and the same X structure
+        if self.X != other_operator.X or self.n != other_operator.n:
+            print("\nAchtung: operator addition is allowed only between operator with the same number of indices and with the same X structure\n")
+            return None
+        
+        #if the two operators also have the same irrep then the new operator also does
+        new_irrep = None
+        new_block = None
+        if self.irrep == other_operator.irrep:
+            new_irrep = self.irrep
+            #the same goes for the block
+            if self.block == other_operator.block:
+                new_block = self.block
+
+        #we also do a brief symmetry analysis
+        new_C = "mixed"
+        if self.C == other_operator.C:
+            new_C = self.C
+        new_symm = "Mixed Symmetry"
+        if self.symm == other_operator.symm:
+            new_symm = self.symm
+
+
+        
+        
+        #if the input is ok we instantiate the new operator
+        new_op = Operator(cgmat=self.cgmat + other_operator.cgmat,
+                          id = None,
+                          K = self.K + other_operator.K,
+                          X = self.X,
+                          n = self.n,
+                          irrep = new_irrep,
+                          block = new_block,
+                          index_block = None,
+                          C = new_C,
+                          symm = new_symm,
+                          tr = trace_symm(self.cgmat + other_operator.cgmat),
+                          O = self.O + other_operator.O)
+        
+        #we return the sum of the two operators
+        return new_op
+    
+
+
+    #we overload the subtraction of two other operators
+    def __sub__(self, other_operator: Self) -> Self:
+        """
+        Overload of the subtraction between two lattice operators (operator properties that cannot be subtracted are setted to None)
+        """
+
+        #input check: the subtraction is allowed only if the two operators have the same amount of indices and the same X structure
+        if self.X != other_operator.X or self.n != other_operator.n:
+            print("\nAchtung: operator addition is allowed only between operator with the same number of indices and with the same X structure\n")
+            return None
+        
+        #if the two operators also have the same irrep then the new operator also does
+        new_irrep = None
+        new_block = None
+        if self.irrep == other_operator.irrep:
+            new_irrep = self.irrep
+            #the same goes for the block
+            if self.block == other_operator.block:
+                new_block = self.block
+
+        #we also do a brief symmetry analysis
+        new_C = "mixed"
+        if self.C == other_operator.C:
+            new_C = self.C
+        new_symm = "Mixed Symmetry"
+        if self.symm == other_operator.symm:
+            new_symm = self.symm
+
+
+        
+        
+        #if the input is ok we instantiate the new operator
+        new_op = Operator(cgmat=self.cgmat - other_operator.cgmat,
+                          id = None,
+                          K = self.K - other_operator.K,
+                          X = self.X,
+                          n = self.n,
+                          irrep = new_irrep,
+                          block = new_block,
+                          index_block = None,
+                          C = new_C,
+                          symm = new_symm,
+                          tr = trace_symm(self.cgmat - other_operator.cgmat),
+                          O = self.O - other_operator.O)
+        
+        #we return the subtraction between the two operators
+        return new_op
+    
+
+
+
+    #we overload the multiplication of an operator with a number
+    def __mul__(self, coefficient: float) -> Self:
+        """
+        Overload of the multiplication between an operator and a numeric coefficient
+        """
+
+        #we instantiate the new operator (only cgmat, K and O change)
+        new_op = Operator(cgmat=self.cgmat * coefficient,
+                          id = self.id,
+                          K = self.K * coefficient,
+                          X = self.X,
+                          n = self.n,
+                          irrep = self.irrep,
+                          block = self.block,
+                          index_block = self.index_block,
+                          C = self.C,
+                          symm = self.symm,
+                          tr = self.tr,
+                          O = self.O * coefficient)
+        
+        #we return the product of operator times coefficient
+        return new_op
+    
+    #the overload is the same for the right multiplication between number and operator
+    def __rmul__(self, coefficient: float) -> Self:
+        """
+        Overload of the multiplication between an operator and a numeric coefficient
+        """
+
+        #it is the same as the left multiplication
+        return self.__mul__(coefficient)
+    
+
+    #we overload the divison by a numeric coefficient
+    def __truediv__(self, coefficient: float) -> Self:
+        """
+        Overload of the divison of the operator by a numeric coefficient
+        """
+        
+        #input check
+        if coefficient == 0:
+            print("\nAchtung: cannot divide by 0\n")
+            return None
+        
+        #if the input is ok we istantiate the new operator just by changing its cgmat, K and O
+        new_op = Operator(cgmat=self.cgmat / coefficient,
+                          id = self.id,
+                          K = self.K / coefficient,
+                          X = self.X,
+                          n = self.n,
+                          irrep = self.irrep,
+                          block = self.block,
+                          index_block = self.index_block,
+                          C = self.C,
+                          symm = self.symm,
+                          tr = self.tr,
+                          O = self.O / coefficient)
+        
+        #we return the division of the operator by the coefficient
+        return new_op
+    
+
+
+
+
+########### Auxiliary Functions #################
+
+#function used to check the trace condition of a cgmat
+def trace_symm(cgmat: np.ndarray) -> str:
+    """
+    Input:
+        - cgmat: a np.array with the cg coefficients (in the remapped version)
+
+    Output:
+        - a string describing the trace condition of the cgmat
+    """
+
+    #we compute the trace
+    tr = np.trace(cgmat)
+
+    #we convert the value of the trace to a string
+    tr_condition = "!= 0"
+    if tr.all()== 0:
+        tr_condition= "= 0"
+    
+    #we return the trace condition
+    return tr_condition
