@@ -25,7 +25,7 @@ momAn.operator_show(show=False, verbose=True)
 momAn.select_operator(28,32, 78, 80, 81)
 
 
-momAn.plot_R(save=True,show=False)
+momAn.plot_R(save=True,show=False, figsize=(20,8),fontsize_title=24,fontsize_x=18, fontsize_y=18, markersize=8)
 
 print("\nS mean and std: ")
 _, S1mean, S1std = momAn.get_S(1)

@@ -41,6 +41,7 @@ import subprocess #to open pdf files
 import time #to use sleep and pause the code
 import matplotlib.pyplot as plt #to plot stuff
 from typing import Any, Callable, List #to use annotations for functions
+import itertools #to cycle through markers
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
@@ -329,7 +330,8 @@ class moments_toolkit:
     
 
     #function used to plot the ratio R for all the selected operators
-    def plot_R(self, isospin='U-D', show=True, save=False, figname='plotR') -> None:
+    def plot_R(self, isospin='U-D', show=True, save=False, figname='plotR',
+               figsize=(32,14), fontsize_title=12, fontsize_x=10, fontsize_y=10, markersize=3) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -356,7 +358,11 @@ class moments_toolkit:
         for iop,op in enumerate(self.selected_op):
             
             #instantiate figure
-            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
+            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
+
+            #we cycle on the markers
+            marker = itertools.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
+
 
             #we loop over T and each time we add a graph to the plot
             for iT, T in enumerate(self.T_list):
@@ -382,12 +388,12 @@ class moments_toolkit:
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
                 #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
-                ax.errorbar(times, r,yerr=r_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
+                ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, linewidth = 0.3, linestyle='dashed',label=f"T{T}")
                 ax.legend()
 
-                ax.set_title(r"R(T,$\tau$) - Operator " + str(op.id))
-                ax.set_xlabel(r"$\tau$")
-                ax.set_ylabel('R')
+                ax.set_title(r"R(T,$\tau$) - Operator " + str(op.id),fontsize=fontsize_title)
+                ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
+                ax.set_ylabel('R', fontsize=fontsize_y)
 
                 #ax.grid()
 
@@ -452,7 +458,8 @@ class moments_toolkit:
 
         #first we recall the two point correlators
         #corr_2p = self.bb_list[0].p2_corr
-        corr_2p = np.abs( self.bb_list[0].p2_corr )
+        #corr_2p = np.abs( self.bb_list[0].p2_corr )
+        corr_2p = self.bb_list[0].p2_corr.real
 
         #we use the jackknife to compute the effective mass (mean and std)
         meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis=0, time_axis=-1)
@@ -683,6 +690,67 @@ def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
     return S
 
 
+
+#function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice)
+def ratio2p_to_mass(ratio2p: float, t: int, T: int, case=2, max_it=1000) -> float:
+    """
+    Input:
+        - T: time extent of the lattice
+    
+    Output:
+        -
+    """
+
+    sign = [1.0, -1.0, 0.0]
+    
+
+    
+    # If the ratio is less than or equal to 1.0 we return a value of the mass that is 0
+    if ratio2p <= 1.0:
+        return 0.0
+    
+    #if the ratio is bigger than 1 we proceed with the iterative determination of the effective mass
+
+    #0th value of the mass in the iterative procedure
+    m0 = np.log(ratio2p)
+
+    #we also instantiate the value of the previous iteration to be the 0th value
+    old_m = m0
+    m_new = m0
+
+    #then we loop over the iteration of the iterative algorithm
+    for it in range(max_it):
+        
+        # Specific conditions for early exit
+        if ((T - 2 * (t - 1) + 2) == 0 and sign[case] == -1) or ((T - 2 * (t - 1) - 2) == 0 and sign[case] == -1):
+            break
+        
+        if t <= (T / 2):
+            d = 1.0 + sign[case] * np.exp(-old_m * (T - 2.0 * (t - 1)))
+            u = 1.0 + sign[case] * np.exp(-old_m * (T - 2.0 * (t - 1) - 2.0))
+        else:
+            d = 1.0 + sign[case] * np.exp(old_m * (T - 2.0 * (t - 1)))
+            u = 1.0 + sign[case] * np.exp(old_m * (T - 2.0 * (t - 1) + 2.0))
+        
+        rud = u / d
+        m_new = np.log(ratio2p * rud)
+        
+
+        #if the new mass exceeds a max value or it is smaller than 0 we stop the algortihm
+        if abs(m_new) > 4.0 or m_new <= 0.0:
+            return 10.0
+        
+        #if the change in the mass due to the iteration process is small we stop the iterative procedure
+        if abs(old_m - m_new) <= 3.0e-7:
+            break
+        
+        old_m = m_new
+
+    #in the end we return the new mass
+    return m_new
+
+
+
 #function used to extract the effective mass for the two-point correlators
 def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
     """
@@ -704,7 +772,14 @@ def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
 
     #we compute the effective mass (the loop as it should goes up to Tlat-1, so that the last entry of meff is a 0 of padding)
     for t in range(Tlat-1): 
-        meff[t] = np.log( (corr_gavg[t]/corr_gavg[t+1]).real )
+        
+        #to compute the mass we need the ratio of the 2-points correlator
+        ratio_2p = corr_gavg[t]/corr_gavg[t+1]
+
+        #then we just need to take the log, but for that the ratio has to be bigger than 1 (??)   (if that does not happen then the mass is set to 0 -> as done in the initialization above)
+        if ratio_2p >= 1.0:
+            meff[t] = np.log( ratio_2p )
+        #meff[t] = ratio2p_to_mass(ratio_2p,t,48)
 
     #we send back the effective mass
     return meff
@@ -723,9 +798,6 @@ def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray,
         - chi2: the reduced chi2 of the fit
     """
 
-    #first we invert the covariance array
-    cov_inv = np.linalg.inv(covmat)
-
     #then we compute the differences between the fit and input array
     deltas = in_array - fit_array
 
@@ -734,6 +806,8 @@ def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray,
 
     #TO DO: fix the issue with the covmat
     if only_sig==False:
+        #first we invert the covariance array
+        cov_inv = np.linalg.inv(covmat)
         #then we compute the reduced chi2 according to its formula and we return it
         return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / len_plat
     else:
