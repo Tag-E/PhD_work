@@ -106,8 +106,16 @@ class moments_toolkit:
         self.p3_folder=p3_folder
         self.p2_folder=p2_folder
 
-        #we initialize a list with all the available number of indices #TO DO: add input check
-        self.n_list = [i for i in range(2,max_n+1)] 
+        #input check on the maximum number of indices
+        if (type(max_n) is not int) or max_n<=1:
+            print("\nAchtung: the maximum number of indices should be at least 2 - Switching from the input value to the defualt max_n=2\n")
+            self.max_n = 2
+        #if the input is ok we just store the maximum number of indices
+        else:
+            self.max_n = max_n
+
+        #we initialize a list with all the available number of indices
+        self.n_list = [i for i in range(2,self.max_n+1)] 
 
         
         #First we look into the given p3 folder to see how many different subfolders we have
@@ -210,14 +218,14 @@ class moments_toolkit:
 
         #we set the title param to the default value
         if title is None:
-            title = "Available Operators" #TO DO: add the max number of indicices used
+            title = f"Available Operators (with up to n={self.max_n} indices)"
 
         #we set the document name to the default value
         if doc_name is None:
-            doc_name = "operator_catalogue" #TO DO: add max number of indices
+            doc_name = "operator_catalogue"
         
         #the name of the pdf file is then
-        file_name = f"{doc_name}.pdf" #TO DO: add the max number of indicices used
+        file_name = f"{doc_name}.pdf"
         
 
         #we instantiate the .tex file
@@ -383,11 +391,14 @@ class moments_toolkit:
             print("Selected isospin not valid, defaulting to 'U-D'")
             isospin='U-D'
 
+        #check on the number of selected operators
+        if len(self.selected_op)==0:
+            print("\nAchtung: no operator has been selected so no plot will be shown (operators can be selected using the select_operator method)\n")
+            return
+
         
         #we first fetch R using the dedicate method
         R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
-
-        #TO DO: add check on selected op
 
 
 
@@ -443,7 +454,7 @@ class moments_toolkit:
                 plt.show()
 
 
-    #function used to to compute the sum of ratios S #TO DO: add jackknife analysis
+    #function used to to compute the sum of ratios S
     def get_S(self, tskip: int, isospin='U-D') -> tuple[np.ndarray, float, float]:
         """
         Input:

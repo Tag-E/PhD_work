@@ -129,6 +129,14 @@ class bulding_block:
             - None (an instance of the building_block class is created)
         """
 
+        #Input check on the folders with the corelators (the class is not initialized if one of the folders does not exist, and hence the dataset can't be read)
+        if Path(bb_folder).is_dir() == False:
+            print("\nAchtung; the bb_folder specified does not exist, the building block class can't be initialized\n")
+            return
+        if Path(p2_folder).is_dir() == False:
+            print("\nAchtung; the p2_folder specified does not exist, the building block class can't be initialized\n")
+            return
+
 
         #Info Print
         if verbose:
@@ -140,7 +148,7 @@ class bulding_block:
         #we store the folder for later use
         self.bb_folder = bb_folder
 
-        #Path file to the data folder          #TO DO: add input control checking whether the path exists or not
+        #Path file to the data folder
         p = Path(bb_folder).glob('**/*')
         files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
 
@@ -232,7 +240,7 @@ class bulding_block:
         #we store the folder for later use
         self.p2_folder = p2_folder
 
-        #Path file to the data folder          #TO DO: add input control checking whether the path exists or not
+        #Path file to the data folder
         p = Path(p2_folder).glob('**/*')
         files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
 
@@ -437,7 +445,7 @@ class bulding_block:
             if verbose:
                 print("\nLooping over the configurations to read the 2-point correlators from the h5 files...\n")
 
-            #Path file to the data folder          #TO DO: add input control checking whether the path exists or not
+            #Path file to the data folder
             p = Path(self.p2_folder).glob('**/*')
             files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
 
