@@ -108,12 +108,25 @@ class bulding_block:
 
 
     #Initialization function
-    def __init__(self, bb_folder, p2_folder,
+    def __init__(self, bb_folder: str, p2_folder: str,
                  tag='bb',hadron='proton_3', tag_2p='hspectrum',
-                 maxConf=None, force_2preading=False, verbose=False):
+                 maxConf=None, force_2preading=False, verbose=False) -> None:
         
         """
-        Input description:...
+        Initialization of the class used to read and perform analysis routines on a 3point correlator, for a given T, and on to the realated 2p correlator
+
+        Input:
+            - bb_folder: folder with the 3-point correlators
+            - p2_folder: folder with the 2-point correlators (related to the 3 point ones)
+            - tag: tag of the 3-point correlator
+            - hadron: hadron type we want to read from the dataset (for both 3-points and 2-points)
+            - tag_2p: tag of the 2-points correlator
+            - maxConf: maximum number of configuration to be red
+            - force_2preading: bool, if True the 2-points correlator are red again even if they can be retrieved from the previous class instance
+            - verbose: bool, if True info print are provided while the class instance is being constructed
+
+        Output:
+            - None (an instance of the building_block class is created)
         """
 
 
@@ -256,8 +269,8 @@ class bulding_block:
 
         #so first thing first we check wheteher the 2p corr is different this time or not
 
-        #if all the specifics of the 2pcorr match (case 1)
-        if self.__class__.last_2p_folder==p2_folder and self.__class__.last_2p_parms==[self.tag_2p, self.momentum_2p] and self.__class__.last_nconf==self.nconf:
+        #if all the specifics of the 2pcorr match, and the reading is not forced (case 1)
+        if self.__class__.last_2p_folder==p2_folder and self.__class__.last_2p_parms==[self.tag_2p, self.momentum_2p] and self.__class__.last_nconf==self.nconf and force_2preading==False:
             #we just copy it
             self.p2_corr = self.last_2p_corr[:]
             #info print
@@ -298,7 +311,10 @@ class bulding_block:
 
 
     #function used to print the information regarding the keys in the dictionary
-    def print_keys(self):
+    def print_keys(self) -> None:
+        """
+        Function printing to screen the specifics of the building block class instance
+        """
 
 
         #First we print the currently chosen values for the keys
@@ -334,7 +350,18 @@ class bulding_block:
     
     #function used to change the keys and reread the h5 files accordingly
     def update_keys(self, tag=None, smearing=None, mass=None, hadron=None, momentum=None, insmomentum=None,
-                    tag2p=None, verbose=False):
+                    tag2p=None, verbose=False) -> None:
+        """
+        Update reading keys by specifing them again here.
+
+        Input:
+            - tag: new tag key for the 3 points correlators
+            - smearing: new smearing key 
+            - momentum: new momentum key
+            - insmomentum: new insertion momentum key
+            - tag2p: new tag key for the two point correlators
+            - verbose: bool, if True info print are given while updating the keys
+        """
 
         #we update the keys the user wants to change
 
@@ -725,7 +752,7 @@ class bulding_block:
         """
         Input:
             - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
-            - isospin: either 'U' or 'D' (for up or down quarks) !!!! TO DO: add support for the 'isovector' choice (i.e. U-D) (or U+D??)
+            - isospin: either 'U', 'D', 'U+D' or 'U-D' (with U and D meaning up and down quark)
             - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
             - normalize: if True then the output is the ratio giving the matrix element (i.e the 3point correlator divided to the 2point one)
 
@@ -893,7 +920,7 @@ class bulding_block:
         Input:
             - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
             - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
-            - isospin: either 'U' or 'D' (for up or down quarks) !!!! TO DO: add support for the 'isovector' choice (i.e. U-D) (or U+D??)
+            - isospin: either 'U', 'D', 'U+D' or 'U-D' (with U and D meaning up and down quark)
             - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
             - normalize: if True then the output is the ratio to the two point function
 
@@ -929,11 +956,16 @@ class bulding_block:
 ################ Auxiliary Functions ###############################
 
 #function used to implement the product of two gamma matrices
-def gamma_prod(g1,g2):
+def gamma_prod(g1: list[int], g2: list[int]) -> tuple[int, list]:
 
     """
-    - the inputs are g1 and g2 , lists of 4 bits (with the rightmost being the most significat)
-    - the output is a tuple with (sign, gamma structure), where the gamma structure is in the same format (list of 4 bits)
+    Function implementing the product of two gamma matrices
+
+    Input:
+        - g1 and g2: lists of 4 bits (with the rightmost being the most significat)
+
+    Output:
+        - (sign, gamma structure): a tuple, where the gamma structure is in the same format (list of 4 bits)
     """
 
     #the gamma multiplication is just a bit by bit addition modulo 2
@@ -948,5 +980,16 @@ def gamma_prod(g1,g2):
 
 
 #function translating one list encoding the gamma structure into the relevant key
-def list_to_key(list):
+def list_to_key(list: list[int]) -> str:
+    """
+    Function translating a gamma structure to the related key to access the dataset.
+    
+    Input:
+        - list: the list with the gamma structure (e.g. [0,1,0,1])
+        
+    Output
+        - gamma_key: the key to access the dictionary (e.g. 'g10')
+    """
+
+    #we do the conversion and return the key
     return 'g'+ str(int( ''.join([str(e) for e in reversed(list)]), 2))

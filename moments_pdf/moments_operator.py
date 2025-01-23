@@ -36,7 +36,7 @@ class Operator:
     def __init__(self, cgmat:np.ndarray,
                  id:int, K:sym.core.mul.Mul, X:str, n:int, irrep:tuple,
                  block:int, index_block:int,
-                 C:str, symm:str, tr:str, O:sym.core.add.Add):
+                 C:str, symm:str, tr:str, O:sym.core.add.Add) -> None:
         """
         Input:
             - cgmat: matrix of cg coeff

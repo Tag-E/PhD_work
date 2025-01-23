@@ -40,7 +40,7 @@ from pylatex.utils import NoEscape #also to produce a pdf document
 import subprocess #to open pdf files
 import time #to use sleep and pause the code
 import matplotlib.pyplot as plt #to plot stuff
-from typing import Any, Callable, List #to use annotations for functions
+from typing import Any, Callable #to use annotations for functions
 import itertools #to cycle through markers
 from scipy.optimize import curve_fit #to extract the mass using a fit of the two point correlator
 
@@ -77,10 +77,23 @@ class moments_toolkit:
     #Initialization function
     def __init__(self, p3_folder:str, p2_folder:str,
                  tag_3p='bb',hadron='proton_3', tag_2p='hspectrum',
-                 maxConf=None,max_n=3, verbose=False):
+                 maxConf=None, max_n=3, verbose=False) -> None:
         
         """
-        Input description:...
+        Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
+
+        Input:
+            - p3_folder: folder having as sub folders all the folders with the 3-point correlators at different time separations T
+            - p2_folder: folder with the 2-point correlators (related to the 3 point ones)
+            - tag_3p: tag of the 3-point correlator
+            - hadron: hadron type we want to read from the dataset (for both 3-points and 2-points)
+            - tag_2p: tag of the 2-points correlator
+            - maxConf: maximum number of configuration to be red
+            - max_n: maximum number of indices  of the lattice operators we want to have to deal with (changing this parameter will change the number of available operators)
+            - verbose: bool, if True info print are provided while the class instance is being constructed
+
+        Output:
+            - None (an instance of the moments_toolkit class is created)
         """
 
 
@@ -117,7 +130,7 @@ class moments_toolkit:
             #Info Print
             if verbose:
                 print(f"\n\nReading data for T = {self.T_list[i]} ...\n")
-            self.bb_list.append( bulding_block(bb_path,p2_folder, maxConf=maxConf, verbose=verbose) )
+            self.bb_list.append( bulding_block(bb_path,p2_folder, hadron=hadron, tag_2p= tag_2p, tag=tag_3p, maxConf=maxConf, verbose=verbose) )
 
 
         #We initialize some other class variables
@@ -179,9 +192,20 @@ class moments_toolkit:
 
 
     #Function used to print to pdf and show to the user all the available operators that can be chosen
-    def operator_show(self, title=None, author="E.T.", doc_name=None, verbose=False, show=True, remove_pdf=False, clean_tex=True):
+    def operator_show(self, title=None, author="E.T.", doc_name=None, verbose=False, show=True, remove_pdf=False, clean_tex=True) -> None:
         """
-        Function description TO DO
+        Function used to produce and show the .pdf file containing the list of all the available operators.
+
+        Input:
+            - title: str, the title of the pdf document (i.e. what is shown on the first page of the pdf)
+            - auhor: the name of the author shown in the pdf
+            - doc_name: the name of the .pdf file
+            - show: bool, if True the .pdf file is opened and shown to the user 
+            - remove_pdf: bool, if True the .pdf file is removed right after being created (useful it the user just wants to see it once)
+            - clean_tex: bool, if True the tex files used to create the .pdf file are removed after the pdf creation
+
+        Output:
+            - None (the function just shows and/or save the pdf with the catalouge of lattice operators)
         """
 
         #we set the title param to the default value
@@ -263,10 +287,15 @@ class moments_toolkit:
 
     
     #function used to select which operators we want to study
-    def select_operator(self, *kwarg):
+    def select_operator(self, *kwarg) -> None:
         """
+        Function used to select the operators on which perform the analysis.
+
         Input:
-            - the int corresponding to the operators selected, as shown in the operator catalogue (accessible via the method operator_show)
+            - an int for each operator that the user wants to select: the correspondence between the int and the operator is given in the operator catalogue (accessible via the method operator_show)
+
+        Output:
+            - None (the selected_op list, i.e. the list with the selected operators gets updated)
         """
 
         #the chosen ids are
@@ -332,12 +361,19 @@ class moments_toolkit:
 
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin='U-D', show=True, save=False, figname='plotR',
-               figsize=(32,14), fontsize_title=12, fontsize_x=10, fontsize_y=10, markersize=3) -> None:
+               figsize=(20,8), fontsize_title=24, fontsize_x=18, fontsize_y=18, markersize=8) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
             - show: bool, if True the plot with R is shown
             - save: bool, if True the plot is saved to .png
+            - figname: the name prefix of the .png files (one for each of the selected operators)
+            - figsize: size of the matplotlib figure
+            - fontsize_title: font size for the title of the plot
+            - fontsize_x: font size for the x label of the plot
+            - fontsize_y: font size for the y label of the plot
+            - markersize: size of the markers on the plot
+
         Output:
             - None (the function is used just to have the plots with R printed to screen)
         """
@@ -408,11 +444,12 @@ class moments_toolkit:
 
 
     #function used to to compute the sum of ratios S #TO DO: add jackknife analysis
-    def get_S(self, tskip: int, isospin='U-D'):
+    def get_S(self, tskip: int, isospin='U-D') -> tuple[np.ndarray, float, float]:
         """
         Input:
-            - tskip = \tau_skip = gap in time when performing the sum of ratios
+            - tskip = tau_skip = gap in time when performing the sum of ratios
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
+
         Output:
             - S: the sum of ration given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t) (with shape (nop,nconf,nT))
             - Smean, Sstd: mean and std from jackknife procedure applied on S (with shape (nop, nT))
@@ -450,11 +487,17 @@ class moments_toolkit:
 
 
     #function to get a value of the mass from the two point function
-    def get_meff(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figtitle='mass_plataux'):
+    def get_meff(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figname='mass_plataux') -> tuple[float, float]:
         """
         Input:
+            - show: bool, if True the effective mass vs time plot is shown to screen
+            - save: bool, if True the effective mass vs time plot is saved to file
+            - chi2_treshold:  treshold for the plateau determination using a chi2 analysis
+            - zoom: int, number of extra points plotted on the sides of the plateau
+            - figname: name of the .png file containing the plot
         
         Output:
+            - meff_plat, meff_plat_std: value of the mass extracted from the plateau of the effective mass, with related std
         """
 
         #first we recall the two point correlators
@@ -509,7 +552,7 @@ class moments_toolkit:
 
         #we save the figure if asked
         if save:
-            plt.savefig(f"{figtitle}.png")
+            plt.savefig(f"{figname}.png")
 
 
         #we return the plateaux values
@@ -517,13 +560,13 @@ class moments_toolkit:
     
 
     #function used to extract a value of the fit mass from the two point correlators
-    def get_mfit(self):
+    def get_mfit(self) -> tuple[float,float]:
         """
         Input:
             - None
 
         Output:
-            - mfit, mfit_std: mean value and std of the mass  extracted from the fit, using the jackknife analysis
+            - mfit, mfit_std: mean value and std of the mass extracted from the fit, using the jackknife analysis
         """
 
         #first we recall the two point correlators
@@ -543,6 +586,7 @@ class moments_toolkit:
         """
         Input:
             - op_number: the number of the operator one wants to get as given in the operator catalogue
+
         Output:
             - an instance of the Operator class with all the specifics of the selected operator
         """
@@ -576,7 +620,7 @@ class moments_toolkit:
 
 
 #function implementing the jackknife analysis
-def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, time_axis=-1, binsize=1,first_conf=0,last_conf=None) -> List[np.ndarray]:
+def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, time_axis=-1, binsize=1,first_conf=0,last_conf=None) -> list[np.ndarray]:
     """
     Input:
         - in_array: input array to be jackknifed
@@ -712,14 +756,18 @@ def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
 
 
 
-#function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice)
+#function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice) TO DO: double check this function with computations (!!!!)
 def ratio2p_to_mass(ratio2p: float, t: int, T: int, case=2, max_it=1000) -> float:
     """
     Input:
+        - ratio2p: the ratio of the two point correlators at two consecutive times
+        - t: the time of the correlator at the numerator
         - T: time extent of the lattice
+        - case: case considered (cosh, sinh or exp)
+        - max_it: maximum number of iteration of the iterative algorithm for the mass determination
     
     Output:
-        -
+        - m: the mass value extracted from the ratio of the correlators
     """
 
     sign = [1.0, -1.0, 0.0]
