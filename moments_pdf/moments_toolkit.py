@@ -42,6 +42,7 @@ import time #to use sleep and pause the code
 import matplotlib.pyplot as plt #to plot stuff
 from typing import Any, Callable, List #to use annotations for functions
 import itertools #to cycle through markers
+from scipy.optimize import curve_fit #to extract the mass using a fit of the two point correlator
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
@@ -449,7 +450,7 @@ class moments_toolkit:
 
 
     #function to get a value of the mass from the two point function
-    def get_m(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figtitle='mass_plataux'):
+    def get_meff(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figtitle='mass_plataux'):
         """
         Input:
         
@@ -513,6 +514,26 @@ class moments_toolkit:
 
         #we return the plateaux values
         return meff_plat, meff_plat_std
+    
+
+    #function used to extract a value of the fit mass from the two point correlators
+    def get_mfit(self):
+        """
+        Input:
+            - None
+
+        Output:
+            - mfit, mfit_std: mean value and std of the mass  extracted from the fit, using the jackknife analysis
+        """
+
+        #first we recall the two point correlators
+        corr_2p = self.bb_list[0].p2_corr.real
+
+        #then we use the jackknife to compute the fit mass and its std
+        mfit, mfit_std , _= jackknife(corr_2p, fit_mass, jack_axis=0, time_axis=None)
+
+        #we return the fit mass and its std
+        return mfit, mfit_std
 
         
 
@@ -756,6 +777,7 @@ def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
     """
     Input:
         - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
+        - conf_axis: the axis with the configurations
 
     Output:
         - m_eff(t): the effective mass, with shape (Tlat,) (the configuration axis gets removed) (the shape is Tlat and not Tlat-1, so that the jackknife function can be used)
@@ -783,6 +805,7 @@ def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
 
     #we send back the effective mass
     return meff
+
 
 
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
@@ -859,3 +882,60 @@ def plateaux_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold=1.0)
 
     #if by the end of the loop the chi2 condition is never met we return the cuts corresponding to the whole dataset
     return 0, np.shape(in_array)[0]
+
+
+
+#exponential function used in the fit for the mass extraction
+def exp_fit_func(t: np.ndarray, amp: float, mass: float) -> np.ndarray:
+    """
+    This function is only used to fit the two point correlators to an exponential to extract the mass using scipy curve fit
+    
+    Input:
+        - t: numpy array with the times (the x array of the fit)
+        - amp: the amplitude of the exponential
+        - mass: the mass at the exponent (the parameter we actually want to extract from the fit)
+        
+    Output:
+        - corr_2p(t) = amp * exp(-t * m): the values of the correlator in the purely exponential form (the y array of the fit)
+    """
+    
+    #we just return the exponential
+    return amp * np.exp(-t * mass)
+
+
+
+#function used to extract the fit mass from the two-point correlators
+def fit_mass(corr_2p: np.ndarray, conf_axis=0, guess_mass=0.5) -> np.ndarray:
+    """
+    Input:
+        - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
+        - conf_axis: the axis with the configurations
+        - guess_mass: the first guess for the mass we want to extract from the fit
+
+    Output:
+        - (mift, mfit_std): the mean value and the std of the mass extracted from the fit
+    """
+
+
+
+    #we first take the gauge average of the two point correlator
+    corr_gavg = np.mean(corr_2p, axis=conf_axis)
+
+    #then we define the first guess for the parameters of the fit
+    guess_amp = corr_gavg[0]
+    guess = [guess_amp,guess_mass]
+
+    #we define the x and y arrays used for the fit (which are respectively times and corr_gavg)
+    times = np.arange(np.shape(corr_gavg)[conf_axis])
+
+    #we perform the fit
+    popt,pcov = curve_fit(exp_fit_func, times, corr_gavg, p0=guess)#,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
+    perr = np.sqrt(np.diag(pcov)) #perr being the std of the parameters extracted from the fit
+
+    #we read the mass (that's the only thing we're interested about, the amplitude we discard)
+    fit_mass = popt[1]
+    fit_mass_std = perr[1]
+
+
+    #we return the fit mass and its std
+    return np.array(fit_mass)
