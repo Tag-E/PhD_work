@@ -36,6 +36,7 @@ from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
 from pylatex import Document, Math, Matrix, Section, Subsection, Command #to produce a pdf documents with the CG coeff
 from pylatex.utils import NoEscape #also to produce a pdf document
+from IPython.display import display #to print the cg matrix nicely in a notebook
 
 ######################## Global Variables ###############################
 
@@ -514,7 +515,24 @@ class cg_calc:
     irrep_dim = dict(zip(rep_label_list, rep_dim_list)) #a dimensionality
     irrep_texname  = dict(zip(rep_label_list, rep_latex_names)) #and a character in latex
 
-    def __init__(self, *kwarg, cgdatabase='cg_database',force_computation=False, force_h4gen=False, verbose=True):
+
+    ## Class Methods
+
+    #class initialization
+    def __init__(self, *kwarg: tuple[int,int], cgdatabase='cg_database',force_computation=False, force_h4gen=False, verbose=True) -> None:
+        """
+        Initialization of the class used to construct the Clebsch-Gordan coefficients of a given tensor product between irreps of H(4)
+        
+        Input;
+            -- kwarg: the irreps of H(4) involved in the tensor product under study, in the format of tuples of two ints, so (1,1), (1,2), (1,3), ... up to (8,2)
+            - cgdatabase: str, path of the folder where the matrices with the cg coefficients will be stored
+            - force_computation: bool, if True then the computation of the cg coefficients will be repeated even if a database with already compute cg coefficients is available
+            - force_h4gen: bool, if True then the explicit matrix representation of all the elements of H(4) will be computed again even if we they can be read from the database
+            - verbose: bool, if True then info prints will be shown when the class instance is being created
+        
+        Output:
+            - None (a cg_calc class instance gets created)
+        """
 
         #we store in a class variable the irreps chosen for the decomposition
         self.chosen_irreps = kwarg
@@ -816,13 +834,36 @@ class cg_calc:
 
 
     #function returning the multiplicities in the decomposition
-    def get_multiplicities(self):
+    def get_multiplicities(self) -> list[int]:
+        """
+        Function returning the list with the multiplicities in the tensor product under study.
+        
+        Input:
+            - None (all the information is stored in the class instance)
+            
+        Output:
+            - multiplicities list: a list with 20 entries, one for each H(4) irrep, with the i-th entry being the multiplicity of the i-th irrep in the tensor product considered
+        """
+        #we just return the class attribute storing the multiplicities
         return self.mul_list
     
 
 
     #function to print the cg coeff in latex
-    def latex_print(self,digits=5,verbose=True, title=None, author="E.T.", clean_tex=True):
+    def latex_print(self, digits=5, verbose=True, title=None, author="E.T.", clean_tex=True) -> None:
+        """
+        Function creating a latex pdf with all the cg coefficients of the tensor product considered.
+        
+        Input:
+            - digits: int, the number of digits considered when rounding cg coefficients
+            - verbose: bool, if True info print are shown when the function is called
+            - title: str, the title shown on the first page of the produced pdf
+            - author: str, the author shown in the produced pdf
+            - clean_latex: bool, if True the tex files used to create the pdf are removed after its creation
+        
+        Output:
+            - None (a .pdf file with all the relevant cg coefficients is created)
+        """
 
         #we set the title param to the default value
         if title is None:
@@ -880,7 +921,17 @@ class cg_calc:
 ######################## Auxiliary Functions ###############################
 
 #function that given the irreps in the tensor products returns the multiplicity in their decomoposition
-def get_multiplicities(*kwarg):
+def get_multiplicities(*kwarg: tuple[int,int]) -> list[int]:
+    """
+    Function that obtain the multiplicities of each representation for the given tensor product specified by the input (algorithm implementing the group theory formula for the multiplicities).
+    
+    Input:
+        - kwarg: the irreps of H(4) involved in the tensor product under study, in the format of tuples of two ints, so (1,1), (1,2), (1,3), ... up to (8,2)
+    
+    Output:
+        - multiplicities list: a list with 20 entries, one for each H(4) irrep, with the i-th entry being the multiplicity of the i-th irrep in the tensor product considered
+    """
+
     #the inputs are the label of the irrep i want to multiply together
     
     #the output will be a list with the multiplicity for each irrep
@@ -897,11 +948,23 @@ def get_multiplicities(*kwarg):
         mul /= n_ele_h4
         mult_list.append(int(mul))
 
+    #we return the list with the multiplicities
     return mult_list
 
 
 #function to obtain the correctly normalized matrix with cg coefficients from the raw block obtained from the cg formula
 def CGmat_from_block(block : np.ndarray, m = 0, mul=1) -> np.ndarray:
+    """
+    Super Important Function in which the prescription to translate a symbolic matrix (here block) to a matrix with number (the CGmat) is implemented. !!!
+    
+    Input:
+        - block: the symbolic matrix coming out of the mathematical formula for the cg coefficient (see https://doi.org/10.1063/1.1666528)
+        - m: int, the index, going from 0 to mul, labelling the particular block considered betwenn the mul different ones of the same irrep
+        - mul: int, the number of blocks of the irrep considered, i.e. its multiplicity in the decomposition of the tensor product under study
+    
+    Output:
+        - cgmat: the cg matrix, now with numbers inside (i.e. the actual coefficients), that however still need to be rounded (and then remapped if needed)
+    """
 
     #matrix in which cg coefficients hide
     mat = block.copy()
@@ -1001,5 +1064,16 @@ def CGmat_from_block(block : np.ndarray, m = 0, mul=1) -> np.ndarray:
 
 
 #function used to print in a nice way the matrix with cg coefficientss
-def print_CGmat(cgmat,digits=5):
+def print_CGmat(cgmat: np.ndarray, digits=5) -> None:
+    """
+    Function used to print the matrix with cg coefficients (matrix with number) in a fancy way on a jupyter notebook.
+    
+    Input:
+        - cgmat: the matrix with the cg coefficients (the entries should be castable to floats)
+        - digits: int, the number of digits the cg coefficients should be rounded to for a pretty printing
+    
+    Output:
+        - None (the cgmat is shown in the notebook with rounded entries)
+    """
+    #we just display the cg matrix in a nice way
     display( sym.Matrix(np.round(np.asarray(cgmat).astype(np.float64),digits)) )

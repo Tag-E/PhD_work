@@ -172,20 +172,43 @@ class K_calc:
     irrep_dim = dict(zip(rep_label_list, rep_dim_list)) #a dimensionality
     irrep_texname  = dict(zip(rep_label_list, rep_latex_names)) #and a character in latex
 
-    def __init__(self, X: str, n: int, verbose=True):
 
+    ## Methods of the class
+
+    #class initialization
+    def __init__(self, X: str, n: int, verbose=True) -> None:
         '''
-        X = 'V', 'A', 'T'
-        n = 1,2,3,...
+        Initializaiton of the class containing the data and methods necessary for the computation of the kinematic factors of the lattice operators.
+
+        Input:
+            - X: str, either 'V', 'A' or 'T', i.e. vector, axial or tensorial, depending on the kind of structure of the operators we're dealing with
+            - n: int, the number of indices of the operators we're dealing with
+            - verbose: bool, if True then info print are shown while the class instance is being initialized
+        
+        Output:
+            - None (an instance of the K_calc class is created)
         '''
 
-        #TO DO: add input check
+        #Input check
 
-        #we store the type of structure: vector, axial or tensor
-        self.structure = X
+        #input check on X
+        if X not in ['V','A','T']:
+            print("\nAchtung: X must be either 'V', 'A' or 'T' - Switching to the default choice X='V'\n")
+            self.structure = 'V'
+        #if the user specified the input correctly...
+        else:
+            #...we store the type of structure: vector, axial or tensor
+            self.structure = X
 
-        #we also store the rank (number of indices) of the operator
-        self.n = n
+
+        #input check on n
+        if type(n)!=int or n <=0:
+            print("\nAchtung: the number of indices must be a positive integer - Switching to the default choice n=2\n")
+            self.n =2
+        #if the user specified the input correctly...
+        else:
+            #...we also store the rank (number of indices) of the operator
+            self.n = n
 
         #then we store in a class variable the irreps chosen for the decomposition
         self.chosen_irreps = []
@@ -247,14 +270,28 @@ class K_calc:
                     self.cg_dict[k][imul].append(cg_mat)
 
                     #now that we have the cg matrix we compute the operator as the sum of combinations of the type: CGcoeff x gammaMat x momentum
-                    operator = construct_operator(cg_mat,self.chosen_irreps,self.structure)
+                    #operator = construct_operator(cg_mat,self.chosen_irreps,self.structure)
+                    operator = construct_operator(cg_mat,self.structure)
 
                     #we compute the kinematic factor with the function implementing its formula and we store it
                     self.kin_dict[k][imul].append( Kfactor(operator) )
 
 
     #function to print the Kinematic factors in a latex pdf
-    def latex_print(self,digits=5,verbose=True, title=None, author="E.T.", clean_tex=True):
+    def latex_print(self, digits=5 ,verbose=True, title=None, author="E.T.", clean_tex=True) -> None:
+        """
+        Function creating a latex pdf with all the operators in the case considered.
+        
+        Input:
+            - digits: int, the number of digits considered when rounding cg coefficients
+            - verbose: bool, if True info print are shown when the function is called
+            - title: str, the title shown on the first page of the produced pdf
+            - author: str, the author shown in the produced pdf
+            - clean_latex: bool, if True the tex files used to create the pdf are removed after its creation
+        
+        Output:
+            - None (a .pdf file with all the relevant operators is created)
+        """
 
         #we set the title param to the default value
         if title is None:
@@ -376,9 +413,16 @@ class K_calc:
     #function used to append to a given latex document the the list of operators typical of the class
     def append_operators(self, doc:Document, op_number:int, digits=5, verbose=False) -> None:
         """
+        Function used to append to a given latex document the print stuff associated with a list of operators
+
         Input:
             - doc: the documents that will be updated with the operators produced by the class instance (supposeed to be already initialised)
             - op_number: the number associated to the first operator
+            - digits: int, the number of digits we use while converting from symbolic computations
+            - verbose: bool, if True info print are given while the function is being executed
+        
+        Output:
+            - None (the input document gets upadated)
         """
 
         #we initialize the count of operators to the number passed as input
@@ -482,7 +526,16 @@ class K_calc:
 
     
     #function returning a list of all the operator with all their specifics
-    def get_opList(self,first_op=1):
+    def get_opList(self, first_op=1) -> list[Operator]:
+        """
+        Function used to create a list with the instances of the Operators class for all the available operators
+
+        Input:
+            - first_op: int, the number we want the first operator in the list to be laballed with (the next ones will proceed in ascending order)
+        
+        Output:
+            - op_list: a list with all the instances of the Operator class corresponding to the various operators
+        """
 
         #we instantiate the list as empty
         op_list = []
@@ -553,7 +606,17 @@ class K_calc:
 
 
 #function used to remap the cg coefficients from a 4**n column to a n rank matrix of dimension 4 (with n number of tensors in the product)
-def cg_remapping(raw_cg,n: int):
+def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
+    """
+    Function used to reshape a matrix of with the cg coefficients (already rounded) into a form that can be better handled
+    
+    Input:
+        - raw_cg: column with cg coefficients, i.e. a matrix with shape (4**n,) where n is the number of indices of the operator under study
+        - n: int, the number of indices of the operator under study
+    
+    Output:
+        - cg_remapped: the matrix with cg coefficients, now with shape ((4,)**n), that is with n axis each with dimension 4
+    """
 
     #first we instantiate the new matrix empy
     cg_remapped = np.zeros(shape=(4,)*n)
@@ -565,11 +628,22 @@ def cg_remapping(raw_cg,n: int):
     for i in range(4**n):
         cg_remapped[*mapping[i]] = raw_cg[i]
 
+    #we return the remapped matrix
     return cg_remapped
 
 
 #function used to round the raw CG matrix obtained from the calculator
-def round_CG(cgmat,digits=2):
+def round_CG(cgmat: np.ndarray, digits=2) -> np.ndarray:
+    """
+    Function rounding the matrices of Clebsch-Gordan coefficients coming out of the cg calculator
+    
+    Input:
+        - cgmat: the raw cg matrix coming out of the cg calculator
+        
+    Output:
+        - rounded cgmat: the cg matrix with rounded numbers
+    """
+
     #ok = np.asarray(cgmat)
     #print(np.shape(ok))
     return np.round(np.asarray(cgmat).astype(np.float64),digits)
@@ -577,6 +651,15 @@ def round_CG(cgmat,digits=2):
 
 #function used to compute the kinematic factor for a given operator
 def Kfactor(operator):
+    """
+    Function used to construct the symbolic form of the kinematic factor given the symbolic (matrix) form of an operator
+    
+    Input:
+        - operator: a symbolic expression (in a matrix form) representing the operator under study
+        
+    Ouput:
+        - K: the symbolic expression for the operator under study
+    """
 
     #at the numerator of the kin factor there is the following term
     num =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
@@ -586,10 +669,21 @@ def Kfactor(operator):
 
 
 #function used to construct the operator from the matrices of cg coefficients
-def construct_operator(cgmat,irreps,X: str):
+def construct_operator(cgmat: np.ndarray, X: str):
+    """
+    Function used to construct the symbolic form of the operator specified by the input
+    
+    Input:
+        - cgmat: matrices with the Clebsch-Gordan coefficient, in the remapped form
+        - X: str, either 'V', 'A' or 'T', i.e. vector, axial or tensorial, depending on the kind of structure of the operators we're dealing with
+    
+    Output:
+        - the symbolic form of the operator we're dealing with (with a matrix structure)
+    """
 
-    #we first get the number of irreps in the tensor product
-    n = len(irreps)
+    #we first get the number of irreps in the tensor product (that is the number of indices)
+    #n = len(irreps)
+    n = len(np.shape(cgmat))
 
     #we first instantiate the operator as the zero matrix in Dirac space
     op = np.zeros((4,4))
@@ -622,7 +716,18 @@ def construct_operator(cgmat,irreps,X: str):
 
 
 #function used to check the Charge conjugation symmetry
-def Csymm(block,X, n):
+def Csymm(block: np.ndarray, X: str, n: int) -> str | int:
+    """
+    Function used to determine the C parity of a given explicit representation (the block) of an irrep
+    
+    Input:
+        - block: the np array with all the matrices of cg coefficients of the operators in a given irrep repetition (=in the given block)
+        - X: str, either 'V', 'A' or 'T', i.e. vector, axial or tensorial, depending on the kind of structure of the operators we're dealing with
+        - n: int, the number of indices of the operators we're dealing with
+        
+    Output:
+        - C parity condition: str or int, either "mixed", 1 or -1 depending on what is the charge conjugation condition of all the cg matrices in the block
+    """
 
     #to check the symmetry we have to cycle over all the cg coefficients and see if they respect the correct conditions
 
@@ -680,7 +785,16 @@ def Csymm(block,X, n):
 
 
 #function used to check the trace condition of a given block
-def trace_symm(block):
+def trace_symm(block: np.ndarray) -> str:
+    """
+    Function used to determine the trace condition of a given explicit representation (the block) of an irrep
+    
+    Input:
+        - block: the np array with all the matrices of cg coefficients of the operators in a given irrep repetition (=in the given block)
+        
+    Output:
+        - trace condition: a string that is either "mixed", "= 0" or "!= 0" depending on what is the trace of all the cg matrices in the block
+    """
 
     #we have to check that for all the operators the trace is the same, so we store the last computed trace
     tr_old=0
@@ -708,7 +822,17 @@ def trace_symm(block):
 
 
 #function used to check the symmetry condition of a given block
-def index_symm(block,n):
+def index_symm(block: np.ndarray, n: int) -> str:
+    """
+    Function used to determine the symmetry under indices exchange in a given block of cg matrices (i.e. in a given explicit representation of an irrep)
+    
+    Input:
+        - block: the np array with all the matrices of cg coefficients of the operators in a given irrep repetition (=in the given block)
+        - n: the number of indices of the operators in the given block
+    
+    Output:
+        - symmetry condition: a string that is either "Mixed Symmetry", "Symmetric" or "Antisymmetric" depending on what is the symmetry under indices exchange of all the cg matrices in the block
+    """
 
     #we have to check that all the operators have the same index symmetry, so we initialize it to a certain value
     symm_old=0
@@ -758,8 +882,18 @@ def index_symm(block,n):
 
 
 
-#fucton used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
-def parity(permutation):
+#function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+def parity(permutation: tuple) -> int:
+    """
+    Function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+    
+    Input:
+        - permutation: a tuple coming out of itertools.permutation()
+    
+    Output:
+        - parity: int, either 1 or -1, respectively for an even or for an odd permutation
+    """
+    #code copied from the referenced source:
     permutation = list(permutation)
     length = len(permutation)
     elements_seen = [False] * length
@@ -777,7 +911,7 @@ def parity(permutation):
 
 
 #function used to obtain the dictionary with the cg coefficients in matrix from
-def get_CGdict(X: str, n: int) -> Dict[tuple,List[np.ndarray]]:
+def get_CGdict(X: str, n: int) -> dict[tuple, list[np.ndarray]]:
     """
     Input:
         - X: either 'V', 'A' or 'T'
@@ -842,7 +976,7 @@ def get_CGdict(X: str, n: int) -> Dict[tuple,List[np.ndarray]]:
 
 
 #function used to obtain the dictionary with the cg coefficients in matrix from
-def get_CGlist(X: str, n: int) -> List[np.ndarray]:
+def get_CGlist(X: str, n: int) -> list[np.ndarray]:
     """
     Input:
         - X: either 'V', 'A' or 'T'
