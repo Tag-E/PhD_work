@@ -788,6 +788,7 @@ class cg_calc:
 
             #we create the folders where to store the cg coefficients
             Path(self.cg_folder).mkdir(parents=True, exist_ok=True)
+            Path(self.cg_folder+"_raw").mkdir(parents=True, exist_ok=True)
 
             #we loop over the items of the dict with the cg coeff
             for k,v in self.cg_dict.items():
@@ -795,6 +796,13 @@ class cg_calc:
                 for i,arr in enumerate(v):
                     with open(f'{self.cg_folder}/{k}_{i}.npy', 'wb') as f:
                         np.save(f,arr)
+
+            #for deubugging and code development purposes it is also useful to store the raw cg coefficient matrices
+            for k,v in self.raw_cg.items():
+                #from the key we read irrep and multiplicity
+                irep,m = k
+                with open(f'{self.cg_folder}_raw/{irep}_{m}.npy', 'wb') as f:
+                     np.save(f,v)
 
 
         #if instead the cg coefficients are in the database we just have to load them
@@ -830,6 +838,26 @@ class cg_calc:
 
             #then we reorder the dictionary as to have keys in increasing order
             self.cg_dict = {k: self.cg_dict[k] for k in sorted(list(self.cg_dict.keys())) }
+
+            #we repeat the same procedure for the dict with raw cg coeff
+            self.raw_cg = {}
+
+            #we take the list of all the files in the folder
+            p = Path(self.cg_folder+"_raw").glob('**/*')
+            files = [x for x in p if x.is_file()]
+
+            #we cycle through the files in the folder
+            for i,file in enumerate(files):
+
+                #we parse the index of the representation and the number associated with the multiplicity
+                irep = int(file.name.split(".")[0].split("_")[0])
+                m = int(file.name.split(".")[0].split("_")[1])
+
+                #we open the file with the rawcg coeff
+                with open(f'{self.cg_folder+"_raw"}/{file.name}', 'rb') as f:
+
+                    #the dict keys are in a 1:1 correspondence with the files name, so we just load the files in the dict entries
+                    self.raw_cg[(irep,m)] = np.load(f, allow_pickle=True)
 
 
 

@@ -617,7 +617,7 @@ class moments_toolkit:
         """
 
         #input check
-        if type(new_operator) != Operator:
+        if type(new_operator) is not Operator:
             print("\nAchtung: the input must be an instance of the Operator class!\n")
         #if the input is ok we append the input operator to the list of selected operators
         else:

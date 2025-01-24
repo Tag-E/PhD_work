@@ -202,7 +202,7 @@ class K_calc:
 
 
         #input check on n
-        if type(n)!=int or n <=0:
+        if (type(n) is not int) or n <=0:
             print("\nAchtung: the number of indices must be a positive integer - Switching to the default choice n=2\n")
             self.n =2
         #if the user specified the input correctly...
