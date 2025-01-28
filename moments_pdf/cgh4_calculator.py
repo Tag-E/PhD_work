@@ -37,6 +37,7 @@ from pathlib import Path #to check whether directories exist or not
 from pylatex import Document, Math, Matrix, Section, Subsection, Command #to produce a pdf documents with the CG coeff
 from pylatex.utils import NoEscape #also to produce a pdf document
 from IPython.display import display #to print the cg matrix nicely in a notebook
+import time #to measure elapsed time in code
 
 ######################## Global Variables ###############################
 
@@ -710,8 +711,16 @@ class cg_calc:
             #info print
             if verbose: print("\nLooping over group elements...\n")
 
+            #timing of the loop
+            time_start_loop = time.time()
+            totalT_mat_construction = 0
+            totalT_mat_mul = 0
+
             #loop over elements of H(4) (with a nice loading bar)
             for ih in tqdm(range(self.n_ele_h4)):
+
+                #timing of the loop
+                time_before_construction = time.time()
 
                 #for each element first we find the matrix in the kronecker product form
                 Tp = np.eye(1)
@@ -744,8 +753,23 @@ class cg_calc:
                 #matrix in the block diagonal form
                 Bd = np.block(rows)
 
+                #timing of the loop
+                time_before_mul = time.time()
+
                 #then we do the computation
                 res_mat = res_mat + Tp @ A @ Bd.T
+
+                #timing of the loop
+                time_after_mul = time.time()
+
+                #time estimation
+                totalT_mat_construction += time_before_mul - time_before_construction
+                totalT_mat_mul += time_after_mul - time_before_mul
+
+
+            #timing of the loop
+            time_end_loop = time.time()
+
 
             #we then eliminate rounding errors
             rounded_res = np.empty((dim,dim),dtype=object)
@@ -765,6 +789,9 @@ class cg_calc:
                         new_entry = new_entry + coeff * monom
                     rounded_res[i,j] = new_entry
 
+            #timinig of rounding
+            time_end_rounding = time.time()
+
             #we now construct the output dict
             self.cg_dict = {}
             self.raw_cg = {} #raw cg mat, without CGmat_from_block function
@@ -778,6 +805,23 @@ class cg_calc:
                     self.cg_dict[irep].append( CGmat_from_block( rounded_res[:,d:d+rep_dim_list[irep]], m, mul ) )
                     self.raw_cg[(irep,m)] = rounded_res[:,d:d+rep_dim_list[irep]] #raw cg coeff
                     d += rep_dim_list[irep]
+
+            #timing of evaluation
+            time_end_evaluation = time.time()
+
+
+            #total timing
+            totalT_loop = time_end_loop - time_start_loop
+            totalT_rounding = time_end_rounding - time_end_loop
+            totalT_evaluating = time_end_evaluation - time_end_rounding
+            totalT = totalT_loop+totalT_rounding+totalT_evaluating
+
+
+            #time info print
+            if verbose:
+                print(f"\nH(4) Loop time: {round(totalT_loop,2)} s\nMatrix Construction Time: {round(totalT_mat_construction/totalT_loop*100,2)}%\nMatrix Multiplication Time: {round(totalT_mat_mul/totalT_loop*100,2)}%\n")
+                print(f"\nTotal Time (Loop+Rounding+Evaluation): {round(totalT,2)} s\nLoop: {round(totalT_loop/totalT*100,2)}%\nRounding: {round(totalT_rounding/totalT*100,2)}%\nEvaluation: {round(totalT_evaluating/totalT*100,2)}%\n")
+
 
             
             #once that we have done the computation of the cg coefficient we save them to the database for later use

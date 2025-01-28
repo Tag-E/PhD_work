@@ -498,7 +498,7 @@ class moments_toolkit:
 
 
     #function to get a value of the mass from the two point function
-    def get_meff(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figname='mass_plataux') -> tuple[float, float]:
+    def get_meff(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figname='mass_plateau') -> tuple[float, float]:
         """
         Input:
             - show: bool, if True the effective mass vs time plot is shown to screen

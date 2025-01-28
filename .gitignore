@@ -172,4 +172,4 @@ moments_pdf/test_notebooks/cg_database/
 moments_pdf/test_notebooks/*pdf
 moments_pdf/*png
 moments_pdf/*pdf
-#moments_pdf/Kfact_pdf
+moments_pdf/Kfact_pdf/

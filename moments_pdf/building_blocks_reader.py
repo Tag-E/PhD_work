@@ -232,7 +232,7 @@ class bulding_block:
                         for idstruct, dstructure in enumerate(self.dstructure_list):
 
                             #we read the building block and store it in the np array
-                            self.bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][self.momentum][displacement][dstructure][self.insmomentum]
+                            self.bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][self.momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
 
         
         #We read the 2 point functions
@@ -916,6 +916,9 @@ class bulding_block:
         if normalize==True:
             for iconf in range(self.nconf):
                 bb_operator[iconf] /= self.p2_corr[iconf,self.T] #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0)
+
+
+        #to do: reverse index
 
 
         #we return the building block as calculated
