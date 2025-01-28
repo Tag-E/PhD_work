@@ -693,7 +693,7 @@ class cg_calc:
 
             #info print
             if verbose==True:
-                print("\nComputing the cg coefficients for the given tensor product ...\n")
+                print(f"\nComputing the cg coefficients for the tensor product {self.chosen_irreps} ...\n")
 
             #we then compute the dimension of the bases
             dim=1
@@ -1060,28 +1060,58 @@ def CGmat_from_block(block : np.ndarray, m = 0, mul=1) -> np.ndarray:
                 monom_rows[monom].append(i)
 
 
-    #we take note of its index because this monomial will be set to 1 
-    index = min(monom_counts, key=monom_counts.get)
+    #!we look at the monom in each column, and compile a dict with lists of the monom in each column
+    monoms_in_colum = {}
+    #we loop over all the monoms (including column 0, it makes no difference)
+    for j in range(np.shape(mat)[1]):
+        monoms_in_colum[j] = []
+        for i in range(np.shape(mat)[0]):
+            entry = sym.Add.make_args(mat[i,j])
+            for element in entry:
+                monom = element.as_coeff_Mul()[1]
+                if monom not in monoms_in_colum[j]:
+                    monoms_in_colum[j].append(monom)
+    #!then we remove from monom_counts and rows the monom not appearing in other columns (remove means putting their count at the max value)
+    for k in monom_counts.keys():
+        for j in range(np.shape(mat)[1]):
+            if k not in monoms_in_colum[j]:
+                monom_counts[k] = max(monom_counts.values())+1 #TO DO: maybe it would be better to really remove these keys (to avoid having to use them if they become smaller than the one removed above due to the same row problem check)
 
-    #in this dict we store the number we will assign to each A monomial
+    ####we take note of its index because this monomial will be set to 1 
+    ###index = min(monom_counts, key=monom_counts.get)
+    ###
+    ####in this dict we store the number we will assign to each A monomial
+    ###monom_dict = {}
+    ###found = 0 #we just need to find one new element per groups of columns
+    ###target=mul
+    ###total_found=0
+    ###for j in range(np.shape(mat)[1]):
+    ###    for i in range(np.shape(mat)[0]):
+    ###        entry = sym.Add.make_args(mat[i,j])
+    ###        for element in entry:
+    ###            coeff = element.as_coeff_Mul()[0]
+    ###            monom = element.as_coeff_Mul()[1]
+    ###            if (found==0) and (monom not in monom_dict.keys()) and (type(monom)!= sym.core.numbers.One):
+    ###                monom_dict[monom] = 1.0
+    ###                found = 1
+    ###                total_found+=1
+    ###            elif (found==1) and (monom not in monom_dict.keys()):
+    ###                monom_dict[monom] = 0.0
+    ###        if total_found<target:
+    ###            found=0
+
+    #!we loop over all the matrix and put all the present symbols into a dict (monom_dict), which will contain the values to substitute the symbols to (by default 0)
     monom_dict = {}
-    found = 0 #we just need to find one new element per groups of columns
-    target=mul
-    total_found=0
     for j in range(np.shape(mat)[1]):
         for i in range(np.shape(mat)[0]):
             entry = sym.Add.make_args(mat[i,j])
             for element in entry:
-                coeff = element.as_coeff_Mul()[0]
                 monom = element.as_coeff_Mul()[1]
-                if (found==0) and (monom not in monom_dict.keys()) and (type(monom)!= sym.core.numbers.One):
-                    monom_dict[monom] = 1.0
-                    found = 1
-                    total_found+=1
-                elif (found==1) and (monom not in monom_dict.keys()):
+                if (monom not in monom_dict.keys()) and (type(monom) != sym.core.numbers.One):
                     monom_dict[monom] = 0.0
-            if total_found<target:
-                found=0
+
+    #! target is the multiplicity ??? TO DO: check what we need target for
+    target = mul
 
     newmat = mat.copy()
 
@@ -1096,13 +1126,16 @@ def CGmat_from_block(block : np.ndarray, m = 0, mul=1) -> np.ndarray:
         index_list.append(min(monom_counts, key=monom_counts.get))
 
 
-    #anyway, monom_dict was just there to count all the monomial, in the end we put to 1 the
-    #one appearing less in the first column
-    for k,v in monom_dict.items():
-        if k == index_list[m]:
-            monom_dict[k]=1
-        else:
-            monom_dict[k]=0
+    ###anyway, monom_dict was just there to count all the monomial, in the end we put to 1 the
+    ###one appearing less in the first column
+    ###for k,v in monom_dict.items():
+    ###    if k == index_list[m]:
+    ###        monom_dict[k]=1
+    ###    else:
+    ###        monom_dict[k]=0
+
+    #! we put to one only one index
+    monom_dict[index_list[m]] = 1.0
     
     newmat = mat.copy()
 
