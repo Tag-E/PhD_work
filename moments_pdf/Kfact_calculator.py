@@ -176,7 +176,7 @@ class K_calc:
     ## Methods of the class
 
     #class initialization
-    def __init__(self, X: str, n: int, verbose=True) -> None:
+    def __init__(self, X: str, n: int, verbose:bool=True) -> None:
         '''
         Initializaiton of the class containing the data and methods necessary for the computation of the kinematic factors of the lattice operators.
 
@@ -278,7 +278,7 @@ class K_calc:
 
 
     #function to print the Kinematic factors in a latex pdf
-    def latex_print(self, digits=5 ,verbose=True, title=None, author="E.T.", clean_tex=True) -> None:
+    def latex_print(self, digits:int=5 ,verbose:bool=True, title:str|None=None, author:str="E.T.", clean_tex:bool=True) -> None:
         """
         Function creating a latex pdf with all the operators in the case considered.
         
@@ -411,7 +411,7 @@ class K_calc:
 
 
     #function used to append to a given latex document the the list of operators typical of the class
-    def append_operators(self, doc:Document, op_number:int, digits=5, verbose=False) -> None:
+    def append_operators(self, doc:Document, op_number:int, digits=5, verbose:bool=False) -> None:
         """
         Function used to append to a given latex document the print stuff associated with a list of operators
 
@@ -526,7 +526,7 @@ class K_calc:
 
     
     #function returning a list of all the operator with all their specifics
-    def get_opList(self, first_op=1) -> list[Operator]:
+    def get_opList(self, first_op:int=1) -> list[Operator]:
         """
         Function used to create a list with the instances of the Operators class for all the available operators
 
@@ -633,7 +633,7 @@ def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
 
 
 #function used to round the raw CG matrix obtained from the calculator
-def round_CG(cgmat: np.ndarray, digits=2) -> np.ndarray:
+def round_CG(cgmat: np.ndarray, digits:int=2) -> np.ndarray:
     """
     Function rounding the matrices of Clebsch-Gordan coefficients coming out of the cg calculator
     

@@ -922,7 +922,7 @@ class cg_calc:
 
 
     #function to print the cg coeff in latex
-    def latex_print(self, digits=5, verbose=True, title=None, author="E.T.", clean_tex=True) -> None:
+    def latex_print(self, digits : int = 5, verbose:bool=True, title:str|None=None, author:str="E.T.", clean_tex:bool=True) -> None:
         """
         Function creating a latex pdf with all the cg coefficients of the tensor product considered.
         
@@ -1025,7 +1025,7 @@ def get_multiplicities(*kwarg: tuple[int,int]) -> list[int]:
 
 
 #function to obtain the correctly normalized matrix with cg coefficients from the raw block obtained from the cg formula
-def CGmat_from_block(block : np.ndarray, m = 0, mul=1) -> np.ndarray:
+def CGmat_from_block(block : np.ndarray, m : int = 0, mul : int = 1) -> np.ndarray:
     """
     Super Important Function in which the prescription to translate a symbolic matrix (here block) to a matrix with number (the CGmat) is implemented. !!!
     
@@ -1169,7 +1169,7 @@ def CGmat_from_block(block : np.ndarray, m = 0, mul=1) -> np.ndarray:
 
 
 #function used to print in a nice way the matrix with cg coefficientss
-def print_CGmat(cgmat: np.ndarray, digits=5) -> None:
+def print_CGmat(cgmat: np.ndarray, digits:int=5) -> None:
     """
     Function used to print the matrix with cg coefficients (matrix with number) in a fancy way on a jupyter notebook.
     

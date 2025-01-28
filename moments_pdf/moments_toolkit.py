@@ -76,8 +76,8 @@ class moments_toolkit:
 
     #Initialization function
     def __init__(self, p3_folder:str, p2_folder:str,
-                 tag_3p='bb',hadron='proton_3', tag_2p='hspectrum',
-                 maxConf=None, max_n=3, verbose=False) -> None:
+                 tag_3p:str='bb',hadron:str='proton_3', tag_2p:str='hspectrum',
+                 maxConf:int|None=None, max_n:int=3, verbose:bool=False) -> None:
         
         """
         Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
@@ -200,7 +200,7 @@ class moments_toolkit:
 
 
     #Function used to print to pdf and show to the user all the available operators that can be chosen
-    def operator_show(self, title=None, author="E.T.", doc_name=None, verbose=False, show=True, remove_pdf=False, clean_tex=True) -> None:
+    def operator_show(self, title:str|None=None, author:str="E.T.", doc_name:str|None=None, verbose:bool=False, show:bool=True, remove_pdf:bool=False, clean_tex:bool=True) -> None:
         """
         Function used to produce and show the .pdf file containing the list of all the available operators.
 
@@ -319,7 +319,7 @@ class moments_toolkit:
     
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self, isospin:str='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
@@ -368,8 +368,8 @@ class moments_toolkit:
     
 
     #function used to plot the ratio R for all the selected operators
-    def plot_R(self, isospin='U-D', show=True, save=False, figname='plotR',
-               figsize=(20,8), fontsize_title=24, fontsize_x=18, fontsize_y=18, markersize=8) -> None:
+    def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -455,7 +455,7 @@ class moments_toolkit:
 
 
     #function used to to compute the sum of ratios S
-    def get_S(self, tskip: int, isospin='U-D') -> tuple[np.ndarray, float, float]:
+    def get_S(self, tskip: int, isospin:str='U-D') -> tuple[np.ndarray, float, float]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
@@ -498,7 +498,7 @@ class moments_toolkit:
 
 
     #function to get a value of the mass from the two point function
-    def get_meff(self, show=False, save=False, chi2_treshold=1.0, zoom=0, figname='mass_plateau') -> tuple[float, float]:
+    def get_meff(self, show:bool=False, save:bool=False, chi2_treshold:float=1.0, zoom:int=0, figname:str='mass_plateau') -> tuple[float, float]:
         """
         Input:
             - show: bool, if True the effective mass vs time plot is shown to screen
@@ -631,7 +631,7 @@ class moments_toolkit:
 
 
 #function implementing the jackknife analysis
-def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis=0, time_axis=-1, binsize=1,first_conf=0,last_conf=None) -> list[np.ndarray]:
+def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int=0, time_axis:int=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
     """
     Input:
         - in_array: input array to be jackknifed
@@ -768,7 +768,7 @@ def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
 
 
 #function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice) TO DO: double check this function with computations (!!!!)
-def ratio2p_to_mass(ratio2p: float, t: int, T: int, case=2, max_it=1000) -> float:
+def ratio2p_to_mass(ratio2p: float, t: int, T: int, case:int=2, max_it:int=1000) -> float:
     """
     Input:
         - ratio2p: the ratio of the two point correlators at two consecutive times
@@ -832,7 +832,7 @@ def ratio2p_to_mass(ratio2p: float, t: int, T: int, case=2, max_it=1000) -> floa
 
 
 #function used to extract the effective mass for the two-point correlators
-def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
+def effective_mass(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
     """
     Input:
         - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
@@ -868,7 +868,7 @@ def effective_mass(corr_2p: np.ndarray, conf_axis=0) -> np.ndarray:
 
 
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
-def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig=True) -> float:
+def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig:bool=True) -> float:
     """
     Input:
         - in_array: a 1D array, with len T
@@ -897,7 +897,7 @@ def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray,
         return np.sum( (deltas/sig)**2 ) / len_plat
 
 #function that given a 1D array returns the cut values identifying its plateaux
-def plateaux_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold=1.0) -> tuple[int,int]:
+def plateaux_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0) -> tuple[int,int]:
     """
     Input:
         - in_array: the 1D array we want to search the plateaux of
@@ -964,7 +964,7 @@ def exp_fit_func(t: np.ndarray, amp: float, mass: float) -> np.ndarray:
 
 
 #function used to extract the fit mass from the two-point correlators
-def fit_mass(corr_2p: np.ndarray, conf_axis=0, guess_mass=0.5) -> np.ndarray:
+def fit_mass(corr_2p: np.ndarray, conf_axis:int=0, guess_mass:float=0.5) -> np.ndarray:
     """
     Input:
         - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)

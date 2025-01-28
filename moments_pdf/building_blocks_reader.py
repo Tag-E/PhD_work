@@ -109,8 +109,8 @@ class bulding_block:
 
     #Initialization function
     def __init__(self, bb_folder: str, p2_folder: str,
-                 tag='bb',hadron='proton_3', tag_2p='hspectrum',
-                 maxConf=None, force_2preading=False, verbose=False) -> None:
+                 tag:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
+                 maxConf:int|None=None, force_2preading:bool=False, verbose:bool=False) -> None:
         
         """
         Initialization of the class used to read and perform analysis routines on a 3point correlator, for a given T, and on to the realated 2p correlator
@@ -357,8 +357,8 @@ class bulding_block:
 
     
     #function used to change the keys and reread the h5 files accordingly
-    def update_keys(self, tag=None, smearing=None, mass=None, hadron=None, momentum=None, insmomentum=None,
-                    tag2p=None, verbose=False) -> None:
+    def update_keys(self, tag:str|None=None, smearing:str|None=None, mass:str|None=None, hadron:str|None=None, momentum:str|None=None, insmomentum:str|None=None,
+                    tag2p:str|None=None, verbose:bool=False) -> None:
         """
         Update reading keys by specifing them again here.
 
@@ -756,7 +756,7 @@ class bulding_block:
 
 
     #function used to obtain the building block of the relevant operators
-    def get_bb(self, X:str, isospin:str, n_mu:int, normalize=True) -> np.ndarray:
+    def get_bb(self, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
         """
         Input:
             - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
@@ -926,7 +926,7 @@ class bulding_block:
     
 
     #function returning the building block of the specified operator
-    def operatorBB(self, cgmat:np.ndarray, X:str, isospin:str, n_mu:int, normalize=True) -> np.ndarray:
+    def operatorBB(self, cgmat:np.ndarray, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
         """
         Input:
             - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
