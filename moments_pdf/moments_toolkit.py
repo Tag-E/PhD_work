@@ -332,6 +332,7 @@ class moments_toolkit:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
+
         Output:
             - R(iop,iconf,T,tau): a np array with axis (iop,iconf,T,tau) and shape [n_selected_operators, nconf, n_T, max_T] 
             - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed on R
@@ -368,6 +369,9 @@ class moments_toolkit:
 
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
                 R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
+
+        #before calling the jackknife we add a cast of the ratio to real values #TO DO: check if that is correct
+        R = R.real
 
         #we perform the jackknife analysis (the observable being the avg over the configuration axis)
         Rmean, Rstd, Rcovmat = jackknife(R, lambda x: np.mean(x,axis=1), jack_axis=1, time_axis=-1)
@@ -436,7 +440,7 @@ class moments_toolkit:
                 #ratio
                 #ratio = ratio.real #cast to real
                 #ratio = ratio.imag
-                ratio = np.abs(ratio)
+                #ratio = np.abs(ratio) #TO DO: check this cast
 
                 #we discard the endpoints
                 r = ratio[1:-1]
@@ -568,24 +572,30 @@ class moments_toolkit:
             
             #we instantiate the figure
             fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
-    
+
             #we determine the time values to be displayed on the plot (x axis)
             m_times = np.arange(np.shape(meff)[0]) + 0.5
-    
+
             #we plot the plateau and the neighbouring effective mass values
             plt.errorbar(m_times[start_plateau-zoom:end_plateau+zoom], meff[start_plateau-zoom:end_plateau+zoom], yerr=meff_std[start_plateau-zoom:end_plateau+zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
             plt.hlines(meff_plat ,start_plateau+0.5, end_plateau+0.5, color='red')
             plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
             plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-    
-    
+
+            #plot styling
+            plt.title("Effective Mass Plateau")
+            plt.ylabel(r"$m_{eff}(t)$")
+            plt.xlabel(r"$t$")
+
+
+            #we save the figure if asked
+            if save:
+                plt.savefig(f"{self.plots_folder}/{figname}.png")
+
             #we show the figure if asked
             if show:
                 plt.show()
-    
-            #we save the figure if asked
-            if save:
-                plt.savefig(f"{figname}.png")
+
 
 
         #we return the plateau values
@@ -890,13 +900,13 @@ def effective_mass(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
 
 
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
-def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig:bool=True) -> float:
+def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig:bool=False) -> float:
     """
     Input:
         - in_array: a 1D array, with len T
         - fit_array: a 1D array, also with len T, representing the function we want the in_arrya fitted to
         - covmat: a 2D array with shape (T,T), representing the covariance matrix of in_array
-        - only_sig: bool, if True discards the whole covmat and looks just at its diagonal
+        - only_sig: bool, if True the diag of the covmat is used (the covariance) instead of the whole covmat
 
     Output:
         - chi2: the reduced chi2 of the fit
@@ -919,7 +929,7 @@ def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray,
         return np.sum( (deltas/sig)**2 ) / ndof
 
 #function that given a 1D array returns the values of the indices identifying its plateau (the first and last index)
-def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0, only_sig:bool=False) -> tuple[int,int]:
+def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0, only_sig:bool=True) -> tuple[int,int]:
     """
     Input:
         - in_array: the 1D array we want to search the plateau of
@@ -943,11 +953,12 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
                 #the suggested plateau region in this case is
                 plat = in_array[start_plateau:start_plateau+len_plat]
 
-                #the value of the plateau is
-                plat_value = np.mean(plat,axis=0,keepdims=True)
-
                 #we also have to reshape the covariance matrix
                 covmat_plat = covmat[start_plateau:start_plateau+len_plat, start_plateau:start_plateau+len_plat]
+
+                #the value of the plateau is
+                #plat_value = np.mean(plat,axis=0,keepdims=True)
+                plat_value = np.average(plat, weights = np.diag(np.linalg.inv(covmat_plat)), axis=0, keepdims=True) #the weights are the inverse of the sigma squared
 
                 #we see if the chi2 meets the condition
                 if redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig) < chi2_treshold:
