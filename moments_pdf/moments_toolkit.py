@@ -77,7 +77,7 @@ class moments_toolkit:
     #Initialization function
     def __init__(self, p3_folder:str, p2_folder:str,
                  tag_3p:str='bb',hadron:str='proton_3', tag_2p:str='hspectrum',
-                 maxConf:int|None=None, max_n:int=3, plot_folder:str="plots", verbose:bool=False) -> None:
+                 maxConf:int|None=None, max_n:int=3, T_to_remove_list:list[int]=[12], plot_folder:str="plots", verbose:bool=False) -> None:
         
         """
         Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
@@ -129,6 +129,10 @@ class moments_toolkit:
         p = Path(p3_folder)
         #we read the avalaible list of time separations T
         self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
+        #we remove the times the user specified
+        for T_to_remove in T_to_remove_list:
+            if T_to_remove in self.T_list:
+                self.T_list.remove(T_to_remove)
         #from that we obtain the paths of the folders containing the different building blocks
         bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
 
