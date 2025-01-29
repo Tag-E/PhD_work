@@ -77,7 +77,7 @@ class moments_toolkit:
     #Initialization function
     def __init__(self, p3_folder:str, p2_folder:str,
                  tag_3p:str='bb',hadron:str='proton_3', tag_2p:str='hspectrum',
-                 maxConf:int|None=None, max_n:int=3, verbose:bool=False) -> None:
+                 maxConf:int|None=None, max_n:int=3, plot_folder:str="plots", verbose:bool=False) -> None:
         
         """
         Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
@@ -105,6 +105,11 @@ class moments_toolkit:
         #we store the folder variables
         self.p3_folder=p3_folder
         self.p2_folder=p2_folder
+
+        #we store the variable where we want the plots to be saved
+        self.plots_folder = plot_folder
+        #we create such folder if it does not exist
+        Path(plot_folder).mkdir(parents=True, exist_ok=True)
 
         #input check on the maximum number of indices
         if (type(max_n) is not int) or max_n<=1:
@@ -447,7 +452,7 @@ class moments_toolkit:
 
             #we save the plot if the user asks for it
             if save:
-                plt.savefig(f"{figname}_operator{op.id}.png")
+                plt.savefig(f"{self.plots_folder}/{figname}_operator{op.id}.png")
             
             #we show the plot if the user asks for it
             if show:
