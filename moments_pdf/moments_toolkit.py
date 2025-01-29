@@ -529,53 +529,66 @@ class moments_toolkit:
         meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis=0, time_axis=-1)
 
         #we determine the time extent of the lattice
-        Tlat = np.shape(meff)[0]
+        #Tlat = np.shape(meff)[0]
 
         #we discard the padding coming from the effective_mass function
-        meff = meff[:-1]
-        meff_std = meff_std[:-1]
-        meff_covmat = meff_covmat[:-1,:-1]
+        #meff = meff[:-1]
+        #meff_std = meff_std[:-1]
+        #meff_covmat = meff_covmat[:-1,:-1]
 
 
-        #we determine the time values to be displayed on the plot
-        m_times = np.arange(np.shape(meff)[0]) + 0.5
+        #we remove from the effective mass the part that is too noisy (and that leads to a singular covariance matrix) 
+        #(doing so we remove also the padding coming from the effective mass function)
+
+        #to remove this problematic part we look for the first time the std is 0
+        cut=np.where(meff_std<=0)[0][0]
+
+        #and we cut the meff arrays there
+        meff = meff[:cut]
+        meff_std = meff_std[:cut]
+        meff_covmat = meff_covmat[:cut,:cut]
 
 
-
-        #we compute a mean value and a std from the plateaux
+        #we compute a mean value and a std from the plateau
 
         #first we identify the boundaries of the plateau region
-        lcut, rcut = plateaux_search(meff,meff_covmat, chi2_treshold=chi2_treshold)
+        start_plateau, end_plateau = plateau_search(meff, meff_covmat, chi2_treshold=chi2_treshold)
 
-        #then we get the mass from the plataux value
-        meff_plat = np.mean(meff[lcut:rcut])
-        #its std is given by the std of the mean
-        meff_plat_std = np.sqrt( np.mean( meff[lcut:rcut]**2 ) )
-
-
-
-        #we make a plot
-
-        #we instantiate the figure
-        fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
-
-        #we plot the plateau and the neighbouring effective mass values
-        plt.errorbar(m_times[lcut-zoom:rcut + zoom], meff[lcut-zoom:rcut + zoom], yerr=meff_std[lcut-zoom:rcut + zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
-        plt.hlines(meff_plat ,lcut, Tlat -1 +rcut, color='red')
-        plt.hlines(meff_plat + meff_plat_std, lcut, Tlat -1 +rcut, color='red', linestyles='dashed')
-        plt.hlines(meff_plat - meff_plat_std, lcut, Tlat -1 +rcut, color='red', linestyles='dashed')
+        #then we get the mass from the plateau value
+        meff_plat = np.mean(meff[start_plateau:end_plateau])
+        #its std is given by sqrt of sum variance/ N
+        meff_plat_std = np.sqrt( np.mean( meff_std[start_plateau:end_plateau]**2 ) )
 
 
-        #we show the figure if asked
-        if show:
-            plt.show()
 
-        #we save the figure if asked
-        if save:
-            plt.savefig(f"{figname}.png")
+        #we make a plot 
+
+        #the plot is made if the user ask either to see it or to save it to file
+        if show or save:
+            
+            #we instantiate the figure
+            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
+    
+            #we determine the time values to be displayed on the plot (x axis)
+            m_times = np.arange(np.shape(meff)[0]) + 0.5
+    
+            #we plot the plateau and the neighbouring effective mass values
+            plt.errorbar(m_times[start_plateau-zoom:end_plateau+zoom], meff[start_plateau-zoom:end_plateau+zoom], yerr=meff_std[start_plateau-zoom:end_plateau+zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
+            plt.hlines(meff_plat ,start_plateau+0.5, end_plateau+0.5, color='red')
+            plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
+            plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
+    
+    
+            #we show the figure if asked
+            if show:
+                plt.show()
+    
+            #we save the figure if asked
+            if save:
+                plt.savefig(f"{figname}.png")
 
 
-        #we return the plateaux values
+        #we return the plateau values
         return meff_plat, meff_plat_std
     
 
@@ -867,7 +880,7 @@ def effective_mass(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
         ratio_2p = corr_gavg[t]/corr_gavg[t+1]
 
         #then we just need to take the log, but for that the ratio has to be bigger than 1 (??)   (if that does not happen then the mass is set to 0 -> as done in the initialization above)
-        if ratio_2p >= 1.0:
+        if ratio_2p > 1.0:
             meff[t] = np.log( ratio_2p )
         #meff[t] = ratio2p_to_mass(ratio_2p,t,48)
 
@@ -892,64 +905,58 @@ def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray,
     #then we compute the differences between the fit and input array
     deltas = in_array - fit_array
 
-    #then we compute the len of the plateaux
-    len_plat = np.shape(in_array)[0]
+    #then we compute the number of d.o.f. (the len of the plateau)
+    ndof = np.shape(in_array)[0]
 
     #TO DO: fix the issue with the covmat
     if only_sig==False:
         #first we invert the covariance array
         cov_inv = np.linalg.inv(covmat)
         #then we compute the reduced chi2 according to its formula and we return it
-        return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / len_plat
+        return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / ndof
     else:
         sig = np.sqrt(np.diag(covmat))
-        return np.sum( (deltas/sig)**2 ) / len_plat
+        return np.sum( (deltas/sig)**2 ) / ndof
 
-#function that given a 1D array returns the cut values identifying its plateaux
-def plateaux_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0) -> tuple[int,int]:
+#function that given a 1D array returns the values of the indices identifying its plateau (the first and last index)
+def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0, only_sig:bool=False) -> tuple[int,int]:
     """
     Input:
-        - in_array: the 1D array we want to search the plateaux of
+        - in_array: the 1D array we want to search the plateau of
         - covmat: a 2D array, representing the covariance matrix of in_array
-        - chi2_treshold: the treshold for the plateaux determination
+        - chi2_treshold: the treshold for the plateau determination
+        - only_sig: bool, if True only the standard deviation, and not the whole cavariance matrix, is used for the plateau determination
     
     Output:
-        - let_cut: the number of data point to be discarded from the left (beginning of the array) to arrive at the plateaux
-        - right_cut: the number of data point to be discarded from the right (end of the array) to arrive at the plateaux
+        - (start_plateau,end_plateau): indices such that in_array[start_plateau,end_plateau] is the region with the plateau
     """
 
-    #we set the max cut to be half of the allowed range for the 1D array
-    max_cut = int( np.shape(in_array)[0] / 2 )
+    #first we compute the len of the array
+    len_array = np.shape(in_array)[0]
 
-    #we loop over the cut we make (that is equal both from left and from right)
-    for icut in range(1,max_cut):
+    #we loop over all the possible plateau lenghts, starting from the biggest possible one and then diminishing it up to a plataeau of len 1
+    for len_plat in range(len_array,0,-1):
 
-        #then we also loop over the possible offset we'd like to have from the left and from the right (i.e. asymmetric cuts)
-        for l_off in range(icut):
-            for r_off in range(icut):
+        #then we loop over the possible initial points of the plateau
+        for start_plateau in range(0,len_array-len_plat+1,1):
 
-                #if the total cut is bigger than the array we break
-                if 2*icut + l_off + r_off >= np.shape(in_array)[0]:
-                    break
-                
-                #if instead the cut is ok we go on with the chi2 computation
-
-                #the plataux region in this case is given by
-                plat = in_array[l_off+icut:-icut-r_off]
+                #the suggested plateau region in this case is
+                plat = in_array[start_plateau:start_plateau+len_plat]
 
                 #the value of the plateau is
                 plat_value = np.mean(plat,axis=0,keepdims=True)
 
                 #we also have to reshape the covariance matrix
-                covmat_plat = covmat[l_off+icut:-icut-r_off, l_off+icut:-icut-r_off]
+                covmat_plat = covmat[start_plateau:start_plateau+len_plat, start_plateau:start_plateau+len_plat]
 
                 #we see if the chi2 meets the condition
-                if redchi2_cov(plat, plat_value, covmat_plat) < chi2_treshold:
-                    #in that case we return the values of found cuts
-                    return icut + l_off, - icut - r_off
+                if redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig) < chi2_treshold:
 
-    #if by the end of the loop the chi2 condition is never met we return the cuts corresponding to the whole dataset
-    return 0, np.shape(in_array)[0]
+                    #in that case we return the values of the starting and ending point fo the plateau
+                    return start_plateau, start_plateau+len_plat
+
+    #if by the end of the loop the chi2 condition is never met we return the points corresponding to the whole dataset
+    return 0, len_array
 
 
 
