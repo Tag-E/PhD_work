@@ -183,7 +183,7 @@ class moments_toolkit:
             for X in self.X_list:
 
                 #safety measure to avoid the bug present in the cg calc class: TO BE REMOVED after fixing it (TO DO)
-                if n>2 and X=='T': break
+                #if n>2 and X=='T': break
 
                 #the actual number of indices depends on X
                 actual_n = n

@@ -41,6 +41,7 @@ from pylatex.utils import NoEscape #also to produce a pdf document
 from pylatex.package import Package
 import itertools as it
 from typing import List, Dict #to use strong typing in function definitions
+from tqdm import tqdm #for a nice view of for loops with loading bars
 
 ##personal libraries
 from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
@@ -231,7 +232,7 @@ class K_calc:
 
         #info print
         if verbose==True:
-            print("\nFetching the CG coefficients for the specified tensor product\n")
+            print("\nFetching the CG coefficients for the specified tensor product ...\n")
 
         #we compute the cg coefficient using the ad hoc class and we store them in a tmp dictionary
         cg_dict_tmp = cg_calc(*self.chosen_irreps,verbose=verbose).cg_dict
@@ -239,14 +240,18 @@ class K_calc:
 
         ## we now begin the computation of the kinematic factors
 
+        #info print
+        if verbose==True:
+            print("\nComputing the kinematic factor for every operator in every irrep appearing in the decomposition ...\n")
+
         #dict used to store the remapped cg coefficients
         self.cg_dict = {}
 
         #dict used to store the kinematic factors
         self.kin_dict = {}
 
-        #we loop over the irrep in the decompositio of the tensor products (these are the keys in the cg dict)
-        for k,v in cg_dict_tmp.items():
+        #we loop over the irrep in the decomposition of the tensor products (these are the keys in the cg dict)
+        for k,v in tqdm(cg_dict_tmp.items()):
 
             #for each irrep(=key) we instantiate an empty list with len equal to the multiplicity of that irrep in the decomposition
             self.cg_dict[k] = [[] for _ in range(len(v))]
@@ -632,7 +637,7 @@ def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
     return cg_remapped
 
 
-#function used to round the raw CG matrix obtained from the calculator
+#function used to round the raw CG matrix obtained from the calculator #TO DO: include this function at the end of the cg_calculator class
 def round_CG(cgmat: np.ndarray, digits:int=2) -> np.ndarray:
     """
     Function rounding the matrices of Clebsch-Gordan coefficients coming out of the cg calculator
@@ -646,7 +651,35 @@ def round_CG(cgmat: np.ndarray, digits:int=2) -> np.ndarray:
 
     #ok = np.asarray(cgmat)
     #print(np.shape(ok))
-    return np.round(np.asarray(cgmat).astype(np.float64),digits)
+    #return np.round(np.asarray(cgmat).astype(np.float64),digits)
+
+    #first thing first we convert the sympy symbols to floats
+    new_cgmat = np.asarray(cgmat).astype(np.float64)
+
+    #we define a treshold for small and big numbers
+    treshold = 10**(-10)
+
+    #if there are too much big numbers we have to renormalize appropiately such that they are order 1 (and hence the former order 1 will be zero)
+
+    #then we normalize the entries to the columns to the highest number
+    for j in range(np.shape(new_cgmat)[1]):
+    
+    
+        #we look for the index of the biggest number and for its value
+
+        #index = (new_cgmat[:,j]!=0).argmax(axis=0)
+        index = np.abs(new_cgmat[:,j]).argmax(axis=0)
+        norm = np.abs(new_cgmat[index,j])
+
+        #if such number is deemed to be too big we normalize to it
+        if norm > 1/treshold:
+            new_cgmat[:,j] /= norm
+
+    #then we put to 0 the coefficient smaller than a fixed treshold
+    new_cgmat[np.abs(new_cgmat)<treshold] = 0.0    
+
+    #then we return the rounded matrix
+    return np.round(new_cgmat,digits)
 
 
 #function used to compute the kinematic factor for a given operator

@@ -669,7 +669,7 @@ class cg_calc:
             self.h4_mat = [ [] for _ in range(self.n_rep)]
 
             #to load the matrices first we loop over the representations
-            for ir in range(self.n_rep):
+            for ir in tqdm(range(self.n_rep)):
 
                 #the folder we have to look into is
                 rep_folder = self.h4_ele_folder + f"/{str(self.rep_label_list[ir])}"
@@ -865,7 +865,7 @@ class cg_calc:
             files = [x for x in p if x.is_file()]
 
             #we cycle through the files in the folder
-            for i,file in enumerate(files):
+            for i,file in enumerate(tqdm(files)):
 
                 #we parse the index of the representation and the number associated with the multiplicity
                 irep = int(file.name.split(".")[0].split("_")[0])
@@ -891,7 +891,7 @@ class cg_calc:
             files = [x for x in p if x.is_file()]
 
             #we cycle through the files in the folder
-            for i,file in enumerate(files):
+            for i,file in enumerate(tqdm(files)):
 
                 #we parse the index of the representation and the number associated with the multiplicity
                 irep = int(file.name.split(".")[0].split("_")[0])
@@ -1149,7 +1149,7 @@ def CGmat_from_block(block : np.ndarray, m : int = 0, mul : int = 1) -> np.ndarr
             newmat[i,j] = tmp
         
 
-    #we normalize each column to the value of is maximum entry (so such that the max number appearing is 1)
+    #we normalize each column to the value of is maximum entry (so such that the max number appearing is 1) ----> NO: we normalize to the first entry being non 0 (TO DO: add also normalization to max --> i.e. add here the round_CG function of Kfact_calculator.py)
     for j in range(np.shape(newmat)[1]):
     
         index = (newmat[:,j]!=0).argmax(axis=0)
