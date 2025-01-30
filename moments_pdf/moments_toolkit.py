@@ -675,7 +675,7 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
         - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
 
     Output:
-        - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one, and the cov has one extra time dimension (the new time dimension is now the last one)
+        - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
     """
 
     #we set last conf to its default value
@@ -722,7 +722,8 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
     #print(np.shape(obs_std))
 
     #to obtain the final estimate we correct the jack mean by the bias
-    obs_mean = jack_mean - bias                                                                                                                                  #shape = shape(in_array) - jack_dimension
+    #obs_mean = jack_mean - bias 
+    obs_mean = obs_total - bias                                                                                                                                  #shape = shape(in_array) - jack_dimension
 
 
     #step 5: covariance matrix computation
