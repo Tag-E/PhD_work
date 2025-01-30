@@ -382,7 +382,8 @@ class moments_toolkit:
 
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
-               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> None:
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
+               abs=False, rescale=False) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -440,11 +441,17 @@ class moments_toolkit:
                 #ratio
                 #ratio = ratio.real #cast to real
                 #ratio = ratio.imag
-                #ratio = np.abs(ratio) #TO DO: check this cast
+                if abs:
+                    ratio = np.abs(ratio) #TO DO: check this cast
 
                 #we discard the endpoints
                 r = ratio[1:-1]
                 r_err = ratio_err[1:-1]
+
+                #we rescale to the kfactor
+                if rescale:
+                    mass = self.get_meff()[0]
+                    ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
 
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)

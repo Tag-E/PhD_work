@@ -108,6 +108,8 @@ Gamma_pol_s = sym.Symbol("Gamma_pol")
 
 ## Some more symbols
 
+#from moments_operator import mN,E,p1,p2,p3
+
 #ground state mass
 mN = sym.Symbol("m_N")
 

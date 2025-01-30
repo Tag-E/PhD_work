@@ -27,6 +27,21 @@ import sympy as sym #for symbolic computations
 from typing import Self #to use annotations in operator overloading
 
 
+
+########################################################################
+
+#ground state mass
+mN = sym.Symbol("m_N")
+
+#energy
+E = sym.Symbol("E(p)")
+
+#4 momentum p_mu
+p1=sym.Symbol("p_1")
+p2=sym.Symbol("p_2")
+p3=sym.Symbol("p_3")
+
+
 ######################## Main Class #####################################
 
 #simple container class used to store all the information related to a given operator
@@ -239,7 +254,24 @@ class Operator:
         #we return the division of the operator by the coefficient
         return new_op
     
-
+    
+    #function used to evaluate the kinematic factor of the operator
+    def evaluate_K(self, m_value:float, E_value:float, p1_value:float ,p2_value:float, p3_value:float) -> float:
+        """
+        Function returning the value of the kinematic factor after the input values have been substituted
+        
+        Input:
+            - m: the value of the mass
+            - E: the value of the energy
+            - p1: the value of the momentum along x
+            - p2: the value of the momentum along y
+            - p3: the value of the momentum along z
+            
+        Output:
+            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression"""
+        
+        #we just substitute and send back the numeric value
+        return complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))
 
 
 
