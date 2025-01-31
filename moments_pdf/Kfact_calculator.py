@@ -656,32 +656,33 @@ def round_CG(cgmat: np.ndarray, digits:int=2) -> np.ndarray:
     #return np.round(np.asarray(cgmat).astype(np.float64),digits)
 
     #first thing first we convert the sympy symbols to floats
-    new_cgmat = np.asarray(cgmat).astype(np.float64)
-
-    #we define a treshold for small and big numbers
-    treshold = 10**(-10)
-
-    #if there are too much big numbers we have to renormalize appropiately such that they are order 1 (and hence the former order 1 will be zero)
-
-    #then we normalize the entries to the columns to the highest number
-    for j in range(np.shape(new_cgmat)[1]):
-    
-    
-        #we look for the index of the biggest number and for its value
-
-        #index = (new_cgmat[:,j]!=0).argmax(axis=0)
-        index = np.abs(new_cgmat[:,j]).argmax(axis=0)
-        norm = np.abs(new_cgmat[index,j])
-
-        #if such number is deemed to be too big we normalize to it
-        if norm > 1/treshold:
-            new_cgmat[:,j] /= norm
-
-    #then we put to 0 the coefficient smaller than a fixed treshold
-    new_cgmat[np.abs(new_cgmat)<treshold] = 0.0    
-
-    #then we return the rounded matrix
-    return np.round(new_cgmat,digits)
+    #new_cgmat = np.asarray(cgmat).astype(np.float64)
+    #
+    ##we define a treshold for small and big numbers
+    #treshold = 10**(-10)
+    #
+    ##if there are too much big numbers we have to renormalize appropiately such that they are order 1 (and hence the former order 1 will be zero)
+    #
+    ##then we normalize the entries to the columns to the highest number
+    #for j in range(np.shape(new_cgmat)[1]):
+    #
+    #
+    #    #we look for the index of the biggest number and for its value
+    #
+    #    #index = (new_cgmat[:,j]!=0).argmax(axis=0)
+    #    index = np.abs(new_cgmat[:,j]).argmax(axis=0)
+    #    norm = np.abs(new_cgmat[index,j])
+    #
+    #    #if such number is deemed to be too big we normalize to it
+    #    if norm > 1/treshold:
+    #        new_cgmat[:,j] /= norm
+    #
+    ##then we put to 0 the coefficient smaller than a fixed treshold
+    #new_cgmat[np.abs(new_cgmat)<treshold] = 0.0    
+    #
+    ##then we return the rounded matrix
+    #return np.round(new_cgmat,digits)
+    return np.round(cgmat,2)
 
 
 #function used to compute the kinematic factor for a given operator

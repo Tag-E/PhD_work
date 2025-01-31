@@ -520,15 +520,16 @@ class cg_calc:
     ## Class Methods
 
     #class initialization
-    def __init__(self, *kwarg: tuple[int,int], cgdatabase='cg_database',force_computation=False, force_h4gen=False, verbose=True) -> None:
+    def __init__(self, *kwarg: tuple[int,int], cgdatabase:str='cg_database', force_computation:bool=False, force_h4gen:bool=False, prescription_changed:bool=False, verbose:bool=True) -> None:
         """
         Initialization of the class used to construct the Clebsch-Gordan coefficients of a given tensor product between irreps of H(4)
         
         Input;
-            -- kwarg: the irreps of H(4) involved in the tensor product under study, in the format of tuples of two ints, so (1,1), (1,2), (1,3), ... up to (8,2)
+            - kwarg: the irreps of H(4) involved in the tensor product under study, in the format of tuples of two ints, so (1,1), (1,2), (1,3), ... up to (8,2)
             - cgdatabase: str, path of the folder where the matrices with the cg coefficients will be stored
             - force_computation: bool, if True then the computation of the cg coefficients will be repeated even if a database with already compute cg coefficients is available
             - force_h4gen: bool, if True then the explicit matrix representation of all the elements of H(4) will be computed again even if we they can be read from the database
+            - prescription_changed: bool, if True, and if there is a database with cg coefficients, the numeric cg matrix is computed again from the symbolic one (i.e. the CGmat_from_block and the prescription in it is applied again, avoiding the symbolic computation)
             - verbose: bool, if True then info prints will be shown when the class instance is being created
         
         Output:
@@ -857,6 +858,38 @@ class cg_calc:
                 print("\nLoading the cg coefficients for the given tensor product from the database ...\n")
 
 
+            ## first for the raw coefficients
+
+            #we load the raw cg coeff into a dictionary
+            self.raw_cg = {}
+
+            #we take the list of all the files in the folder
+            p = Path(self.cg_folder+"_raw").glob('**/*')
+            files = [x for x in p if x.is_file()]
+
+            #we cycle through the files in the folder
+            for i,file in enumerate(tqdm(files)):
+
+                #we parse the index of the representation and the number associated with the multiplicity
+                irep = int(file.name.split(".")[0].split("_")[0])
+                m = int(file.name.split(".")[0].split("_")[1])
+
+                #we open the file with the rawcg coeff
+                with open(f'{self.cg_folder+"_raw"}/{file.name}', 'rb') as f:
+
+                    #the dict keys are in a 1:1 correspondence with the files name, so we just load the files in the dict entries
+                    self.raw_cg[(irep,m)] = np.load(f, allow_pickle=True)
+
+                ## code to be executed only if the prescription contained in CGmat_from_block changes
+                if prescription_changed==True:
+                    #in this case we apply again the conversion to numerical matrix and then save it to the database
+                    with open(f'{self.cg_folder}/{irep}_{m}.npy', 'wb') as f:
+                        np.save(f, CGmat_from_block( self.raw_cg[(irep,m)], m, self.mul_list[irep] ) )
+
+
+
+            ## then we repeat the same for the non raw coefficients
+
             #we load the cg coeff into the proper dictionary
             self.cg_dict = {}
 
@@ -883,25 +916,8 @@ class cg_calc:
             #then we reorder the dictionary as to have keys in increasing order
             self.cg_dict = {k: self.cg_dict[k] for k in sorted(list(self.cg_dict.keys())) }
 
-            #we repeat the same procedure for the dict with raw cg coeff
-            self.raw_cg = {}
+            
 
-            #we take the list of all the files in the folder
-            p = Path(self.cg_folder+"_raw").glob('**/*')
-            files = [x for x in p if x.is_file()]
-
-            #we cycle through the files in the folder
-            for i,file in enumerate(tqdm(files)):
-
-                #we parse the index of the representation and the number associated with the multiplicity
-                irep = int(file.name.split(".")[0].split("_")[0])
-                m = int(file.name.split(".")[0].split("_")[1])
-
-                #we open the file with the rawcg coeff
-                with open(f'{self.cg_folder+"_raw"}/{file.name}', 'rb') as f:
-
-                    #the dict keys are in a 1:1 correspondence with the files name, so we just load the files in the dict entries
-                    self.raw_cg[(irep,m)] = np.load(f, allow_pickle=True)
 
 
 
@@ -1165,6 +1181,35 @@ def CGmat_from_block(block : np.ndarray, m : int = 0, mul : int = 1) -> np.ndarr
 
         newmat[:,j]/=newmat[ (newmat[:,j]!=0).argmax(axis=0) , j]
 
+
+    ## at this point we convert the matrix to numbers and we remove possible rounding errors
+
+    #conversion to float
+    newmat = np.asarray(newmat).astype(np.float64)
+
+    #we define a treshold to identify small and big numbers
+    treshold = 10**(-10)
+
+    #if there are too much big numbers we have to renormalize appropiately such that they are order 1 (and hence the former order 1 will be zero)
+
+    #then we normalize the entries to the columns to the highest number
+    for j in range(np.shape(newmat)[1]):
+    
+        #we look for the index of the biggest number and for its value
+
+        #index = (new_cgmat[:,j]!=0).argmax(axis=0)
+        index = np.abs(newmat[:,j]).argmax(axis=0)
+        norm = np.abs(newmat[index,j])
+
+        #if such number is deemed to be too big we normalize to it
+        if norm > 1/treshold:
+            newmat[:,j] /= norm
+
+    #then we put to 0 the coefficient smaller than a fixed treshold
+    newmat[np.abs(newmat)<treshold] = 0.0    
+
+    
+    #we return the complete matrix with cg coefficients (the only thing missing is a rounding)
     return newmat
 
 
