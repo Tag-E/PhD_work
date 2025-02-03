@@ -915,7 +915,7 @@ class bulding_block:
         #we normalize the operator if the user requested so (in this case the output will be the ratio giving the matrix element)
         if normalize==True:
             for iconf in range(self.nconf):
-                bb_operator[iconf] /= self.p2_corr[iconf,self.T] #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0)
+                bb_operator[iconf] /= self.p2_corr[iconf,self.T].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
 
 
         #to do: reverse index

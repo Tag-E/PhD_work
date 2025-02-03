@@ -328,7 +328,7 @@ class moments_toolkit:
     
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin:str='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self, isospin:str='U-D', component="real") -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
@@ -371,7 +371,10 @@ class moments_toolkit:
                 R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
 
         #before calling the jackknife we add a cast of the ratio to real values #TO DO: check if that is correct
-        R = R.real
+        if component=="real":
+            R = R.real
+        if component=="imag":
+            R = R.imag
 
         #we perform the jackknife analysis (the observable being the avg over the configuration axis)
         Rmean, Rstd, Rcovmat = jackknife(R, lambda x: np.mean(x,axis=1), jack_axis=1, time_axis=-1)
@@ -383,7 +386,7 @@ class moments_toolkit:
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               abs=False, rescale=False) -> None:
+               abs=False, component="real", rescale=False) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -412,7 +415,7 @@ class moments_toolkit:
 
         
         #we first fetch R using the dedicate method
-        R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
+        R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin,component=component)
 
 
 
@@ -441,7 +444,7 @@ class moments_toolkit:
                 #ratio
                 #ratio = ratio.real #cast to real
                 #ratio = ratio.imag
-                if abs:
+                if abs==True:
                     ratio = np.abs(ratio) #TO DO: check this cast
 
                 #we discard the endpoints
