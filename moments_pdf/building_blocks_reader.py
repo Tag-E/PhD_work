@@ -110,7 +110,7 @@ class bulding_block:
     #Initialization function
     def __init__(self, bb_folder: str, p2_folder: str,
                  tag:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
-                 maxConf:int|None=None, force_2preading:bool=False, verbose:bool=False) -> None:
+                 maxConf:int|None=None, force_2preading:bool=False, skip3p=False, verbose:bool=False) -> None:
         
         """
         Initialization of the class used to read and perform analysis routines on a 3point correlator, for a given T, and on to the realated 2p correlator
@@ -217,22 +217,25 @@ class bulding_block:
         #we initialize the np array with the building blocks (for the three-point correlators)
         self.bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, self.T),dtype=complex)
 
-        #we loop over the configurations
-        for iconf, file in enumerate(tqdm(files[:self.nconf])):
+        #we skip the reading of the 3point if the user asks for it
+        if skip3p==False:
 
-            #we open the h5 file corresponding too the current configuration
-            with h5.File(bb_folder+file.name, 'r') as h5f:
+            #we loop over the configurations
+            for iconf, file in enumerate(tqdm(files[:self.nconf])):
 
-                #id of the given configuration (this is equal to firstconf)
-                cfgid = list(h5f.keys())[0]
+                #we open the h5 file corresponding too the current configuration
+                with h5.File(bb_folder+file.name, 'r') as h5f:
 
-                #we loop over the keys that have not been set:
-                for iq, qcontent in enumerate(self.qcontent_list):
-                    for idisp, displacement in enumerate(self.displacement_list):
-                        for idstruct, dstructure in enumerate(self.dstructure_list):
+                    #id of the given configuration (this is equal to firstconf)
+                    cfgid = list(h5f.keys())[0]
 
-                            #we read the building block and store it in the np array
-                            self.bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][self.momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
+                    #we loop over the keys that have not been set:
+                    for iq, qcontent in enumerate(self.qcontent_list):
+                        for idisp, displacement in enumerate(self.displacement_list):
+                            for idstruct, dstructure in enumerate(self.dstructure_list):
+
+                                #we read the building block and store it in the np array
+                                self.bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][self.momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
 
         
         #We read the 2 point functions
