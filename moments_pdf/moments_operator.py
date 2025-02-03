@@ -28,18 +28,12 @@ from typing import Self #to use annotations in operator overloading
 
 
 
-########################################################################
+#################### Global Varibales ###################################
 
-#ground state mass
-mN = sym.Symbol("m_N")
 
-#energy
-E = sym.Symbol("E(p)")
-
-#4 momentum p_mu
-p1=sym.Symbol("p_1")
-p2=sym.Symbol("p_2")
-p3=sym.Symbol("p_3")
+## Imports from shared files
+from kinematic_data import mN, E       #mass of the ground state, energy
+from kinematic_data import p1, p2, p3  #spatial components of the 4 momentum
 
 
 ######################## Main Class #####################################

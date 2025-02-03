@@ -32,15 +32,14 @@
 
 ##general libraries
 import sympy as sym #to handle symbolic computations
-from sympy import I # = imaginary unit
+
 from sympy.tensor.array.expressions import ArraySymbol
 import numpy as np #to handle just everything
 from pathlib import Path #to check whether directories exist or not
-from pylatex import Document, Math, Matrix, Section, Subsection, Command, Alignat #to produce a pdf documents with the CG coeff
+from pylatex import Document, Section, Subsection, Command, Alignat #to produce a pdf documents with the CG coeff
 from pylatex.utils import NoEscape #also to produce a pdf document
 from pylatex.package import Package
 import itertools as it
-from typing import List, Dict #to use strong typing in function definitions
 from tqdm import tqdm #for a nice view of for loops with loading bars
 
 ##personal libraries
@@ -49,91 +48,19 @@ from moments_operator import Operator
 
 
 
-######################## Global Variables ################################
+######################## Library Imports ################################
 
-## Gamma Structures ##
-
-#we instantiate the Dirac gamma matrices using the following representation
-gamma1 = sym.Matrix([
-                    [0,0,0,I],
-                    [0,0,I,0],
-                    [0,-I,0,0],
-                    [-I,0,0,0]])
-gamma2 = sym.Matrix([
-                    [0,0,0,-1],
-                    [0,0,1,0],
-                    [0,1,0,0],
-                    [-1,0,0,0]])
-gamma3 = sym.Matrix([
-                    [0,0,I,0],
-                    [0,0,0,-I],
-                    [-I,0,0,0],
-                    [0,I,0,0]])
-gamma4 = sym.Matrix([
-                    [0,0,1,0],
-                    [0,0,0,1],
-                    [1,0,0,0],
-                    [0,1,0,0]])
-
-#we instantiate also their symbolic counterpart
-gamma1_s = sym.Symbol("gamma_1")
-gamma2_s = sym.Symbol("gamma_2")
-gamma3_s = sym.Symbol("gamma_3")
-gamma4_s = sym.Symbol("gamma_4")
-
-#we can now instantiate the gamma_mu vector
-gamma_mu = [gamma1,gamma2,gamma3,gamma4]#,gamma_5]
-gamma_mu_s = [gamma1_s,gamma2_s,gamma3_s,gamma4_s]#,sym_gamma_5]
-
-#we will need also gamma 5
-gamma5 = sym.Matrix([
-                    [1,0,0,0],
-                    [0,1,0,0],
-                    [0,0,-1,0],
-                    [0,0,0,-1]])
-gamma5_s = sym.Symbol("gamma_5")
-
-#also the identity in 4 dimension will be useful
-Id_4 = sym.Matrix([
-                    [1,0,0,0],
-                    [0,1,0,0],
-                    [0,0,1,0],
-                    [0,0,0,1]])
-
-#we construct the polarization matrix in the following way
-Gamma_pol = 0.5*(Id_4 + gamma4) @ (Id_4 - I * gamma1 @ gamma2)
-#and its symbolic counterpart
-Gamma_pol_s = sym.Symbol("Gamma_pol")
+## imports from shared files
+from kinematic_data import gamma_mu, gamma5, Gamma_pol, Id_4 #gamma structures: gamma_mu, gamma_5, polarization structure in Dirac space, Identity in Dirac space
+from kinematic_data import I                                 #complex unit in sympy
+from kinematic_data import mN, E                             #symbols for mass and energy
+from kinematic_data import  p1, p2, p3                       #symbols for p1, p2 and p3
+from kinematic_data import p_mu, pslash                      #symbols for p_mu and the contraction p_mu gamma_mu
+from kinematic_data import den                               #symbolic expression of the denominator of the kinematic factor
 
 
-## Some more symbols
 
-#from moments_operator import mN,E,p1,p2,p3
 
-#ground state mass
-mN = sym.Symbol("m_N")
-
-#energy
-E = sym.Symbol("E(p)")
-
-#4 momentum p_mu
-p1=sym.Symbol("p_1")
-p2=sym.Symbol("p_2")
-p3=sym.Symbol("p_3")
-p_mu = [
-    p1,
-    p2,
-    p3,
-    I*E # = sym.Symbol("p_4")
-]
-
-#pslash = contraction gamma_mu p_mu
-pslash = np.einsum('ijk,i->jk',gamma_mu,p_mu)
-#and its symbolic counterpart
-pslash_s = sym.Symbol("\cancel{p}")
-
-#denominator appearing in every kinematic factor
-den = 2 * E * sym.trace( Gamma_pol * (-I*pslash + mN*Id_4) ).simplify(rational=True)
 
 
 
