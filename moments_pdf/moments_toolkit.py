@@ -849,13 +849,15 @@ class moments_toolkit:
 
 
 
+        #we save the figure if the user asks for it
+        if save:
+            plt.savefig(f"{self.plots_folder}/2p_corr_fit.png")
+
         #we sho the figure in the user asks for it
         if show:
             plt.show()
 
-        #we save the figure if the user asks for it
-        if save:
-            plt.savefig(f"{self.plots_folder}/2p_corr_fit.png")
+        
 
         #we return the fit state
         return fit_state
