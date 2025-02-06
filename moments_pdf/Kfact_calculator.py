@@ -499,7 +499,8 @@ class K_calc:
 
  
                 #for each time the given irrep appear in the decomposition we have a basis
-                for iop,op in enumerate(base):
+                #for iop,op in enumerate(base):
+                for iop in range(len(base)):
 
                     #we take the cg matrix for the given operator
                     cgmat = self.cg_dict[k][imul][iop]
@@ -520,7 +521,7 @@ class K_calc:
                     #    new_op += cgmat[indices] * O[shifted_indices]
 
                     #we construct the operator and add it to the list
-                    op_list.append( Operator(cgmat=cgmat, id=op_count, K=op,
+                    op_list.append( Operator(cgmat=cgmat, id=op_count,
                                              X=self.structure, irrep=self.rep_label_list[k],
                                              block=imul+1, index_block=iop+1,
                                              C=C, symm=symm, tr=trace)

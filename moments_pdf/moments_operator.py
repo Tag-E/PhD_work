@@ -34,8 +34,16 @@ import itertools as it #to have fancy loops
 
 
 ## Imports from shared files
-from kinematic_data import mN, E       #mass of the ground state, energy
-from kinematic_data import p1, p2, p3  #spatial components of the 4 momentum
+from kinematic_data import mN, E                             #mass of the ground state, energy
+from kinematic_data import p1, p2, p3                        #spatial components of the 4 momentum
+from kinematic_data import gamma_mu, gamma5                  #gamma matrices in Dirac space
+from kinematic_data import p_mu                              #symbolic expression of the momentum
+from kinematic_data import I                                 #complex unit in sympy
+from kinematic_data import p_mu, pslash                      #symbols for p_mu and the contraction p_mu gamma_mu
+from kinematic_data import den                               #symbolic expression of the denominator of the kinematic factor
+from kinematic_data import Gamma_pol                         #symbolic expression of the polarization matrix in Dirac space
+from kinematic_data import Id_4                              #4x4 identity matrix in Dirac space
+
 
 
 ######################## Main Class #####################################
@@ -45,38 +53,34 @@ class Operator:
 
     #initialization function
     def __init__(self, cgmat:np.ndarray,
-                 id:int, K:sym.core.mul.Mul, X:str, irrep:tuple,
+                 id:int, X:str, irrep:tuple,
                  block:int, index_block:int,
                  C:str, symm:str, tr:str) -> None:
         """
         Input:
             - cgmat: matrix of cg coeff
             - id: the number associated to the operator
-            - K: the kinematic factor (the symbol) associated with the operator
             - X: etiher 'V', 'A' or 'T'
-            - n: the number of indices of the operator
             - irrep: the irrep the operator belongs to
             - block: the multiplicity of the selected irrep
             - index_block: the index of the operator inside its block
             - C: the C parity of the operator
             - symm: the index symmetry of the operator
             - tr: the trace condition of the operator
-            - O: the symbolical expression of the operator
         """
 
         self.cgmat = cgmat[:]
         self.id = id
-        self.K = K
+        self.K = Kfactor_from_diracO( diracO_from_cgmat(cgmat, X) ) #the kinematic factor (the symbol) associated with the operator
         self.X = X
-        #self.n = n
-        self.n = cgmat.ndim
+        self.n = cgmat.ndim #the number of indices of the operator
         self.irrep = irrep
         self.block = block
         self.index_block = index_block
         self.C = C
         self.symm = symm
         self.tr = tr
-        self.O = O_from_cgmat(cgmat, self.n)
+        self.O = symO_from_Cgmat(cgmat, self.n) #the symbolical expression of the operator
         self.nder = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
         if X=='T':
             self.nder -=1 #..and n derivatives = n indices -2 for X=T
@@ -275,7 +279,7 @@ class Operator:
 ########### Auxiliary Functions #################
 
 #function to obtain the functional form of an operator from its cgmat
-def O_from_cgmat(cgmat:np.ndarray, n:int) -> sym.core.add.Add:
+def symO_from_Cgmat(cgmat:np.ndarray, n:int) -> sym.core.add.Add:
     """
     Input:
         - cgmat: the matrix of cg coefficients
@@ -302,6 +306,76 @@ def O_from_cgmat(cgmat:np.ndarray, n:int) -> sym.core.add.Add:
 
     #we return the symbolic expression of the operator
     return operator_symbol
+
+
+#function used to obtain the operator representation in Dirac space from its cgmat (still symbolical)
+def diracO_from_cgmat(cgmat: np.ndarray, X: str) -> sym.core.add.Add:
+    """
+    Function used to construct the symbolic form of the operator specified by the input
+    
+    Input:
+        - cgmat: matrices with the Clebsch-Gordan coefficient, in the remapped form
+        - X: str, either 'V', 'A' or 'T', i.e. vector, axial or tensorial, depending on the kind of structure of the operators we're dealing with
+    
+    Output:
+        - the symbolic form of the operator we're dealing with (with a matrix structure)
+    """
+
+    #input check
+    if X not in ['V','A','T']:
+        raise ValueError("The input X must be either 'V', 'A' or 'T'")
+
+    #we first get the number of irreps in the tensor product (that is the number of indices)
+    n = cgmat.ndim
+
+    #we first instantiate the operator as the zero matrix in Dirac space
+    op = np.zeros((4,4))
+
+    #we then loop over all the possible indices combinations (we have the implicit assumption that all the irrep we are considering are 4 dim)
+    for indices in it.product(range(4),repeat=n):
+
+
+        #we first compute the product of the gamma matrices according to the structure of the operator
+        if X=='V':
+            gamma_prod = gamma_mu[indices[0]]
+            start_ind = 1
+        elif X=='A':
+            gamma_prod = gamma_mu[indices[0]] @ gamma5
+            start_ind = 1
+        elif X=='T':
+            gamma_prod = gamma_mu[indices[0]] @ gamma_mu[indices[1]] - gamma_mu[indices[1]] @ gamma_mu[indices[0]]
+            start_ind = 2
+
+        #then we compute the product of all the momenta
+        p_prod = 1
+        for ind in indices[start_ind:]:
+            p_prod *= p_mu[ind]
+
+        #then once we have these product we have the structure in dirac space, so we just have to multiply by cg and p that are numbers in dirac space
+        op += cgmat[indices] * p_prod *  gamma_prod
+
+    #we send back the operator just constructed (it is a matrix in Dirac space)
+    return op
+
+
+#function used to construct the symbolic expression of the kinematic factor from the matrix in dirac space reprsenting the operator under study
+def Kfactor_from_diracO(operator:sym.core.add.Add) -> sym.core.mul.Mul:
+    """
+    Function used to construct the symbolic form of the kinematic factor given the symbolic (matrix) form of an operator
+    
+    Input:
+        - operator: a symbolic expression (in a 4x4 Dirac matrix form) representing the operator under study
+        
+    Ouput:
+        - K: the symbolic expression for the operator under study
+    """
+
+    #at the numerator of the kin factor there is the following term
+    num =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
+
+    #we obtain the result as numerator divided by denominator (we explicit the dispersion relation to obtain a nicer output)
+    return (num/den).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2})
+
 
 
 #function used to check the trace condition of a cgmat
