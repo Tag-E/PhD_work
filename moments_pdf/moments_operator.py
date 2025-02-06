@@ -25,6 +25,8 @@
 import numpy as np #to handle matrices
 import sympy as sym #for symbolic computations
 from typing import Self #to use annotations in operator overloading
+from sympy.tensor.array.expressions import ArraySymbol #to construct the symbolic expresison of the operator
+import itertools as it #to have fancy loops
 
 
 
@@ -43,9 +45,9 @@ class Operator:
 
     #initialization function
     def __init__(self, cgmat:np.ndarray,
-                 id:int, K:sym.core.mul.Mul, X:str, n:int, irrep:tuple,
+                 id:int, K:sym.core.mul.Mul, X:str, irrep:tuple,
                  block:int, index_block:int,
-                 C:str, symm:str, tr:str, O:sym.core.add.Add) -> None:
+                 C:str, symm:str, tr:str) -> None:
         """
         Input:
             - cgmat: matrix of cg coeff
@@ -66,15 +68,16 @@ class Operator:
         self.id = id
         self.K = K
         self.X = X
-        self.n = n
+        #self.n = n
+        self.n = cgmat.ndim
         self.irrep = irrep
         self.block = block
         self.index_block = index_block
         self.C = C
         self.symm = symm
         self.tr = tr
-        self.O = O #TO DO: implement the determination of O from cgmat (look code inside Kfact_calculator)
-        self.nder = n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
+        self.O = O_from_cgmat(cgmat, self.n)
+        self.nder = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
         if X=='T':
             self.nder -=1 #..and n derivatives = n indices -2 for X=T
 
@@ -270,6 +273,36 @@ class Operator:
 
 
 ########### Auxiliary Functions #################
+
+#function to obtain the functional form of an operator from its cgmat
+def O_from_cgmat(cgmat:np.ndarray, n:int) -> sym.core.add.Add:
+    """
+    Input:
+        - cgmat: the matrix of cg coefficients
+        - n: the number of indices of the operator
+    
+    Output:
+        - O: the symbolic expression of the operator
+    """
+    
+    #we first instantiate the symbols we're going to use (we use 5 indices, from 0 to 4, so that we can discard the 0 and have the count start from 1)
+    O = ArraySymbol("O", (5,)*n)
+
+    #we instantiate the symbolic expression for the operator to 0
+    operator_symbol = 0
+
+    #we loop over the indicies to construct the operator
+    for indices in it.product(range(4),repeat=n):
+
+        #we shift the indices so that we can print 1234 instead of 0123
+        shifted_indices = [sum(x) for x in zip(indices,(1,)*n)]
+
+        #we construct symbolically the operator to print
+        operator_symbol += cgmat[indices] * O[shifted_indices]
+
+    #we return the symbolic expression of the operator
+    return operator_symbol
+
 
 #function used to check the trace condition of a cgmat
 def trace_symm(cgmat: np.ndarray) -> str:

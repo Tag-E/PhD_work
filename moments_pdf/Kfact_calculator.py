@@ -494,8 +494,8 @@ class K_calc:
                 symm = index_symm(self.cg_dict[k][imul],self.n)
 
 
-                #to print to latex the operators we use an array with with n indices, ranging from 0 to 4 (and we just use 1,2,3,4 and discard 0)
-                O = ArraySymbol("O", (5,)*self.n)
+                ##to print to latex the operators we use an array with with n indices, ranging from 0 to 4 (and we just use 1,2,3,4 and discard 0)
+                #O = ArraySymbol("O", (5,)*self.n)
 
  
                 #for each time the given irrep appear in the decomposition we have a basis
@@ -507,23 +507,23 @@ class K_calc:
 
                     #we now construct the latex symbol for the new operator using sympy
 
-                    #we instantiate it to 0
-                    new_op = 0
-
-                    #we loop over the indicies to construct the operator
-                    for indices in it.product(range(4),repeat=self.n):
-
-                        #we shift the indices so that we can print 1234 instead of 0123
-                        shifted_indices = [sum(x) for x in zip(indices,(1,)*self.n)]
-
-                        #we construct symbolically the operator to print
-                        new_op += cgmat[indices] * O[shifted_indices]
+                    ##we instantiate it to 0
+                    #new_op = 0
+                    #                   
+                    ##we loop over the indicies to construct the operator
+                    #for indices in it.product(range(4),repeat=self.n):
+                    #
+                    #    #we shift the indices so that we can print 1234 instead of 0123
+                    #    shifted_indices = [sum(x) for x in zip(indices,(1,)*self.n)]
+                    #
+                    #    #we construct symbolically the operator to print
+                    #    new_op += cgmat[indices] * O[shifted_indices]
 
                     #we construct the operator and add it to the list
                     op_list.append( Operator(cgmat=cgmat, id=op_count, K=op,
-                                             X=self.structure, n=self.n, irrep=self.rep_label_list[k],
+                                             X=self.structure, irrep=self.rep_label_list[k],
                                              block=imul+1, index_block=iop+1,
-                                             C=C, symm=symm, tr=trace, O = new_op)
+                                             C=C, symm=symm, tr=trace)
                                     )
                     
                     #we update the op_count
