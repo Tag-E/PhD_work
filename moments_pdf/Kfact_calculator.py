@@ -524,7 +524,7 @@ class K_calc:
                     op_list.append( Operator(cgmat=cgmat, id=op_count,
                                              X=self.structure, irrep=self.rep_label_list[k],
                                              block=imul+1, index_block=iop+1,
-                                             C=C, symm=symm, tr=trace)
+                                             symm=symm)
                                     )
                     
                     #we update the op_count

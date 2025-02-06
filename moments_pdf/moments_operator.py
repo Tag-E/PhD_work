@@ -55,7 +55,7 @@ class Operator:
     def __init__(self, cgmat:np.ndarray,
                  id:int, X:str, irrep:tuple,
                  block:int, index_block:int,
-                 C:str, symm:str, tr:str) -> None:
+                 symm:str) -> None:
         """
         Input:
             - cgmat: matrix of cg coeff
@@ -64,7 +64,7 @@ class Operator:
             - irrep: the irrep the operator belongs to
             - block: the multiplicity of the selected irrep
             - index_block: the index of the operator inside its block
-            - C: the C parity of the operator
+            - C: 
             - symm: the index symmetry of the operator
             - tr: the trace condition of the operator
         """
@@ -77,10 +77,10 @@ class Operator:
         self.irrep = irrep
         self.block = block
         self.index_block = index_block
-        self.C = C
+        self.C = C_parity(cgmat,X) #the C parity of the operator
         self.symm = symm
-        self.tr = tr
-        self.O = symO_from_Cgmat(cgmat, self.n) #the symbolical expression of the operator
+        self.tr = trace_symm(cgmat) #the trace condition of the operator
+        self.O = symO_from_Cgmat(cgmat) #the symbolical expression of the operator
         self.nder = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
         if X=='T':
             self.nder -=1 #..and n derivatives = n indices -2 for X=T
@@ -177,16 +177,17 @@ class Operator:
         #if the input is ok we instantiate the new operator
         new_op = Operator(cgmat=self.cgmat - other_operator.cgmat,
                           id = None,
-                          K = self.K - other_operator.K,
+                          #K = self.K - other_operator.K,
                           X = self.X,
-                          n = self.n,
+                          #n = self.n,
                           irrep = new_irrep,
                           block = new_block,
                           index_block = None,
-                          C = new_C,
+                          #C = new_C,
                           symm = new_symm,
-                          tr = trace_symm(self.cgmat - other_operator.cgmat),
-                          O = self.O - other_operator.O)
+                          #tr = trace_symm(self.cgmat - other_operator.cgmat),
+                          #O = self.O - other_operator.O
+                          )
         
         #we return the subtraction between the two operators
         return new_op
@@ -203,16 +204,17 @@ class Operator:
         #we instantiate the new operator (only cgmat, K and O change)
         new_op = Operator(cgmat=self.cgmat * coefficient,
                           id = self.id,
-                          K = self.K * coefficient,
+                          #K = self.K * coefficient,
                           X = self.X,
-                          n = self.n,
+                          #n = self.n,
                           irrep = self.irrep,
                           block = self.block,
                           index_block = self.index_block,
-                          C = self.C,
+                          #C = self.C,
                           symm = self.symm,
-                          tr = self.tr,
-                          O = self.O * coefficient)
+                          #tr = self.tr,
+                          #O = self.O * coefficient
+                          )
         
         #we return the product of operator times coefficient
         return new_op
@@ -241,16 +243,17 @@ class Operator:
         #if the input is ok we istantiate the new operator just by changing its cgmat, K and O
         new_op = Operator(cgmat=self.cgmat / coefficient,
                           id = self.id,
-                          K = self.K / coefficient,
+                          #K = self.K / coefficient,
                           X = self.X,
-                          n = self.n,
+                          #n = self.n,
                           irrep = self.irrep,
                           block = self.block,
                           index_block = self.index_block,
-                          C = self.C,
+                          #C = self.C,
                           symm = self.symm,
-                          tr = self.tr,
-                          O = self.O / coefficient)
+                          #tr = self.tr,
+                          #O = self.O / coefficient
+                          )
         
         #we return the division of the operator by the coefficient
         return new_op
@@ -279,15 +282,17 @@ class Operator:
 ########### Auxiliary Functions #################
 
 #function to obtain the functional form of an operator from its cgmat
-def symO_from_Cgmat(cgmat:np.ndarray, n:int) -> sym.core.add.Add:
+def symO_from_Cgmat(cgmat:np.ndarray) -> sym.core.add.Add:
     """
     Input:
         - cgmat: the matrix of cg coefficients
-        - n: the number of indices of the operator
     
     Output:
         - O: the symbolic expression of the operator
     """
+
+    #the number of indices is given by the number of dimensions of the cgmat
+    n = cgmat.ndim
     
     #we first instantiate the symbols we're going to use (we use 5 indices, from 0 to 4, so that we can discard the 0 and have the count start from 1)
     O = ArraySymbol("O", (5,)*n)
@@ -383,6 +388,7 @@ def trace_symm(cgmat: np.ndarray) -> str:
     """
     Input:
         - cgmat: a np.array with the cg coefficients (in the remapped version)
+        - X: str, either 'V', 'A' or 'T', i.e. vector, axial or tensorial, depending on the kind of structure of the operators we're dealing with
 
     Output:
         - a string describing the trace condition of the cgmat
@@ -393,8 +399,59 @@ def trace_symm(cgmat: np.ndarray) -> str:
 
     #we convert the value of the trace to a string
     tr_condition = "!= 0"
-    if tr.all()== 0:
+    if tr.all() == 0:
         tr_condition= "= 0"
     
     #we return the trace condition
     return tr_condition
+
+#function used to asses the C parity of an operator from its cgmat
+def C_parity(cgmat: np.ndarray, X:str) -> int|str:
+    """
+    Input:
+        - cgmat: a np.array with the cg coefficients (in the remapped version)
+    
+    Output:
+        - C_parity: +1, -1 or "mixed", depending on the C parity of the operator
+    """
+
+    #input check
+    if X not in ['V','A','T']:
+        raise ValueError("The input X must be either 'V', 'A' or 'T'")
+    
+    ## to asses the C parity we have to construct the cgmat matrix corresponding to the charge conjugated operator
+
+    #let'instantiate the cgmat matrix of the operator under Cunder C
+    cgmat_C = np.empty(shape=np.shape(cgmat))
+
+    #the number of indices is given by
+    n = cgmat.ndim
+
+    #let's cycle over the indices to obtain the cgmat under charge conjugation
+    for indices in it.product(range(4),repeat=n):
+
+        #and we consider construct its conjugated counterpart
+        if X=='V' or X=='A':
+            cgmat_C[indices] = cgmat[(indices[0],)+indices[-1:0:-1]]
+        else:
+            cgmat_C[indices] = cgmat[(indices[0],indices[1],)+indices[-1:1:-1]] 
+
+    
+    #then we check if the two matrices are equal
+    if (cgmat==cgmat_C).all():
+        C_parity=1
+    elif (cgmat==-cgmat_C).all():
+        C_parity=-1
+    else:
+        C_parity="mixed"
+
+    #to completely asses the C parity we now just have to take into account the number of indices (if we are sure it is not mixed)
+    if C_parity!="mixed":
+
+        if X=="V":
+            C_parity *= (-1)**n
+        elif X=="A" or X=="T":
+            C_parity *= (-1)**(n+1)  
+
+    #we return the C parity
+    return C_parity
