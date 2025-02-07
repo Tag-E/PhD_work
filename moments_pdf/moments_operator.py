@@ -27,6 +27,15 @@ import sympy as sym #for symbolic computations
 from typing import Self #to use annotations in operator overloading
 from sympy.tensor.array.expressions import ArraySymbol #to construct the symbolic expresison of the operator
 import itertools as it #to have fancy loops
+from pathlib import Path #to check whether directories exist or not (before saving files)
+import sys #to fetch command line argument
+from tqdm import tqdm #for a nice view of for loops with loading bars
+
+
+##Persoal Libraries
+from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
+
+
 
 
 
@@ -53,7 +62,7 @@ class Operator:
 
     #initialization function
     def __init__(self, cgmat:np.ndarray,
-                 id:int, X:str, irrep:tuple,
+                 id:int, X:str, irrep:tuple[int,int],
                  block:int, index_block:int) -> None:
         """
         Input:
@@ -233,6 +242,30 @@ class Operator:
         
         #we just substitute and send back the numeric value
         return complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))
+    
+    #function used to save the operator in a file
+    def save(self, folder:str) -> None:
+        """
+        Function storing the operator in a file created in the given folder
+        
+        Input:
+            - folder: str, the path to the folder where the operator is going to be saved as a .npy file (its cgmat gets saved, and the operator specifics are in the filename)
+
+        Output:
+            - None (the operator just gets saved to file)
+        """
+
+        #we create the input folder if it does not exist
+        Path(folder).mkdir(parents=True, exist_ok=True)
+
+        #we irst construct the filename
+        filename = f"{folder}/operator_{self.id}_{self.X}_{self.irrep[0]}_{self.irrep[1]}_{self.block}_{self.index_block}.npy"
+
+        #we save the operator
+        np.save(filename,self.cgmat)
+
+        #we return
+        return None
 
 
 
@@ -493,3 +526,124 @@ def parity(permutation: tuple) -> int:
             elements_seen[current] = True
             current = permutation[current]
     return (-1)**( (length-cycles) % 2 ) # even,odd are 1,-1
+
+
+#function used to remap the cg coefficients from a 4**n column to a n rank matrix of dimension 4 (with n number of tensors in the product)
+def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
+    """
+    Function used to reshape a matrix of with the cg coefficients (already rounded) into a form that can be better handled
+    
+    Input:
+        - raw_cg: column with cg coefficients, i.e. a matrix with shape (4**n,) where n is the number of indices of the operator under study
+        - n: int, the number of indices of the operator under study
+    
+    Output:
+        - cg_remapped: the matrix with cg coefficients, now with shape ((4,)**n), that is with n axis each with dimension 4
+    """
+
+    #first we instantiate the new matrix empy
+    cg_remapped = np.zeros(shape=(4,)*n)
+
+    #then we create a list using the logic of the remapping
+    mapping = np.asarray( [ tuple(j) for j in [str( int(np.base_repr(i,4)) +  int('1' * n) ) for i in range(4**n)] ] , dtype=int) -1
+
+    #we map the old cg mat onto the new one
+    for i in range(4**n):
+        cg_remapped[*mapping[i]] = raw_cg[i]
+
+    #we return the remapped matrix
+    return cg_remapped
+
+
+
+
+###################### Execution of the Program as Main ############################
+
+#we add the possibility to call the program as main, and in doing so create the database of operators
+if __name__ == "__main__":
+    
+    #we read from the command line the max number of indices the operatos can have
+    max_n=2 #std value
+    if len(sys.argv) > 1:
+        try:
+            max_n = int(sys.argv[1])
+        except ValueError:
+            print(f"\nSpecified maximum number of indices (for V and A case)was max_n = {sys.argv[1]}, as it cannot be casted to int we proceed with max_n={max_n}\n")
+
+    #the folder where we will store the operators is
+    operator_folder = "operator_database"
+
+    #we create the folder if it does not exist
+    Path(operator_folder).mkdir(parents=True, exist_ok=True)
+
+    #we instantiate the list of structures we are going to consider
+    X_list = ['V','A','T']
+
+    #the list of indices we are going to consider is
+    n_list = list(range(2,max_n+1))
+
+    #correspondance int - irrep we're going to need later
+    rep_label_list = [(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(3,1),(3,2),(3,3),(3,4),(4,1),(4,2),(4,3),(4,4),(6,1),(6,2),(6,3),(6,4),(8,1),(8,2)]
+
+    #we use a counter to keep track of the number of operators we have constructed
+    iop = 1
+
+    #we loop over the number of indices
+    for n in n_list:
+
+        #info print
+        print(f"\nConstructing the operators V{n}, A{n} and T{n+1}...\n")
+
+        #we loop over the X structures
+        for X in tqdm(X_list):
+
+            #we construct the irreps we have to use to build the operator
+            chosen_irreps = []
+
+            #we use the right irrep according to the structure (vector,axial or tensor)
+            if X=='V':
+                chosen_irreps.append((4,1))
+            elif X=='A':
+                chosen_irreps.append((4,4))
+            elif X=='T':
+                chosen_irreps.append((4,1))
+                chosen_irreps.append((4,1))
+
+            #all the other indices transform according to the fundamental
+            while( (len(chosen_irreps)!=n and X!='T') or (len(chosen_irreps)!=n+1 and X=='T') ): 
+                chosen_irreps.append((4,1))
+
+            #we then use the cg calculator class to get the dictionary with all the cg coeff we need
+            cg_dict = cg_calc(*chosen_irreps,verbose=False, force_computation=False).cg_dict
+
+            #we loop over the irrep in the decomposition of the tensor products (these are the keys in the cg dict)
+            for k,v in cg_dict.items():
+
+                #then we loop over all the blocks we have in that irrep (i.e. we do as much iteration as the multiplicity of the current irrep)
+                for imul,block in enumerate(v):
+
+                    #print(np.shape(block))
+                
+                    #we round the matrix of cg coefficients (we select the number of decimal places to keep)
+                    block = np.round(block,decimals=2)
+
+                    #each column of the cg matrix is an operator in the new basis, so we cycle throgh the columns
+                    for icol in range(np.shape(block)[1]):
+                    
+                        #we remap the column with the cg coefficient of the current operator into a matrix (best suited to do the matrix multiplications needed to compute the K factor)
+                        cg_mat = cg_remapping(block[:,icol],len(chosen_irreps))
+
+                        #we construct the operator and save it
+                        Operator(cgmat=cg_mat,
+                                 id = iop,
+                                 X = X,
+                                 irrep = rep_label_list[k],
+                                 block = imul+1,
+                                 index_block = icol+1
+                                 ).save(operator_folder)
+
+                        #we update the counter of the constructed operator
+                        iop += 1
+                        
+    #info print
+    print(f"\nAll operators constructed and saved in the foder {operator_folder}\n")
