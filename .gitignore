@@ -166,7 +166,7 @@ cython_debug/
 moments_pdf/h4_ele/
 moments_pdf/cg_database/
 moments_pdf/requirements.txt
-moments_pdf/cg_pdf
+moments_pdf/cg_pdf/
 moments_pdf/test_notebooks/h4_ele/
 moments_pdf/test_notebooks/cg_database/
 moments_pdf/test_notebooks/*pdf
@@ -175,6 +175,5 @@ moments_pdf/*pdf
 moments_pdf/Kfact_pdf/
 moments_pdf/plots/
 moments_pdf/test_notebooks/plots/
-moments_pdf/Kfact_pdf/
 !moments_pdf/operator_catalogue.pdf
 moments_pdf/operator_database/
