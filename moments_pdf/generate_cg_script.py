@@ -9,7 +9,7 @@ if len(sys.argv) > 1:
         n = int(sys.argv[1])
     except ValueError:
         print(f"\nSpecified number of indices n was {sys.argv[1]}, as it cannot be casted to int we proceed with n={n}\n")
-#rading which kind of computation to do
+#reading which kind of computation to do
 which = "both"
 if len(sys.argv) > 2:
     if str(sys.argv[2]) in ["both","vector","axial"]:
@@ -33,4 +33,3 @@ if which=="both" or which=="vector":
 if which=="both" or which=="axial":
     cg_a = cg_calc(*chosen_irreps_axial, force_computation=True)
     cg_a.latex_print()
-
