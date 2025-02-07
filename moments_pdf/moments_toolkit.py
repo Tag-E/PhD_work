@@ -35,7 +35,7 @@ import numpy as np #to handle matrices
 #import h5py as h5 #to read the correlator
 #from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
-from pylatex import Document, Command  #to produce a pdf documents with the CG coeff
+from pylatex import Document, Command, Section, Subsection, Alignat #to produce a pdf documents with catalogue of operators
 from pylatex.utils import NoEscape #also to produce a pdf document
 import subprocess #to open pdf files
 import time #to use sleep and pause the code
@@ -44,10 +44,12 @@ from typing import Any, Callable #to use annotations for functions
 import itertools #to cycle through markers
 from scipy.optimize import curve_fit #to extract the mass using a fit of the two point correlator
 import gvar as gv #to handle gaussian variables (library by Lepage: https://gvar.readthedocs.io/en/latest/)
+from itertools import groupby #used in the function checking the equality of elements in a list
+
+
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
-from Kfact_calculator import K_calc #to obtain the list of operators and related kinematic factors
 from moments_operator import Operator #to handle lattice operators
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 
@@ -79,7 +81,8 @@ class moments_toolkit:
     #Initialization function #TO DO; add properly the skip3p option and skipop option
     def __init__(self, p3_folder:str, p2_folder:str,
                  tag_3p:str='bb',hadron:str='proton_3', tag_2p:str='hspectrum',
-                 maxConf:int|None=None, max_n:int=3, T_to_remove_list:list[int]=[12], plot_folder:str="plots", skip3p=False, skipop=False, verbose:bool=False) -> None:
+                 maxConf:int|None=None, max_n:int=3, T_to_remove_list:list[int]=[12], plot_folder:str="plots", skip3p=False, skipop=False, verbose:bool=False,
+                 operator_folder="operator_database") -> None:
         
         """
         Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
@@ -175,38 +178,49 @@ class moments_toolkit:
                 print("\nBuilding the list of all available operators...\n")
 
             #we initialize the list as empty
-            self.operator_list = []
+            self.operator_list: list[Operator] = []
 
-            #we also store the classes related to the kinematic factors, we also initialize them as empty
-            self.kclass_list = []
+            #we also store all the operators in a dict, as to access them using their specifics (the keys of the dict)
+            self.operators_dict: dict[Operator] = {}
 
-            #we loop over X and n, store the K classes and the operators
+            #we know the folder with the operator database #TO DO: add check whether folder is empty or has not all operators, make option to create folder if empty
+            #we instantiate the path object related to the folder
+            p = Path(operator_folder).glob('**/*')
 
-            #we count the number of operators
-            op_count=1
+            #we list the operator files, sorted according to their number
+            operator_files = [x for x in p if x.is_file()]
 
-            #we loop over the available indices
-            for n in self.n_list:
-                #we loop over the V,A,T structures
-                for X in self.X_list:
+            #we sort the files according to the operator number
+            operator_files.sort(key=lambda x: int(x.name.split("_")[1]))
 
-                    #safety measure to avoid the bug present in the cg calc class: TO BE REMOVED after fixing it (TO DO)
-                    #if n>2 and X=='T': break
+            #to construct the the operators we loop over the related files
+            for file in operator_files:
 
-                    #the actual number of indices depends on X
-                    actual_n = n
-                    if X == 'T':
-                        actual_n += 1
-                    
-                    #we instantiate the related Kfactor class
-                    self.kclass_list.append( K_calc(X,actual_n,verbose=False) )
+                
+                #we reconstruct the operator specifics from the file name
+                _, id, n, X, irrep0, irrep1, block, index_block = file.stem.split('_')
 
-                    #we append the operators
-                    for op in self.kclass_list[-1].get_opList(first_op=op_count):
-                        self.operator_list.append(op)
+                #we construct the operator
+                op = Operator(cgmat = np.load(f"{operator_folder}/{file.name}"),
+                                id = int(id),
+                                X=X,
+                                irrep =(int(irrep0), int(irrep1)),
+                                block=block,
+                                index_block=index_block
+                                )
 
-                    #we update the operator count
-                    op_count += 4**actual_n 
+                #we append the operator to the list
+                self.operator_list.append(op)
+
+                #we append the operator to the dict
+                
+                #we first handle the creation of the keys
+                if (n,X) not in self.operators_dict.keys():
+                    self.operators_dict[(n,X)] = {}
+                if ( (int(irrep0), int(irrep1)), block) not in self.operators_dict[(n,X)].keys():
+                    self.operators_dict[(n,X)][(int(irrep0), int(irrep1)), block] = []
+                #then we apped the operator to the dict
+                self.operators_dict[(n,X)][(int(irrep0), int(irrep1)), block].append(op)
 
         #info print
         if verbose:
@@ -257,18 +271,66 @@ class moments_toolkit:
 
         doc.append(Command('fontsize', arguments = ['8', '12']))
 
-        #we instantiate the operator count to 1
-        op_count = 1
+        #we loop over the keys of the operators dict to add the operators to the document
+        for n,X in self.operators_dict.keys():
 
-        #we loop over the instantiated kinematic classes (=loop over n and over X)
-        for kclass in self.kclass_list:
+            #we make a section, putting in the title the specifics common to all operators (X and n)
+            section = Section(f"X={X}, n={n}",numbering=False)
 
-            #we add the related operator to the document
-            kclass.append_operators(doc,op_count)
+            for irrep, imul in self.operators_dict[(n,X)].keys():
 
-            #we update the operator count
-            op_count += len(kclass.get_opList()) #= 4**actual_n
+                #we asses the C parity, trace condition and index symmetry of the whole block of operators
 
+                #first we construct a list with all the properties for all the operators in the block
+                C_list = [op.C for op in self.operators_dict[(n,X)][(irrep,imul)]]
+                tr_list = [op.tr for op in self.operators_dict[(n,X)][(irrep,imul)]]
+                symm_list = [op.symm for op in self.operators_dict[(n,X)][(irrep,imul)]]
+
+                #then to asses the global properties we check if all the elements in the lists are the same
+                C = C_list[0] if all_equal(C_list) else 'mixed'
+                tr = tr_list[0] if all_equal(tr_list) else 'mixed'
+                symm = symm_list[0] if all_equal(symm_list) else 'Mixed Symmetry'
+
+                #we make a subsection, putting in the title the specifics common to all operators (irrep, block and the shared symmetries)
+                subsection = Subsection(f"{irrep} Block {imul}:  Trace {tr}, {symm}, C = {C}",numbering=False)
+
+                #we instantiate the math environment where we print the operators
+                agn = Alignat(numbering=False, escape=False)
+
+                #we loop over the operators in the dict
+                for op in self.operators_dict[(n,X)][(irrep,imul)]:
+                    
+                    #we do some string manipulation to obtain a nicer output
+                    op_print = str(op.O.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
+
+                    #we append first the operator number (its id)
+                    agn.append(r"\text{Operator "+str(op.id)+r"}&\\")
+                
+                    #we append the output to the mathematical latex environment
+                    agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(op.index_block,'{'+f"{X}{irrep},{imul}"+'}',op_print))
+
+
+                    #we make a nicer output also for the kinematic factor
+                    K_print = str(op.K).replace('**','^').replace('*','').replace('I','i')
+
+                    #if len(op_print>50): #TO DO: handle long string output
+
+                    #we try to use \frac{}{} instead of just a slash
+                    if '/' in K_print:
+                        K_print = "\\frac{" + K_print.split('/')[0] + "}{ " + K_print.split('/')[1]  + "}"
+
+                    #we append the kinematic factor to the math environment
+                    agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(op.index_block,'{'+f"{X}{irrep},{imul}"+'}',K_print))
+
+                #we append the math expression to the subsection
+                subsection.append(agn)
+
+                #and we append the subsection to the section
+                section.append(subsection) 
+            
+            #then we append the section to the document
+            doc.append(section)
+            doc.append(NoEscape(r"\newpage"))
 
         #then we generate the pdf
         
@@ -1348,6 +1410,20 @@ def plot_fit_2pcorr(fit_result,correlator,axs,nstates=2, Ngrad = 30, Nsigma = 2)
     _ = axs.grid()
     _ = axs.legend()
 
+
+#auxiliary function used to check if all elements in an iterable are equal
+def all_equal(iterable):
+    """
+    Function used to check if all elements in a list are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
+    
+    Input:
+        - iterable: the list (or iterable in general) to be checked
+        
+    Output:
+        - True if all elements are equal, False otherwise
+    """
+    g = groupby(iterable)
+    return next(g, True) and not next(g, False)
 
 #auxiliary class used to fit the two point correlators
 class SumOrderedExponentials:
