@@ -173,6 +173,7 @@ moments_pdf/test_notebooks/*pdf
 moments_pdf/*png
 moments_pdf/*pdf
 moments_pdf/Kfact_pdf/
+moments_pdf/outdated_scripts/Kfact_pdf/
 moments_pdf/plots/
 moments_pdf/test_notebooks/plots/
 !moments_pdf/operator_catalogue.pdf
