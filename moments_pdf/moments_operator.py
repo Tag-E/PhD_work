@@ -259,7 +259,7 @@ class Operator:
         Path(folder).mkdir(parents=True, exist_ok=True)
 
         #we irst construct the filename
-        filename = f"{folder}/operator_{self.id}_{self.X}_{self.irrep[0]}_{self.irrep[1]}_{self.block}_{self.index_block}.npy"
+        filename = f"{folder}/operator_{self.id}_{self.n}_{self.X}_{self.irrep[0]}_{self.irrep[1]}_{self.block}_{self.index_block}.npy"
 
         #we save the operator
         np.save(filename,self.cgmat)
@@ -555,24 +555,20 @@ def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
     return cg_remapped
 
 
-
-
-###################### Execution of the Program as Main ############################
-
-#we add the possibility to call the program as main, and in doing so create the database of operators
-if __name__ == "__main__":
+#function used to construct the database of operators
+def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -> None:
+    """
+    Function used to construct the database of operators up to a given number of indices
     
-    #we read from the command line the max number of indices the operatos can have
-    max_n=2 #std value
-    if len(sys.argv) > 1:
-        try:
-            max_n = int(sys.argv[1])
-        except ValueError:
-            print(f"\nSpecified maximum number of indices (for V and A case)was max_n = {sys.argv[1]}, as it cannot be casted to int we proceed with max_n={max_n}\n")
-
-    #the folder where we will store the operators is
-    operator_folder = "operator_database"
-
+    Input:
+        - operator_folder: str, the path to the folder where the operators are going to be saved
+        - max_n: int, the maximum number of indices the operators can have in the vectorial and axial case (for the tensorial case the maximum number of indices is max_n+1)
+        - verbose: bool, if True ouptuts are printed to the screen
+        
+    Output:
+        - None (the operators are saved to file)
+    """
+    
     #we create the folder if it does not exist
     Path(operator_folder).mkdir(parents=True, exist_ok=True)
 
@@ -592,7 +588,8 @@ if __name__ == "__main__":
     for n in n_list:
 
         #info print
-        print(f"\nConstructing the operators V{n}, A{n} and T{n+1}...\n")
+        if verbose:
+            print(f"\nConstructing the operators V{n}, A{n} and T{n+1}...\n")
 
         #we loop over the X structures
         for X in tqdm(X_list):
@@ -646,4 +643,25 @@ if __name__ == "__main__":
                         iop += 1
                         
     #info print
-    print(f"\nAll operators constructed and saved in the foder {operator_folder}\n")
+    if verbose:
+        print(f"\nAll operators constructed and saved in the foder {operator_folder}\n")
+
+
+###################### Execution of the Program as Main ############################
+
+#we add the possibility to call the program as main, and in doing so create the database of operators
+if __name__ == "__main__":
+    
+    #we read from the command line the max number of indices the operatos can have
+    max_n=2 #std value
+    if len(sys.argv) > 1:
+        try:
+            max_n = int(sys.argv[1])
+        except ValueError:
+            print(f"\nSpecified maximum number of indices (for V and A case)was max_n = {sys.argv[1]}, as it cannot be casted to int we proceed with max_n={max_n}\n")
+
+    #the folder where we will store the operators is
+    operator_folder = "operator_database"
+
+    #we construct the database of operators
+    make_operator_database(operator_folder=operator_folder, max_n=max_n, verbose=True)
