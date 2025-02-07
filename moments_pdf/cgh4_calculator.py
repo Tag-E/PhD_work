@@ -670,7 +670,7 @@ class cg_calc:
             self.h4_mat = [ [] for _ in range(self.n_rep)]
 
             #to load the matrices first we loop over the representations
-            for ir in tqdm(range(self.n_rep)):
+            for ir in range(self.n_rep):
 
                 #the folder we have to look into is
                 rep_folder = self.h4_ele_folder + f"/{str(self.rep_label_list[ir])}"
@@ -868,7 +868,7 @@ class cg_calc:
             files = [x for x in p if x.is_file()]
 
             #we cycle through the files in the folder
-            for i,file in enumerate(tqdm(files)):
+            for i,file in enumerate(files):
 
                 #we parse the index of the representation and the number associated with the multiplicity
                 irep = int(file.name.split(".")[0].split("_")[0])
@@ -898,7 +898,7 @@ class cg_calc:
             files = [x for x in p if x.is_file()]
 
             #we cycle through the files in the folder
-            for i,file in enumerate(tqdm(files)):
+            for i,file in enumerate(files):
 
                 #we parse the index of the representation and the number associated with the multiplicity
                 irep = int(file.name.split(".")[0].split("_")[0])
