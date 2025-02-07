@@ -48,14 +48,13 @@ from kinematic_data import Id_4                              #4x4 identity matri
 
 ######################## Main Class #####################################
 
-#simple container class used to store all the information related to a given operator
+#simple container class used to store all the information related to a given operator #TO DO: add possibility to pass O and K as optional params (to avoid recomputation)
 class Operator:
 
     #initialization function
     def __init__(self, cgmat:np.ndarray,
                  id:int, X:str, irrep:tuple,
-                 block:int, index_block:int,
-                 symm:str) -> None:
+                 block:int, index_block:int) -> None:
         """
         Input:
             - cgmat: matrix of cg coeff
@@ -64,9 +63,6 @@ class Operator:
             - irrep: the irrep the operator belongs to
             - block: the multiplicity of the selected irrep
             - index_block: the index of the operator inside its block
-            - C: 
-            - symm: the index symmetry of the operator
-            - tr: the trace condition of the operator
         """
 
         self.cgmat = cgmat[:]
@@ -78,7 +74,7 @@ class Operator:
         self.block = block
         self.index_block = index_block
         self.C = C_parity(cgmat,X) #the C parity of the operator
-        self.symm = symm
+        self.symm = index_symm(cgmat) #the symmetry under index exchange of the operator
         self.tr = trace_symm(cgmat) #the trace condition of the operator
         self.O = symO_from_Cgmat(cgmat) #the symbolical expression of the operator
         self.nder = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
@@ -112,31 +108,16 @@ class Operator:
             #the same goes for the block
             if self.block == other_operator.block:
                 new_block = self.block
-
-        #we also do a brief symmetry analysis
-        new_C = "mixed"
-        if self.C == other_operator.C:
-            new_C = self.C
-        new_symm = "Mixed Symmetry"
-        if self.symm == other_operator.symm:
-            new_symm = self.symm
-
-
         
         
         #if the input is ok we instantiate the new operator
         new_op = Operator(cgmat=self.cgmat + other_operator.cgmat,
                           id = None,
-                          K = self.K + other_operator.K,
                           X = self.X,
-                          n = self.n,
                           irrep = new_irrep,
                           block = new_block,
                           index_block = None,
-                          C = new_C,
-                          symm = new_symm,
-                          tr = trace_symm(self.cgmat + other_operator.cgmat),
-                          O = self.O + other_operator.O)
+                          )
         
         #we return the sum of the two operators
         return new_op
@@ -163,13 +144,7 @@ class Operator:
             if self.block == other_operator.block:
                 new_block = self.block
 
-        #we also do a brief symmetry analysis
-        new_C = "mixed"
-        if self.C == other_operator.C:
-            new_C = self.C
-        new_symm = "Mixed Symmetry"
-        if self.symm == other_operator.symm:
-            new_symm = self.symm
+
 
 
         
@@ -177,16 +152,10 @@ class Operator:
         #if the input is ok we instantiate the new operator
         new_op = Operator(cgmat=self.cgmat - other_operator.cgmat,
                           id = None,
-                          #K = self.K - other_operator.K,
                           X = self.X,
-                          #n = self.n,
                           irrep = new_irrep,
                           block = new_block,
                           index_block = None,
-                          #C = new_C,
-                          symm = new_symm,
-                          #tr = trace_symm(self.cgmat - other_operator.cgmat),
-                          #O = self.O - other_operator.O
                           )
         
         #we return the subtraction between the two operators
@@ -204,16 +173,10 @@ class Operator:
         #we instantiate the new operator (only cgmat, K and O change)
         new_op = Operator(cgmat=self.cgmat * coefficient,
                           id = self.id,
-                          #K = self.K * coefficient,
                           X = self.X,
-                          #n = self.n,
                           irrep = self.irrep,
                           block = self.block,
                           index_block = self.index_block,
-                          #C = self.C,
-                          symm = self.symm,
-                          #tr = self.tr,
-                          #O = self.O * coefficient
                           )
         
         #we return the product of operator times coefficient
@@ -243,16 +206,10 @@ class Operator:
         #if the input is ok we istantiate the new operator just by changing its cgmat, K and O
         new_op = Operator(cgmat=self.cgmat / coefficient,
                           id = self.id,
-                          #K = self.K / coefficient,
                           X = self.X,
-                          #n = self.n,
                           irrep = self.irrep,
                           block = self.block,
                           index_block = self.index_block,
-                          #C = self.C,
-                          symm = self.symm,
-                          #tr = self.tr,
-                          #O = self.O / coefficient
                           )
         
         #we return the division of the operator by the coefficient
@@ -455,3 +412,84 @@ def C_parity(cgmat: np.ndarray, X:str) -> int|str:
 
     #we return the C parity
     return C_parity
+
+
+#function used to evaluate the symmeetry under symmetry exchange of a given operator
+def index_symm(cgmat: np.ndarray) -> str:
+    """
+    Input:
+        - cgmat: a np.array with the cg coefficients (in the remapped version) representing the operator
+        
+    Output:
+        - a string describing the symmetry of the operator under index exchange
+    """
+
+    #the number of indices of the operator is given by the dimensionality of the cgmat
+    n = cgmat.ndim
+
+    #to check the symmetry condition we have to take track of the symmetry under all permutation, so we store the symm of the previous perm in a variable
+    symm_old = None
+
+    # we loop over all the possible permutations of the indices of the operators
+    for ip,p in enumerate(it.permutations(range(n))):
+
+        #we skip the trivial permutation as it yields no information
+        if ip==0:
+            continue
+
+        
+        #then we construct the permuted matrix
+
+        #we instantiate it
+        cgmat_p = np.empty(shape=np.shape(cgmat))
+
+        #we fill it according to the permutations
+        for indices in it.product(range(4),repeat=n):
+            cgmat_p[indices] = cgmat[ *[indices[p[i]] for i in range(n)] ]
+
+        #we check for a particular symmetry
+        if (cgmat==cgmat_p).all() or  (cgmat==-cgmat_p).all(): #this means either symmetric or antisymmetric...
+            if parity(p)==-1:                                  #... but we can only tell if the permutation is odd
+                if (cgmat==cgmat_p).all():
+                    symm_new="Symmetric"
+                elif (cgmat==-cgmat_p).all():
+                    symm_new="Antisymmetric"
+        else:                                                  #in every other case there is mixed symmetry
+            return "Mixed Symmetry"
+        
+        #if we are past the first iteration and the symmetry changed we conclude that it is mixed
+        if (symm_old is not None) and (symm_new!=symm_old):
+            return "Mixed Symmetry"
+        
+        #we update the values of the previous symmetry so that we can check during the next iteration (next permutations)
+        symm_old = symm_new
+
+    #if the symm was always the same we return it
+    return symm_new
+
+
+#function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+def parity(permutation: tuple) -> int:
+    """
+    Function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+    
+    Input:
+        - permutation: a tuple coming out of itertools.permutation()
+    
+    Output:
+        - parity: int, either 1 or -1, respectively for an even or for an odd permutation
+    """
+    #code copied from the referenced source:
+    permutation = list(permutation)
+    length = len(permutation)
+    elements_seen = [False] * length
+    cycles = 0
+    for index, already_seen in enumerate(elements_seen):
+        if already_seen:
+            continue
+        cycles += 1
+        current = index
+        while not elements_seen[current]:
+            elements_seen[current] = True
+            current = permutation[current]
+    return (-1)**( (length-cycles) % 2 ) # even,odd are 1,-1
