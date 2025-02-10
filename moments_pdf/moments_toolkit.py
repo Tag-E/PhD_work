@@ -50,7 +50,7 @@ from itertools import groupby #used in the function checking the equality of ele
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
-from moments_operator import Operator #to handle lattice operators
+from moments_operator import Operator, Operator_from_file #to handle lattice operators
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 
 
@@ -200,17 +200,20 @@ class moments_toolkit(bulding_block):
             for file in operator_files:
 
                 
-                #we reconstruct the operator specifics from the file name
-                _, id, n, X, irrep0, irrep1, block, index_block = file.stem.split('_')
+                ##we reconstruct the operator specifics from the file name
+                #_, id, n, X, irrep0, irrep1, block, index_block = file.stem.split('_')
+                #
+                ##we construct the operator
+                #op = Operator(cgmat = np.load(f"{operator_folder}/{file.name}"),
+                #                id = int(id),
+                #                X=X,
+                #                irrep =(int(irrep0), int(irrep1)),
+                #                block=block,
+                #                index_block=index_block
+                #                )
 
-                #we construct the operator
-                op = Operator(cgmat = np.load(f"{operator_folder}/{file.name}"),
-                                id = int(id),
-                                X=X,
-                                irrep =(int(irrep0), int(irrep1)),
-                                block=block,
-                                index_block=index_block
-                                )
+                #we obtain the operator from the file (from its name)
+                op = Operator_from_file(file.as_posix())
 
                 #we append the operator to the list
                 self.operator_list.append(op)
@@ -218,12 +221,13 @@ class moments_toolkit(bulding_block):
                 #we append the operator to the dict
                 
                 #we first handle the creation of the keys
-                if (n,X) not in self.operators_dict.keys():
-                    self.operators_dict[(n,X)] = {}
-                if ( (int(irrep0), int(irrep1)), block) not in self.operators_dict[(n,X)].keys():
-                    self.operators_dict[(n,X)][(int(irrep0), int(irrep1)), block] = []
+                if (op.n,op.X) not in self.operators_dict.keys():
+                    self.operators_dict[(op.n,op.X)] = {}
+                if ( op.irrep, op.block) not in self.operators_dict[(op.n,op.X)].keys():
+                    self.operators_dict[(op.n,op.X)][op.irrep, op.block] = []
+
                 #then we apped the operator to the dict
-                self.operators_dict[(n,X)][(int(irrep0), int(irrep1)), block].append(op)
+                self.operators_dict[(op.n,op.X)][op.irrep, op.block].append(op)
 
         #info print
         if verbose:
@@ -935,7 +939,7 @@ class moments_toolkit(bulding_block):
         
 
 
-    #function that returns the operator according to the label given in the catalogue
+    #function that returns the operator according to the label given in the catalogue #TO DO: add input control
     def get_operator(self, op_number: int) -> Operator:
         """
         Input:

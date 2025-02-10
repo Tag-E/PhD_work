@@ -647,6 +647,37 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -
         print(f"\nAll operators constructed and saved in the foder {operator_folder}\n")
 
 
+#function used to load an operator from the file where it is stored
+def Operator_from_file(filename:str) -> Operator:
+    """
+    Function used to load an operator from the file where it is stored
+    
+    Input:
+        - filename: str, the path to the file where the operator is stored
+        
+    Output:
+        - operator: the operator we loaded from file
+    """
+
+    #we load the cgmat from file
+    cgmat = np.load(filename)
+
+    #we extract the operator specifics from the filename
+    filename = filename.split("/")[-1].replace(".npy","")
+    id, n, X, irrep0, irrep1, block, index_block = filename.split("_")[1:]
+
+    #we construct the operator
+    operator = Operator(cgmat=cgmat,
+                        id = int(id),
+                        X = X,
+                        irrep = (int(irrep0),int(irrep1)),
+                        block = int(block),
+                        index_block = int(index_block)
+                        )
+
+    #we return the operator
+    return operator
+
 ###################### Execution of the Program as Main ############################
 
 #we add the possibility to call the program as main, and in doing so create the database of operators
