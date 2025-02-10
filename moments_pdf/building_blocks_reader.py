@@ -110,7 +110,7 @@ class bulding_block:
     #Initialization function
     def __init__(self, #bb_folder: str,
                  p3_folder:str, p2_folder: str,
-                 tag:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
+                 tag_3p:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
                  T_to_remove_list:list[int]=[12],
                  maxConf:int|None=None, force_2preading:bool=False, skip3p=False, verbose:bool=False) -> None:
         
@@ -120,7 +120,7 @@ class bulding_block:
         Input:
             - bb_folder: folder with the 3-point correlators
             - p2_folder: folder with the 2-point correlators (related to the 3 point ones)
-            - tag: tag of the 3-point correlator
+            - tag_3p: tag of the 3-point correlator
             - hadron: hadron type we want to read from the dataset (for both 3-points and 2-points)
             - tag_2p: tag of the 2-points correlator
             - maxConf: maximum number of configuration to be red
@@ -144,6 +144,9 @@ class bulding_block:
         
 
         #First we look into the given p3 folder to see how many different subfolders we have
+
+        #we store the three point correlators folder
+        self.p3_folder = p3_folder
 
         #we take the path of the folders with 3 points correlators subfolder
         p = Path(p3_folder)
@@ -218,7 +221,7 @@ class bulding_block:
         self.momentum_list = [mom.split('_T')[0] for mom in self.momentum_list]
 
         #we choose a default values for the different keys we want to be specified at reading time (for the other keys instead we loop over and read them)
-        self.tag = tag
+        self.tag_3p = tag_3p
         self.smearing = self.smearing_list[0]
         self.mass = self.mass_list[0]
         self.hadron = hadron
@@ -276,7 +279,7 @@ class bulding_block:
                                 for idstruct, dstructure in enumerate(self.dstructure_list):
 
                                     #we read the building block and store it in the np array
-                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
+                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
 
             #we store the 3p correlators in a dict of the type T:3p_corr
             self.bb_array_dict[T] = bb_array[:]
@@ -379,7 +382,7 @@ class bulding_block:
 
         #First we print the currently chosen values for the keys
         print("\nSelected Keys:\n")
-        print(f"    -tag: {self.tag}")
+        print(f"    -tag_3point: {self.tag_3p}")
         print(f"    -smearing: {self.smearing}")
         print(f"    -mass: {self.mass}")
         print(f"    -hadron: {self.hadron}")
@@ -409,13 +412,13 @@ class bulding_block:
 
     
     #function used to change the keys and reread the h5 files accordingly
-    def update_keys(self, tag:str|None=None, smearing:str|None=None, mass:str|None=None, hadron:str|None=None, momentum:str|None=None, insmomentum:str|None=None,
+    def update_keys(self, tag_3p:str|None=None, smearing:str|None=None, mass:str|None=None, hadron:str|None=None, momentum:str|None=None, insmomentum:str|None=None,
                     tag2p:str|None=None, verbose:bool=False) -> None:
         """
         Update reading keys by specifing them again here.
 
         Input:
-            - tag: new tag key for the 3 points correlators
+            - tag_3p: new tag key for the 3 points correlators
             - smearing: new smearing key 
             - momentum: new momentum key
             - insmomentum: new insertion momentum key
@@ -429,9 +432,9 @@ class bulding_block:
         #we update the keys the user wants to change
 
         #auxiliary lists
-        keys = [tag,smearing,mass,hadron,momentum,insmomentum,tag2p]
+        keys = [tag_3p,smearing,mass,hadron,momentum,insmomentum,tag2p]
         keys_list = [self.tag_list, self.smearing_list, self.mass_list, self.hadron_list, self.momentum_list, self.insmomementum_list,self.tag2p_list]
-        keys_name = ['tag','smearing','mass','hadron','momentum','insertion momementum', 'tag 2point']
+        keys_name = ['tag 3point','smearing','mass','hadron','momentum','insertion momementum', 'tag 2point']
 
         #flag used to signal an update in the keys
         update=False
@@ -441,7 +444,7 @@ class bulding_block:
             if k in keys_list[i]:
                 match i:
                     case 0:
-                        self.tag = k
+                        self.tag_3p = k
                     case 1:
                         self.smearing = k
                     case 2:
@@ -501,7 +504,7 @@ class bulding_block:
                                 for idstruct, dstructure in enumerate(self.dstructure_list):
 
                                     #we read the building block and store it in the np array
-                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum]
+                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum]
 
                 #we store the 3p correlators in a dict of the type T:3p_corr
                 self.bb_array_dict[T] = bb_array[:]
@@ -576,7 +579,7 @@ class bulding_block:
             #knowing which displacements to use we can now compute the right covariant derivative as follows
 
             #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-            covD_r1_array[:, :, :, :, i] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :]
+            covD_r1_array[:, :, :, :, i] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] #TO DO: add 1/2 factor everywhere
 
         #we return the right covariant derivative
         return covD_r1_array
@@ -669,7 +672,7 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the right-right covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_r2_array[:, :, :, :, i1, i2] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] - bb_array[:, :, idisp3, :, :] + bb_array[:, :, idisp4, :, :]
+                covD_r2_array[:, :, :, :, i1, i2] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] - bb_array[:, :, idisp3, :, :] + bb_array[:, :, idisp4, :, :] #TO DO: add 1/4 factor everywhere
 
         #we return the right-right covariant derivative
         return covD_r2_array
@@ -1005,7 +1008,7 @@ class bulding_block:
         #we normalize the operator if the user requested so (in this case the output will be the ratio giving the matrix element)
         if normalize==True:
             for iconf in range(self.nconf):
-                bb_operator[iconf] /= self.p2_corr[iconf,T+1].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
+                bb_operator[iconf] /= self.p2_corr[iconf,T].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
 
 
         #to do: reverse index

@@ -63,7 +63,7 @@ import correlatoranalyser as CA #to perform proper fits (Marcel's library: https
 ######################## Main Class ####################################
 
 #each dataset corresponds to an instance of the class, its methods provide useful analysis tools
-class moments_toolkit:
+class moments_toolkit(bulding_block):
     """
     Create an instance of the class to setup the analysis framework associated to the given dataset
     """
@@ -105,11 +105,14 @@ class moments_toolkit:
         #Info Print
         if verbose:
             print("\nInitializing the moments_toolkit class instance...\n")
+
+        #we call the initialization of the parent class
+        super().__init__(p3_folder=p3_folder, p2_folder=p2_folder, tag_3p=tag_3p, hadron=hadron, T_to_remove_list=T_to_remove_list, tag_2p=tag_2p, maxConf=maxConf, skip3p=skip3p, verbose=verbose)
         
 
-        #we store the folder variables
-        self.p3_folder=p3_folder
-        self.p2_folder=p2_folder
+        ##we store the folder variables
+        #self.p3_folder=p3_folder
+        #self.p2_folder=p2_folder
 
         #we store the variable where we want the plots to be saved
         self.plots_folder = plot_folder
@@ -130,41 +133,41 @@ class moments_toolkit:
         
         #First we look into the given p3 folder to see how many different subfolders we have
 
-        #we take the path of the folders with 3 points correlators subfolder
-        p = Path(p3_folder)
-        #we read the avalaible list of time separations T
-        self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
-        #we remove the times the user specified
-        for T_to_remove in T_to_remove_list:
-            if T_to_remove in self.T_list:
-                self.T_list.remove(T_to_remove)
-        #from that we obtain the paths of the folders containing the different building blocks
-        bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
+        ##we take the path of the folders with 3 points correlators subfolder
+        #p = Path(p3_folder)
+        ##we read the avalaible list of time separations T
+        #self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
+        ##we remove the times the user specified
+        #for T_to_remove in T_to_remove_list:
+        #    if T_to_remove in self.T_list:
+        #        self.T_list.remove(T_to_remove)
+        ##from that we obtain the paths of the folders containing the different building blocks
+        #bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
 
         
         #We now proceed to produce a  building_block class instance for each one of the times T
 
-        #we instantiate the list with the building_block class instances
-        self.bb_list = []
-
-        #we loop over the bb paths available (loop over T)
-        for i,bb_path in enumerate(bb_pathList):
-            #Info Print
-            if verbose:
-                print(f"\n\nReading data for T = {self.T_list[i]} ...\n")
-            self.bb_list.append( bulding_block(bb_path,p2_folder, hadron=hadron, tag_2p= tag_2p, tag=tag_3p, maxConf=maxConf, skip3p=skip3p, verbose=verbose) )
+        ##we instantiate the list with the building_block class instances
+        #self.bb_list = []
+        #
+        ##we loop over the bb paths available (loop over T)
+        #for i,bb_path in enumerate(bb_pathList):
+        #    #Info Print
+        #    if verbose:
+        #        print(f"\n\nReading data for T = {self.T_list[i]} ...\n")
+        #    self.bb_list.append( bulding_block(bb_path,p2_folder, hadron=hadron, tag_2p= tag_2p, tag=tag_3p, maxConf=maxConf, skip3p=skip3p, verbose=verbose) )
 
 
         #We initialize some other class variables
 
-        #number of configurations
-        self.nconf = self.bb_list[0].nconf
+        ##number of configurations
+        #self.nconf = self.bb_list[0].nconf
 
         #list with operators selected for the analysis, initialized as empty
         self.selected_op = []
 
-        #we store the two point correlator
-        self.p2_corr = self.bb_list[0].p2_corr
+        ##we store the two point correlator
+        #self.p2_corr = self.bb_list[0].p2_corr
 
 
 
@@ -438,7 +441,8 @@ class moments_toolkit:
             for iT,T in enumerate(self.T_list):
 
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
-                R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
+                #R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
+                R[iop,:,iT,:T+1] = self.operatorBB(cgmat,T,X,isospin,nder) #the last axis is padded with zeros
 
         #before calling the jackknife we add a cast of the ratio to real values #TO DO: check if that is correct
         if component=="real":
@@ -607,7 +611,8 @@ class moments_toolkit:
         #first we recall the two point correlators
         #corr_2p = self.bb_list[0].p2_corr
         #corr_2p = np.abs( self.bb_list[0].p2_corr )
-        corr_2p = self.bb_list[0].p2_corr.real
+        #corr_2p = self.bb_list[0].p2_corr.real
+        corr_2p = self.p2_corr.real
 
         #we use the jackknife to compute the effective mass (mean and std)
         meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis=0, time_axis=-1)
@@ -693,7 +698,8 @@ class moments_toolkit:
         """
 
         #first we recall the two point correlators
-        corr_2p = self.bb_list[0].p2_corr.real
+        #corr_2p = self.bb_list[0].p2_corr.real
+        corr_2p = self.p2_corr.real
 
         #then we use the jackknife to compute the fit mass and its std
         mfit, mfit_std , _= jackknife(corr_2p, fit_mass, jack_axis=0, time_axis=None)
