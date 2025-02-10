@@ -108,8 +108,10 @@ class bulding_block:
 
 
     #Initialization function
-    def __init__(self, bb_folder: str, p2_folder: str,
+    def __init__(self, #bb_folder: str,
+                 p3_folder:str, p2_folder: str,
                  tag:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
+                 T_to_remove_list:list[int]=[12],
                  maxConf:int|None=None, force_2preading:bool=False, skip3p=False, verbose:bool=False) -> None:
         
         """
@@ -130,23 +132,38 @@ class bulding_block:
         """
 
         #Input check on the folders with the corelators (the class is not initialized if one of the folders does not exist, and hence the dataset can't be read)
-        if Path(bb_folder).is_dir() == False:
-            print("\nAchtung; the bb_folder specified does not exist, the building block class can't be initialized\n")
-            return
+        if Path(p3_folder).is_dir() == False:
+            raise RuntimeError("\nAchtung; the bb_folder specified does not exist, the building block class can't be initialized\n")
         if Path(p2_folder).is_dir() == False:
-            print("\nAchtung; the p2_folder specified does not exist, the building block class can't be initialized\n")
-            return
+            raise RuntimeError("\nAchtung; the p2_folder specified does not exist, the building block class can't be initialized\n")
 
 
         #Info Print
         if verbose:
             print("\nInitializing the building block class instance...\n")
         
+
+        #First we look into the given p3 folder to see how many different subfolders we have
+
+        #we take the path of the folders with 3 points correlators subfolder
+        p = Path(p3_folder)
+        #we read the avalaible list of time separations T
+        self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
+        #we remove the times the user specified
+        for T_to_remove in T_to_remove_list:
+            if T_to_remove in self.T_list:
+                self.T_list.remove(T_to_remove)
+        #from that we obtain the paths of the folders containing the different building blocks
+        self.bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
+
         
-        #First we look into the given folder to see how many configurations we have
+        #Then we look into the first 3p folder to see how many configurations we have
+
+        #the folder we want to access for make a first inspection is
+        bb_folder = self.bb_pathList[0]
 
         #we store the folder for later use
-        self.bb_folder = bb_folder
+        #self.bb_folder = bb_folder
 
         #Path file to the data folder
         p = Path(bb_folder).glob('**/*')
@@ -166,10 +183,13 @@ class bulding_block:
         self.conflist = [file.name for file in files]
 
 
-        #Now looking only at the first configuration we read the keys of the h5 file structure
+        #Now looking only at the first configuration of the first 3p file we read the keys of the h5 file structure
 
         #first conf is
         firstconf = self.conflist[0]
+
+        #we instantiate the list of times T (read from file, not from the dir name)
+        #self.T_list_fromfile = []
 
         #we open the h5 file corresponding too the first configuration
         with h5.File(bb_folder+firstconf, 'r') as h5f:
@@ -191,8 +211,11 @@ class bulding_block:
             self.insmomementum_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]][self.dstructure_list[0]])
 
             #we store the time extent of the correlator we have
-            self.T = len(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]][self.dstructure_list[0]][self.insmomementum_list[0]])
+            #self.T_list_fromfile.append( len(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]][self.dstructure_list[0]][self.insmomementum_list[0]]) )
 
+
+        #we update the momentum list by stripping the T from the string
+        self.momentum_list = [mom.split('_T')[0] for mom in self.momentum_list]
 
         #we choose a default values for the different keys we want to be specified at reading time (for the other keys instead we loop over and read them)
         self.tag = tag
@@ -200,6 +223,7 @@ class bulding_block:
         self.mass = self.mass_list[0]
         self.hadron = hadron
         self.momentum = [mom for mom in self.momentum_list if mom.startswith('PX0_PY0_PZ0')][0] #we take the 0 forward momentum as default
+        #self.momentum_prefix = 'PX0_PY0_PZ0'
         self.insmomentum = 'qx0_qy0_qz0' #same for the insertion momentum (this is the only choice available for every other key choice)
 
         #we store the dimensionality of the dimension we have not fixed and that we want to read
@@ -208,36 +232,60 @@ class bulding_block:
         self.ndstructures = len(self.dstructure_list)
 
 
-        #Now we loop over the configurations and we convert the nconf h5 files into a single dictionary
+        #Now we loop 3p files and over the configurations and we convert the nconf h5 files into a single dictionary
 
-        #info print
-        if verbose:
-            print("\nLooping over the configurations to read the building blocks from the h5 files...\n")
+        #we instantiate a dict for the 3p correlators
+        self.bb_array_dict = {}
 
-        #we initialize the np array with the building blocks (for the three-point correlators)
-        self.bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, self.T),dtype=complex)
+        #we loop over the files
+        for iT, T in enumerate(self.T_list):
 
-        #we skip the reading of the 3point if the user asks for it
-        if skip3p==False:
 
-            #we loop over the configurations
-            for iconf, file in enumerate(tqdm(files[:self.nconf])):
+            #info print
+            if verbose:
+                print(f"\n3 Points Correlators, T = {T}: looping over the configurations to read the building blocks from the h5 files...\n")
 
-                #we open the h5 file corresponding too the current configuration
-                with h5.File(bb_folder+file.name, 'r') as h5f:
+            #we select the file we have to read
+            bb_folder = self.bb_pathList[iT]
 
-                    #id of the given configuration (this is equal to firstconf)
-                    cfgid = list(h5f.keys())[0]
+            #Path file to the data folder
+            p = Path(bb_folder).glob('**/*')
+            files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
 
-                    #we loop over the keys that have not been set:
-                    for iq, qcontent in enumerate(self.qcontent_list):
-                        for idisp, displacement in enumerate(self.displacement_list):
-                            for idstruct, dstructure in enumerate(self.dstructure_list):
+            #we initialize the np array with the building blocks (for the three-point correlators)
+            bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, T+1),dtype=complex)
 
-                                #we read the building block and store it in the np array
-                                self.bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][self.momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
+            #we select the momentum we want to read
+            momentum = self.momentum+f'_T{T}'
 
-        
+            #we skip the reading of the 3point if the user asks for it
+            if skip3p==False:
+
+                #we loop over the configurations
+                for iconf, file in enumerate(tqdm(files[:self.nconf])):
+
+                    #we open the h5 file corresponding too the current configuration
+                    with h5.File(bb_folder+file.name, 'r') as h5f:
+
+                        #id of the given configuration (this is equal to firstconf)
+                        cfgid = list(h5f.keys())[0]
+
+                        #we loop over the keys that have not been set:
+                        for iq, qcontent in enumerate(self.qcontent_list):
+                            for idisp, displacement in enumerate(self.displacement_list):
+                                for idstruct, dstructure in enumerate(self.dstructure_list):
+
+                                    #we read the building block and store it in the np array
+                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
+
+            #we store the 3p correlators in a dict of the type T:3p_corr
+            self.bb_array_dict[T] = bb_array[:]
+
+
+        #print(self.T_list)
+        #print(self.T_list_fromfile)
+        #return
+
         #We read the 2 point functions
 
         #we store the folder for later use
@@ -254,7 +302,8 @@ class bulding_block:
 
         #we store the tag and the momentum used for the two point correlators
         self.tag_2p = tag_2p
-        self.momentum_2p = '_'.join(self.momentum.split('_')[:-1]) #we adjust the string formatting between the 3p and the 2p h5 files
+        #self.momentum_2p = '_'.join(self.momentum.split('_')[:-1]) #we adjust the string formatting between the 3p and the 2p h5 files
+        self.momentum_2p = self.momentum
 
         #we open the first configuration just to read the lenght of the lattice
         firstconf = [file.name for file in files][0]
@@ -372,6 +421,9 @@ class bulding_block:
             - insmomentum: new insertion momentum key
             - tag2p: new tag key for the two point correlators
             - verbose: bool, if True info print are given while updating the keys
+
+        Output:
+            - None (the keys are updated and the h5 files are read again)
         """
 
         #we update the keys the user wants to change
@@ -418,28 +470,41 @@ class bulding_block:
 
             #this is a copy of the reading procedure from the __init__ function
 
-            #Path file to the data folder
-            p = Path(self.bb_folder).glob('**/*')
-            files = sorted( [x for x in p if x.is_file()] )
-            
-            self.bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, self.T),dtype=complex)
 
-            #we loop over the configurations
-            for iconf, file in enumerate(tqdm(files[:self.nconf])):
+            #we loop over the files
+            for iT, T in enumerate(self.T_list):
 
-                #we open the h5 file corresponding too the current configuration
-                with h5.File(self.bb_folder+file.name, 'r') as h5f:
+                #we select the file we have to read
+                bb_folder = self.bb_pathList[iT]
 
-                    #id of the given configuration (this is equal to firstconf)
-                    cfgid = list(h5f.keys())[0]
+                #Path file to the data folder
+                p = Path(bb_folder).glob('**/*')
+                files = sorted( [x for x in p if x.is_file()] )
 
-                    #we loop over the keys that have not been set:
-                    for iq, qcontent in enumerate(self.qcontent_list):
-                        for idisp, displacement in enumerate(self.displacement_list):
-                            for idstruct, dstructure in enumerate(self.dstructure_list):
+                bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, T+1),dtype=complex)
 
-                                #we read the building block and store it in the np array
-                                self.bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][self.momentum][displacement][dstructure][self.insmomentum]
+                #we select the momentum we want to read
+                momentum = self.momentum+f'_T{T}'
+
+                #we loop over the configurations
+                for iconf, file in enumerate(tqdm(files[:self.nconf])):
+
+                    #we open the h5 file corresponding too the current configuration
+                    with h5.File(bb_folder+file.name, 'r') as h5f:
+
+                        #id of the given configuration (this is equal to firstconf)
+                        cfgid = list(h5f.keys())[0]
+
+                        #we loop over the keys that have not been set:
+                        for iq, qcontent in enumerate(self.qcontent_list):
+                            for idisp, displacement in enumerate(self.displacement_list):
+                                for idstruct, dstructure in enumerate(self.dstructure_list):
+
+                                    #we read the building block and store it in the np array
+                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum]
+
+                #we store the 3p correlators in a dict of the type T:3p_corr
+                self.bb_array_dict[T] = bb_array[:]
 
 
             #same procedure for the 2point correlator, with few adjustments
@@ -479,7 +544,7 @@ class bulding_block:
 
 
     #function used to construct the right covariant derivative of the building blocks (with the chosen keys)
-    def covD_r1(self) -> np.ndarray:
+    def covD_r1(self, T:int) -> np.ndarray:
 
         """
         The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
@@ -492,8 +557,11 @@ class bulding_block:
         #list with the mu indices
         mu_list = ['x','y','z','t']
 
+        #we fetch the 3p correlator corresponding to the given T
+        bb_array = self.bb_array_dict[T]
+
         #we instatiate the np array where we will store the covariant derivative of the building blocks
-        covD_r1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T,4),dtype=complex) #the last dimension is the mu index of the covariant derivative
+        covD_r1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, T+1,4),dtype=complex) #the last dimension is the mu index of the covariant derivative
 
         #for each mu we compute the right derivative of the building block
         for i, mu in enumerate(mu_list):
@@ -508,7 +576,7 @@ class bulding_block:
             #knowing which displacements to use we can now compute the right covariant derivative as follows
 
             #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-            covD_r1_array[:, :, :, :, i] = self.bb_array[:, :, idisp1, :, :] - self.bb_array[:, :, idisp2, :, :]
+            covD_r1_array[:, :, :, :, i] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :]
 
         #we return the right covariant derivative
         return covD_r1_array
@@ -516,7 +584,7 @@ class bulding_block:
 
 
     #function used to construct the left covariant derivative of the building blocks (with the chosen keys)
-    def covD_l1(self) -> np.ndarray:
+    def covD_l1(self, T:int) -> np.ndarray:
 
         """
         The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
@@ -529,8 +597,11 @@ class bulding_block:
         #list with the mu indices
         mu_list = ['x','y','z','t']
 
+        #we fetch the 3p correlator corresponding to the given T
+        bb_array = self.bb_array_dict[T]
+
         #we instatiate the np array where we will store the covariant derivative of the building blocks
-        covD_l1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T,4),dtype=complex) #the last dimension is the mu index of the covariant derivative
+        covD_l1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, T+1,4),dtype=complex) #the last dimension is the mu index of the covariant derivative
 
         #for each mu we compute the right derivative of the building block
         for i, mu in enumerate(mu_list):
@@ -548,7 +619,7 @@ class bulding_block:
             #(in particular for the temporal component the temporal axis has to be shifted by -1 for backward displacement and by +1 for forward displacement)
 
             #smart of way of getting the shift only for i==3
-            covD_l1_array[:, :, :, :, i] = np.roll(self.bb_array[:, :, idisp1, :, :], shift=-(i//3), axis=-1) - np.roll(self.bb_array[:, :, idisp2, :, :], shift=i//3, axis=-1) #axis=-1 is the time axis
+            covD_l1_array[:, :, :, :, i] = np.roll(bb_array[:, :, idisp1, :, :], shift=-(i//3), axis=-1) - np.roll(bb_array[:, :, idisp2, :, :], shift=i//3, axis=-1) #axis=-1 is the time axis
             
 
         #we return the right covariant derivative
@@ -557,7 +628,7 @@ class bulding_block:
 
 
     #function used to construct the double right-right covariant derivative of the building blocks
-    def covD_r2(self) -> np.ndarray:
+    def covD_r2(self, T:int) -> np.ndarray:
         """
         The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
 
@@ -569,8 +640,11 @@ class bulding_block:
         #list with the mu indices
         mu_list = ['x','y','z','t']
 
+        #we fetch the 3p correlator corresponding to the given T
+        bb_array = self.bb_array_dict[T]
+
         #we instatiate the np array where we will store the covariant derivative of the building blocks
-        covD_r2_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+        covD_r2_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, T+1, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
 
         #we now loop over the two indices of the double covariant derivative
         for i1, mu1 in enumerate(mu_list):
@@ -595,14 +669,14 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the right-right covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_r2_array[:, :, :, :, i1, i2] = self.bb_array[:, :, idisp1, :, :] - self.bb_array[:, :, idisp2, :, :] - self.bb_array[:, :, idisp3, :, :] + self.bb_array[:, :, idisp4, :, :]
+                covD_r2_array[:, :, :, :, i1, i2] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] - bb_array[:, :, idisp3, :, :] + bb_array[:, :, idisp4, :, :]
 
         #we return the right-right covariant derivative
         return covD_r2_array
 
     
     #function used to construct the double left-left covariant derivative of the building blocks
-    def covD_l2(self) -> np.ndarray:
+    def covD_l2(self, T:int) -> np.ndarray:
         """
         The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
 
@@ -614,8 +688,11 @@ class bulding_block:
         #list with the mu indices
         mu_list = ['x','y','z','t']
 
+        #we fetch the 3p correlator corresponding to the given T
+        bb_array = self.bb_array_dict[T]
+
         #we instatiate the np array where we will store the covariant derivative of the building blocks
-        covD_l2_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+        covD_l2_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, T+1, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
 
         #we now loop over the two indices of the double covariant derivative
         for i1, mu1 in enumerate(mu_list):
@@ -644,17 +721,17 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the left-left covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_l2_array[:, :, :, :, i1, i2] = np.roll( self.bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
-                                                     -  np.roll( self.bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
-                                                     -  np.roll( self.bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
-                                                     +  np.roll( self.bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1)
+                covD_l2_array[:, :, :, :, i1, i2] = np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                                                     -  np.roll( bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
+                                                     -  np.roll( bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
+                                                     +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1)
         #we return the left-left covariant derivative
         return covD_l2_array
     
 
 
     #function used to construct the double left-right covariant derivative of the building blocks
-    def covD_l1_r1(self) -> np.ndarray:
+    def covD_l1_r1(self, T:int) -> np.ndarray:
         """
         The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
 
@@ -666,8 +743,11 @@ class bulding_block:
         #list with the mu indices
         mu_list = ['x','y','z','t']
 
+        #we fetch the 3p correlator corresponding to the given T
+        bb_array = self.bb_array_dict[T]
+
         #we instatiate the np array where we will store the covariant derivative of the building blocks
-        covD_l1_r1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+        covD_l1_r1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, T+1, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
 
         #we now loop over the two indices of the double covariant derivative
         for i1, mu1 in enumerate(mu_list):
@@ -696,16 +776,16 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the left-left covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_l1_r1_array[:, :, :, :, i1, i2] = -( np.roll( self.bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
-                                                            -  np.roll( self.bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
-                                                            -  np.roll( self.bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
-                                                            +  np.roll( self.bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
+                covD_l1_r1_array[:, :, :, :, i1, i2] = -( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                                                            -  np.roll( bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
+                                                            -  np.roll( bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
+                                                            +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
         #we return the left-left covariant derivative
         return covD_l1_r1_array
     
 
     #function used to construct the double right-left covariant derivative of the building blocks
-    def covD_r1_l1(self) -> np.ndarray:
+    def covD_r1_l1(self, T:int) -> np.ndarray:
         """
         The function takes no argument since the keys are all specified and the combination of displacements to be used is fixed
 
@@ -717,8 +797,11 @@ class bulding_block:
         #list with the mu indices
         mu_list = ['x','y','z','t']
 
+        #we fetch the 3p correlator corresponding to the given T
+        bb_array = self.bb_array_dict[T]
+
         #we instatiate the np array where we will store the covariant derivative of the building blocks
-        covD_r1_l1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, self.T, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
+        covD_r1_l1_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndstructures, T+1, 4, 4),dtype=complex) #the last dimensions are the mu,vu indices of the covariant derivatives
 
         #we now loop over the two indices of the double covariant derivative
         for i1, mu1 in enumerate(mu_list):
@@ -747,10 +830,10 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the left-left covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_r1_l1_array[:, :, :, :, i1, i2] = -( np.roll( self.bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
-                                                             -  np.roll( self.bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
-                                                             -  np.roll( self.bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
-                                                             +  np.roll( self.bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
+                covD_r1_l1_array[:, :, :, :, i1, i2] = -( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                                                             -  np.roll( bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
+                                                             -  np.roll( bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
+                                                             +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
         #we return the left-left covariant derivative
         return covD_r1_l1_array
 
@@ -759,7 +842,7 @@ class bulding_block:
 
 
     #function used to obtain the building block of the relevant operators
-    def get_bb(self, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
+    def get_bb(self, T:int, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
         """
         Input:
             - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
@@ -790,6 +873,10 @@ class bulding_block:
             return None
         
 
+        #we fetch the 3p correlator corresponding to the given T
+        #bb_array = self.bb_array_dict[T]
+
+
         #We now initialize the np array where we will store the building block of the operator
 
         #the number of indices of the operator depends on X and n_mu
@@ -799,16 +886,16 @@ class bulding_block:
 
         #we now instantiate the output array
         #the first two axis are nconf and time, the other ones are the indices of the operator, and they have dimensionality 4
-        bb_operator = np.zeros(shape=(self.nconf, self.T, ) + (4,)*n_indices, dtype=complex)
+        bb_operator = np.zeros(shape=(self.nconf, T+1, ) + (4,)*n_indices, dtype=complex)
 
 
         #We take now care of the quark content
 
         #first thing first we retrieve the right minus left covariant derivative
         if n_mu==1:
-            covD = 1/2 * ( self.covD_r1() - self.covD_l1() ) #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
+            covD = 1/2 * ( self.covD_r1(T) - self.covD_l1(T) ) #shape = (nconf, nquarks, ndstructures, T, 4), the last dimension being the index of the covariant derivative
         elif n_mu==2:
-            covD = 1/4 * ( self.covD_l2() + self.covD_r2() - self.covD_r1_l1() - self.covD_l1_r1() ) #shape = (nconf, nquarks, ndstructures, T, 4, 4)
+            covD = 1/4 * ( self.covD_l2(T) + self.covD_r2(T) - self.covD_r1_l1(T) - self.covD_l1_r1(T) ) #shape = (nconf, nquarks, ndstructures, T, 4, 4)
 
         #in the following we can just ignore the dimensionalities due to the mu index and everything is the same for the n+mu =1 and =2 case
         
@@ -918,7 +1005,7 @@ class bulding_block:
         #we normalize the operator if the user requested so (in this case the output will be the ratio giving the matrix element)
         if normalize==True:
             for iconf in range(self.nconf):
-                bb_operator[iconf] /= self.p2_corr[iconf,self.T].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
+                bb_operator[iconf] /= self.p2_corr[iconf,T+1].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
 
 
         #to do: reverse index
@@ -929,7 +1016,7 @@ class bulding_block:
     
 
     #function returning the building block of the specified operator
-    def operatorBB(self, cgmat:np.ndarray, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
+    def operatorBB(self, cgmat:np.ndarray, T:int, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
         """
         Input:
             - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
@@ -943,7 +1030,7 @@ class bulding_block:
         """
 
         #first thing first we fetch the building block of the basic operators
-        bb = self.get_bb(X, isospin, n_mu, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+        bb = self.get_bb(T, X, isospin, n_mu, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
 
         #we then compute the total number of indices (of the operators)
         n = n_mu+1 #the number of indices is number of derivatives +1 for V and A case...
@@ -951,7 +1038,7 @@ class bulding_block:
             n+=1   #... +2 for the T case
 
         #we can then instantiate the ouput array with the right dimensionality
-        opBB = np.zeros(shape=(self.nconf,self.T), dtype=complex)
+        opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
 
         #we now loop over all the possible indices combinations 
         for indices in it.product(range(4),repeat=n):
