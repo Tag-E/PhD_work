@@ -34,7 +34,7 @@ import numpy as np #to handle matrices
 import h5py as h5 #to read the correlator
 from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
-import itertools as it #for fancy iterations
+#import itertools as it #for fancy iterations
 
 
 
@@ -1018,39 +1018,39 @@ class bulding_block:
         return bb_operator
     
 
-    #function returning the building block of the specified operator
-    def operatorBB(self, cgmat:np.ndarray, T:int, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
-        """
-        Input:
-            - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
-            - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
-            - isospin: either 'U', 'D', 'U+D' or 'U-D' (with U and D meaning up and down quark)
-            - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
-            - normalize: if True then the output is the ratio to the two point function
-
-        Output:
-            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T))
-        """
-
-        #first thing first we fetch the building block of the basic operators
-        bb = self.get_bb(T, X, isospin, n_mu, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
-
-        #we then compute the total number of indices (of the operators)
-        n = n_mu+1 #the number of indices is number of derivatives +1 for V and A case...
-        if X=='T':      
-            n+=1   #... +2 for the T case
-
-        #we can then instantiate the ouput array with the right dimensionality
-        opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
-
-        #we now loop over all the possible indices combinations 
-        for indices in it.product(range(4),repeat=n):
-
-            #using the matrix with the cg coefficients related to the operator we construct its building block
-            opBB[:,:] += cgmat[indices] * bb[:,:,*indices]
-
-        #we return the building block of the operator identified by the cgmat passed as input
-        return opBB
+    ##function returning the building block of the specified operator
+    #def operatorBB(self, cgmat:np.ndarray, T:int, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
+    #    """
+    #    Input:
+    #        - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
+    #        - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
+    #        - isospin: either 'U', 'D', 'U+D' or 'U-D' (with U and D meaning up and down quark)
+    #        - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
+    #        - normalize: if True then the output is the ratio to the two point function
+    #
+    #    Output:
+    #        - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T))
+    #    """
+    #
+    #    #first thing first we fetch the building block of the basic operators
+    #    bb = self.get_bb(T, X, isospin, n_mu, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+    #
+    #    #we then compute the total number of indices (of the operators)
+    #    n = n_mu+1 #the number of indices is number of derivatives +1 for V and A case...
+    #    if X=='T':      
+    #        n+=1   #... +2 for the T case
+    #
+    #    #we can then instantiate the ouput array with the right dimensionality
+    #    opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
+    #
+    #    #we now loop over all the possible indices combinations 
+    #    for indices in it.product(range(4),repeat=n):
+    #
+    #        #using the matrix with the cg coefficients related to the operator we construct its building block
+    #        opBB[:,:] += cgmat[indices] * bb[:,:,*indices]
+    #
+    #    #we return the building block of the operator identified by the cgmat passed as input
+    #    return opBB
 
 
 

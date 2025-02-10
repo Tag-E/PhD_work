@@ -45,6 +45,8 @@ import itertools #to cycle through markers
 from scipy.optimize import curve_fit #to extract the mass using a fit of the two point correlator
 import gvar as gv #to handle gaussian variables (library by Lepage: https://gvar.readthedocs.io/en/latest/)
 from itertools import groupby #used in the function checking the equality of elements in a list
+import itertools as it #for fancy iterations #TO DO: adjust imports
+
 
 
 
@@ -404,6 +406,35 @@ class moments_toolkit(bulding_block):
 
     
 
+    #function returning the building block of the specified operator
+    def operatorBB(self, T:int, isospin: str, operator: Operator, normalize:bool=True) -> np.ndarray:
+        """
+        Input:
+            - T: int, the time separation of the 3-point correlator
+            - operator: the instance of the Operator class representing the operator under study
+            - normalize: if True then the output is the ratio to the two point function
+
+        Output:
+            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T))
+        """
+
+        #first thing first we fetch the building block of the basic operators
+        bb = self.get_bb(T, operator.X, isospin, operator.nder, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+
+        #we can then instantiate the ouput array with the right dimensionality
+        opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
+
+        #we now loop over all the possible indices combinations (n is the number of indices of the operartor)
+        for indices in it.product(range(4),repeat=operator.n):
+
+            #using the matrix with the cg coefficients related to the operator we construct its building block
+            opBB[:,:] += operator.cgmat[indices] * bb[:,:,*indices]
+
+        #we return the building block of the operator identified by the cgmat passed as input
+        return opBB    
+
+
+
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str='U-D', component="real") -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
         """
@@ -437,16 +468,16 @@ class moments_toolkit(bulding_block):
         for iop,op in enumerate(self.selected_op):
 
             #we extract the relevant info from the operator
-            cgmat = op.cgmat #mat with cg coeff
-            X = op.X # 'V','A' or 'T'
-            nder = op.nder #number of derivatives in the operators = number of indices -1 (for V and A) or -2 (for T)
+            #cgmat = op.cgmat #mat with cg coeff
+            #X = op.X # 'V','A' or 'T'
+            #nder = op.nder #number of derivatives in the operators = number of indices -1 (for V and A) or -2 (for T)
 
             #loop over the available times T
             for iT,T in enumerate(self.T_list):
 
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
                 #R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
-                R[iop,:,iT,:T+1] = self.operatorBB(cgmat,T,X,isospin,nder) #the last axis is padded with zeros
+                R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op) #the last axis is padded with zeros
 
         #before calling the jackknife we add a cast of the ratio to real values #TO DO: check if that is correct
         if component=="real":
