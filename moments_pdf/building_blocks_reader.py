@@ -260,7 +260,7 @@ class bulding_block:
                                 for idstruct, dstructure in enumerate(self.dstructure_list):
 
                                     #we read the building block and store it in the np array
-                                    bb_array[iconf, iq, idisp, idstruct] = h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][qcontent][momentum][displacement][dstructure][self.insmomentum] # TO DO: single path access #TO DO: conf index last
+                                    bb_array[iconf, iq, idisp, idstruct] = h5f[f"{cfgid}/{self.tag_3p}/{self.smearing}/{self.mass}/{self.hadron}/{qcontent}/{momentum}/{displacement}/{dstructure}/{self.insmomentum}"] #TO DO: conf index last
 
             #we store the 3p correlators in a dict of the type T:3p_corr
             self.bb_array_dict[T] = bb_array[:]
@@ -312,7 +312,7 @@ class bulding_block:
                 cfgid = list(h5f.keys())[0]
 
                 #we read the 2-point correlator
-                self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
+                self.p2_corr[iconf] = h5f[f"{cfgid}/{self.tag_2p}/{self.smearing}/{self.mass}/{self.hadron}/{self.momentum_2p}"]
 
 
 
