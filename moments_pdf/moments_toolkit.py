@@ -144,12 +144,17 @@ class moments_toolkit(bulding_block):
             #we also store all the operators in a dict, as to access them using their specifics (the keys of the dict)
             self.operators_dict: dict[Operator] = {}
 
-            #we know the folder with the operator database #TO DO: add check whether folder is empty or has not all operators, make option to create folder if empty
+            #then we check whether the database passed as input exists or not
+            if Path(operator_folder).is_dir()==False:
+                raise ValueError(f"\nInput not valid: the path {operator_folder} does not exist\n")
+            
+            ##TO DO: add check whether folder is empty or has not all operators, make option to create the folder if empty
+    
             #we instantiate the path object related to the folder
-            p = Path(operator_folder).glob('**/*')
+            path = Path(operator_folder).glob('**/*')
 
-            #we list the operator files, sorted according to their number
-            operator_files = [x for x in p if x.is_file()]
+            #we list the operator files
+            operator_files = [x for x in path if x.is_file()]
 
             #we sort the files according to the operator number
             operator_files.sort(key=lambda x: int(x.name.split("_")[1]))
@@ -347,8 +352,8 @@ class moments_toolkit(bulding_block):
         for id in chosen_ids:
 
             #we perform an input check
-            if type(id) is not int or id>len(self.operator_list) or id<1:
-                raise ValueError(f"\nAchtung: the operator id {id} is not valid, please select an id between 1 and {len(self.operator_list)}\n")
+            if type(id) is not int or id<1 or id>len(self.operator_list):
+                raise ValueError(f"\nAchtung: the operator id {id} is not valid, please select an id between 1 and {len(self.operator_list)} (included)\n")
 
             #we append the operator to the list
             self.selected_op.append(self.operator_list[id-1]) #-1 because in the pdf the numbering starts from 1

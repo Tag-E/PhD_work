@@ -690,6 +690,77 @@ def Operator_from_file(filename:str) -> Operator:
     #we return the operator
     return operator
 
+#function used to load the whole list of operators from the input dataset
+def OperatorList_from_database(operator_database:str) -> list[Operator]:
+    """
+    Function used to load the list of with all the operators from the database where they are stored
+    
+    Input:
+        - operator_database: str, the path where the operator database is located
+    
+    Ouptut:
+        - operator_list: the list with all the operator in the database"""
+    
+    
+    #we check whether the database passed as input exists or not
+    if Path(operator_database).is_dir()==False:
+        raise ValueError(f"\nInput not valid: the path {operator_database} does not exist\n")
+    
+    #we instantiate the path varibale of the database
+    path = Path(operator_database).glob('**/*')
+
+    #we list the operator files
+    operator_files = [x for x in path if x.is_file()]
+
+    #we sort the files according to the operator number
+    operator_files.sort(key=lambda x: int(x.name.split("_")[1]))
+
+    #we instantiate the operator list we will return
+    operator_list = []
+
+    #to construct the the operators we loop over the related files
+    for file in operator_files:
+
+        #we obtain the operator from the file (from its name) and we append it to the operator list
+        operator_list.append( Operator_from_file(file.as_posix()) )
+
+    #we return the operator list
+    return operator_list
+
+#function used to read one specific operator from the operator database
+def Operator_from_database(operator_id:int, operator_database:str) -> Operator:
+    """
+    Function used to obtain as specific operator from the databse of operators
+    
+    Input:
+        - operator_id: int, the id of the operator in the databse (starting from 1, as in the operators catalogue)
+        - operator_database: str, the path where the operator database is located
+    
+    Output:
+        - operator: the Operator class instance containing all the details of the selected operators
+    """
+
+    #we check whether the database passed as input exists or not
+    if Path(operator_database).is_dir()==False:
+        raise ValueError(f"\nInput not valid: the path {operator_database} does not exist\n")
+    
+    #we instantiate the path varibale of the database
+    path = Path(operator_database).glob('**/*')
+
+    #we list the operator files
+    operator_files = [x for x in path if x.is_file()]
+
+    #we sort the files according to the operator number
+    operator_files.sort(key=lambda x: int(x.name.split("_")[1]))
+
+    #we check that the id passed as input is valid
+    if type(operator_id) is not int or operator_id<1 or operator_id>len(operator_files):
+        raise ValueError(f"\nThe operator id {operator_id} is not valid, please select an id between 1 and {len(operator_files)} (included)\n")
+    
+    #we read the operator from the file corresponding to the given id and we return it (-1 because the counting starts from 1, not 0)
+    return Operator_from_file(operator_files[operator_id-1].as_posix())
+
+
 ###################### Execution of the Program as Main ############################
 
 #we add the possibility to call the program as main, and in doing so create the database of operators
@@ -701,7 +772,7 @@ if __name__ == "__main__":
         try:
             max_n = int(sys.argv[1])
         except ValueError:
-            print(f"\nSpecified maximum number of indices (for V and A case)was max_n = {sys.argv[1]}, as it cannot be casted to int we proceed with max_n={max_n}\n")
+            print(f"\nSpecified maximum number of indices (for V and A case) was max_n = {sys.argv[1]}, as it cannot be casted to int we proceed with max_n = {max_n}\n")
 
     #the folder where we will store the operators is
     operator_folder = "operator_database"
