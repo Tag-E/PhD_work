@@ -34,6 +34,7 @@ import numpy as np #to handle matrices
 import h5py as h5 #to read the correlator
 from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
+import json #to store parameters file
 
 
 
@@ -101,8 +102,9 @@ class bulding_block:
     def __init__(self, #bb_folder: str,
                  p3_folder:str, p2_folder: str,
                  tag_3p:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
-                 T_to_remove_list:list[int]=[12],
-                 maxConf:int|None=None, force_2preading:bool=False, skip3p=False, verbose:bool=False) -> None:
+                 fast_data_folder:str='fast_data', force_reading:bool=False,
+                 T_to_remove_list:list[int]=[12], skip3p:bool=False, 
+                 maxConf:int|None=None, verbose:bool=False) -> None:
         
         """
         Initialization of the class used to read and perform analysis routines on a 3point correlator, for a given T, and on to the realated 2p correlator
@@ -113,8 +115,11 @@ class bulding_block:
             - tag_3p: tag of the 3-point correlator
             - hadron: hadron type we want to read from the dataset (for both 3-points and 2-points)
             - tag_2p: tag of the 2-points correlator
+            - fast_data_folder: str, the path to the folder where the dataset gets saved in a reduced format suitable for fast access
+            - force_reading: bool, if True the correlators will be read from the complete dataset even if a fast access dataset is available
+            - T_to_remove_list: list of the times T (hence 3 point correlators) for which the reading can be avoided
+            - skip3p: bool, if True the reading of the 3 point correlators is skipped alltogether
             - maxConf: maximum number of configuration to be red
-            - force_2preading: bool, if True the 2-points correlator are red again even if they can be retrieved from the previous class instance
             - verbose: bool, if True info print are provided while the class instance is being constructed
 
         Output:
@@ -152,6 +157,11 @@ class bulding_block:
         #from that we obtain the paths of the folders containing the different building blocks
         self.bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
 
+
+        #Info Print
+        if verbose:
+            print("\nReading the the keys of the dataset ...\n")
+
         
         ## Then we look into the first 3p folder to see how many configurations we have
 
@@ -160,18 +170,18 @@ class bulding_block:
 
         #Path file to the data folder
         p = Path(bb_folder).glob('**/*')
-        files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
+        files_3p = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
 
 
         #we store the number of configurations into a class variable (nconf is given by the number of data files in the given folder)
         #if maxConf is not specified we take all the configurations, otherwise we read a smaller amount
-        if maxConf is None or maxConf > len(files):
-            self.nconf = len(files)
+        if maxConf is None or maxConf > len(files_3p):
+            self.nconf = len(files_3p)
         else:
             self.nconf = maxConf
 
         #we store the list with all the configuration names
-        self.conflist = [file.name for file in files]
+        self.conflist = [file.name for file in files_3p]
 
 
         ## Now looking only at the first configuration of the first 3p file we read the keys of the h5 file structure
@@ -216,64 +226,14 @@ class bulding_block:
         self.ndstructures = len(self.dstructure_list)
 
 
-        ## Now we loop 3p files and over the configurations and we convert the nconf h5 files into a single dictionary
-
-        #we instantiate a dict for the 3p correlators
-        self.bb_array_dict = {}
-
-        #we loop over the files
-        for iT, T in enumerate(self.T_list):
-
-
-            #info print
-            if verbose:
-                print(f"\n3 Points Correlators, T = {T}: looping over the configurations to read the building blocks from the h5 files...\n")
-
-            #we select the file we have to read
-            bb_folder = self.bb_pathList[iT]
-
-            #Path file to the data folder
-            p = Path(bb_folder).glob('**/*')
-            files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
-
-            #we initialize the np array with the building blocks (for the three-point correlators)
-            bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, T+1),dtype=complex)
-
-            #we select the momentum we want to read
-            momentum = self.momentum+f'_T{T}'
-
-            #we skip the reading of the 3point if the user asks for it
-            if skip3p==False:
-
-                #we loop over the configurations
-                for iconf, file in enumerate(tqdm(files[:self.nconf])):
-
-                    #we open the h5 file corresponding too the current configuration
-                    with h5.File(bb_folder+file.name, 'r') as h5f:
-
-                        #id of the given configuration (this is equal to firstconf)
-                        cfgid = list(h5f.keys())[0]
-
-                        #we loop over the keys that have not been set:
-                        for iq, qcontent in enumerate(self.qcontent_list):
-                            for idisp, displacement in enumerate(self.displacement_list):
-                                for idstruct, dstructure in enumerate(self.dstructure_list):
-
-                                    #we read the building block and store it in the np array
-                                    bb_array[iconf, iq, idisp, idstruct] = h5f[f"{cfgid}/{self.tag_3p}/{self.smearing}/{self.mass}/{self.hadron}/{qcontent}/{momentum}/{displacement}/{dstructure}/{self.insmomentum}"] #TO DO: conf index last
-
-            #we store the 3p correlators in a dict of the type T:3p_corr
-            self.bb_array_dict[T] = bb_array[:]
-
-
-        ## To read the 2 point functions, we look at the available keys first
+        ## We do the same thing for the 2 point function, and to read it later we first look now at the available keys
 
         #we store the folder for later use
         self.p2_folder = p2_folder
 
         #Path file to the data folder
         p = Path(p2_folder).glob('**/*')
-        files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
+        files_2p = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
 
         #TO DO: add consistency check between the ids list of the 3p function and the ids list of the 2p functions and raise error if they do not match
 
@@ -283,7 +243,7 @@ class bulding_block:
         self.momentum_2p = self.momentum
 
         #we open the first configuration just to read the lenght of the lattice
-        firstconf = [file.name for file in files][0]
+        firstconf = files_2p[0].name
         with h5.File(p2_folder+firstconf, 'r') as h5f:
 
             #id of the given configuration (this is equal to firstconf)
@@ -296,27 +256,150 @@ class bulding_block:
             self.latticeT = len(h5f[cfgid][tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p])
         
 
-        #we can now initialize the np array with the 2 point correlators
-        self.p2_corr = np.zeros(shape=(self.nconf, self.latticeT),dtype=complex)
+        ## We perform an extra check on the ids of the configuration to be sure that they are the same for the 2 point and the 3 point correlators
+
+        #we first grep the ids of 2 and 3 point correlators
+        ids_2p = [file.name.split("/")[-1].split(".")[1] for file in files_2p]
+        ids_3p = [file.name.split("/")[-1].split(".")[1] for file in files_2p]
+
+        #we raise an error if the configuration ids are not equal for 2 point and 3 point correlators
+        if ids_2p != ids_3p:
+            raise RuntimeError(f"\nAchtung: the 2 point and 3 point correlators in the dataset do not have the same configuration ids.\n2 point ids: {ids_2p}\n3 point ids: {ids_2p}\n")
 
 
-        ## Now we now read the 2p correlator
+        ## We now decide whether we can avoid reading the whole dataset by looking into the fast acces folder
 
-        #we loop over the configurations
-        for iconf, file in enumerate(tqdm(files[:self.nconf])):
+        #first we construct a dictionary with all the parameters related to this particular reading
+        self.params_dict = {'p3_folder': self.p3_folder, 'p2_folder': self.p2_folder,
+                       'nconf': self.nconf, 'T_to_remove_list': T_to_remove_list, 'skip3p': skip3p, 
+                       'tag_3p': self.tag_3p, 'smearing': self.smearing, 'mass': self.mass, 'hadron': self.hadron, 'momentum': self.momentum, 'insmomentum': self.insmomentum,
+                       'tag_2p': self.tag_2p, 'momentum_2p': self.momentum_2p
+                       }
+        
+        #the name of the files where we store params, p2_corr and p3_corr are
+        self.params_file_name = "params"
+        self.p2corr_file_name = "p2_corr"
+        self.p3corr_file_prefix = "p3_corr"
 
-            #we open the h5 file corresponding too the current configuration
-            with h5.File(p2_folder+file.name, 'r') as h5f:
+        #we store also the folder where we are going to save the fast acces dataset
+        self.fast_data_folder = fast_data_folder
+        
+        #Case 1: all the conditions to avoid reading from the whole dataset are met
+        if  force_reading==False  and  Path(f"{fast_data_folder}/{self.params_file_name}.json").exists()  and  self.params_dict==json.loads(open(f"{fast_data_folder}/{self.params_file_name}.json").read()) :
+            
+            #info print
+            if verbose:
+                print("\nReading the 2 point and 3 point correlators from the fast acces dataset ...\n")
 
-                #id of the given configuration (this is equal to firstconf)
-                cfgid = list(h5f.keys())[0]
+            #we read the 3 point correlators in the fast way
 
-                #we read the 2-point correlator
-                self.p2_corr[iconf] = h5f[f"{cfgid}/{self.tag_2p}/{self.smearing}/{self.mass}/{self.hadron}/{self.momentum_2p}"]
+            #we instantiate a dict for the 3p correlators
+            self.bb_array_dict = {}
+
+            #we loop over the source-sink separations T (loop over the different 3 points correlators)
+            for iT, T in enumerate(self.T_list):
+
+                #we read the 3 point correlators
+                self.bb_array_dict[T] = np.load(f"{fast_data_folder}/{self.p3corr_file_prefix}_T{T}.npy")
+
+
+            #we read the 2 point correlator in the fast way
+            self.p2_corr = np.load(f"{fast_data_folder}/{self.p2corr_file_name}.npy")
+
+        #Case 2: not all the conditions are met and we have to read again from the main dataset
+        else:
+
+            #info print
+            if verbose:
+                print("\nReading the 2 point and 3 point correlators from the complete dataset ...\n")
+
+            ## Now we loop 3p files and over the configurations and we convert the nconf h5 files into a single dictionary
+
+            #we instantiate a dict for the 3p correlators
+            self.bb_array_dict = {}
+
+            #we loop over the files
+            for iT, T in enumerate(self.T_list):
+
+
+                #info print
+                if verbose:
+                    print(f"\n3 Points Correlators, T = {T}: looping over the configurations to read the building blocks from the h5 files...\n")
+
+                #we select the file we have to read
+                bb_folder = self.bb_pathList[iT]
+
+                #Path file to the data folder
+                p = Path(bb_folder).glob('**/*')
+                files_3p = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
+
+                #we initialize the np array with the building blocks (for the three-point correlators)
+                bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, T+1),dtype=complex)
+
+                #we select the momentum we want to read
+                momentum = self.momentum+f'_T{T}'
+
+                #we skip the reading of the 3point if the user asks for it
+                if skip3p==False:
+
+                    #we loop over the configurations
+                    for iconf, file in enumerate(tqdm(files_3p[:self.nconf])):
+
+                        #we open the h5 file corresponding too the current configuration
+                        with h5.File(bb_folder+file.name, 'r') as h5f:
+
+                            #id of the given configuration (this is equal to firstconf)
+                            cfgid = list(h5f.keys())[0]
+
+                            #we loop over the keys that have not been set:
+                            for iq, qcontent in enumerate(self.qcontent_list):
+                                for idisp, displacement in enumerate(self.displacement_list):
+                                    for idstruct, dstructure in enumerate(self.dstructure_list):
+
+                                        #we read the building block and store it in the np array
+                                        bb_array[iconf, iq, idisp, idstruct] = h5f[f"{cfgid}/{self.tag_3p}/{self.smearing}/{self.mass}/{self.hadron}/{qcontent}/{momentum}/{displacement}/{dstructure}/{self.insmomentum}"] #TO DO: conf index last
+
+                #we store the 3p correlators in a dict of the type T:3p_corr
+                self.bb_array_dict[T] = bb_array[:]
 
 
 
+            ## Now we now read the 2p correlator
 
+            #we initialize the np array with the 2 point correlators
+            self.p2_corr = np.zeros(shape=(self.nconf, self.latticeT),dtype=complex)
+
+            #we loop over the configurations
+            for iconf, file in enumerate(tqdm(files_2p[:self.nconf])):
+
+                #we open the h5 file corresponding too the current configuration
+                with h5.File(p2_folder+file.name, 'r') as h5f:
+
+                    #id of the given configuration (this is equal to firstconf)
+                    cfgid = list(h5f.keys())[0]
+
+                    #we read the 2-point correlator
+                    self.p2_corr[iconf] = h5f[f"{cfgid}/{self.tag_2p}/{self.smearing}/{self.mass}/{self.hadron}/{self.momentum_2p}"]
+
+
+            ## We now store the reduced database into a folder for later use (to have a faster access to the data)
+
+            #we store the variable where we want the fast data to be saved
+            self.fast_data_folder = fast_data_folder
+            #we create such folder if it does not exist
+            Path(fast_data_folder).mkdir(parents=True, exist_ok=True)
+
+            #we store the parameter dict into a json file
+            with open(f"{fast_data_folder}/{self.params_file_name}.json", "w") as f:
+                #Write it to file
+                json.dump(self.params_dict, f)
+
+            #we save the 2 point correlator to file
+            np.save(f"{fast_data_folder}/{self.p2corr_file_name}.npy", self.p2_corr)
+
+            #we save the 3 point correlators to file
+            for T, corr in self.bb_array_dict.items():
+                np.save(f"{fast_data_folder}/{self.p3corr_file_prefix}_T{T}.npy", corr)
 
 
 
@@ -379,7 +462,7 @@ class bulding_block:
         #auxiliary lists
         keys = [tag_3p,smearing,mass,hadron,momentum,insmomentum,tag2p]
         keys_list = [self.tag_list, self.smearing_list, self.mass_list, self.hadron_list, self.momentum_list, self.insmomementum_list,self.tag2p_list]
-        keys_name = ['tag 3point','smearing','mass','hadron','momentum','insertion momementum', 'tag 2point']
+        keys_name = ['tag_3p','smearing','mass','hadron','momentum','insmomentum', 'tag_2p']
 
         #flag used to signal an update in the keys
         update=False
@@ -399,11 +482,13 @@ class bulding_block:
                     case 4:
                         self.momentum = k
                         self.momentum_2p = '_'.join(self.momentum.split('_')[:-1])
+                        self.params_dict["momentum_2p"] = self.momentum_2p #we update the dict
                     case 5:
                         self.insmomentum = k
                     case 6:
                         self.tag_2p = k               #TO DO: this case shoulds be treated separately, as in this case only the 2point correlators need to be read again
                 update=True
+                self.params_dict[keys_name[i]] = k #we update the dict
             elif k is not None:
                 raise ValueError(f"Error: {keys_name[i]} not valid (look at the available keys with the print_keys method)")
         
@@ -427,7 +512,7 @@ class bulding_block:
 
                 #Path file to the data folder
                 p = Path(bb_folder).glob('**/*')
-                files = sorted( [x for x in p if x.is_file()] )
+                files_3p = sorted( [x for x in p if x.is_file()] )
 
                 bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, T+1),dtype=complex)
 
@@ -435,7 +520,7 @@ class bulding_block:
                 momentum = self.momentum+f'_T{T}'
 
                 #we loop over the configurations
-                for iconf, file in enumerate(tqdm(files[:self.nconf])):
+                for iconf, file in enumerate(tqdm(files_3p[:self.nconf])):
 
                     #we open the h5 file corresponding too the current configuration
                     with h5.File(bb_folder+file.name, 'r') as h5f:
@@ -463,10 +548,10 @@ class bulding_block:
 
             #Path file to the data folder
             p = Path(self.p2_folder).glob('**/*')
-            files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
+            files_2p = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
 
             #we loop over the configurations
-            for iconf, file in enumerate(tqdm(files[:self.nconf])):
+            for iconf, file in enumerate(tqdm(files_2p[:self.nconf])):
 
                 #we open the h5 file corresponding too the current configuration
                 with h5.File(self.p2_folder+file.name, 'r') as h5f:
@@ -476,6 +561,21 @@ class bulding_block:
 
                     #we read the 2-point correlator
                     self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
+
+
+            ## We also update the reduced database
+
+            #we store the parameter dict into a json file
+            with open(f"{self.fast_data_folder}/{self.params_file_name}.json", "w") as f:
+                #Write it to file
+                json.dump(self.params_dict, f)
+
+            #we save the 2 point correlator to file
+            np.save(f"{self.fast_data_folder}/{self.p2corr_file_name}.npy", self.p2_corr)
+
+            #we save the 3 point correlators to file
+            for T, corr in self.bb_array_dict.items():
+                np.save(f"{self.fast_data_folder}/{self.p3corr_file_prefix}_T{T}.npy", corr)
 
 
 

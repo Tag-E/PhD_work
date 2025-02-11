@@ -78,9 +78,8 @@ class moments_toolkit(bulding_block):
 
     #Initialization function #TO DO; add properly the skip3p option and skipop option
     def __init__(self, p3_folder:str, p2_folder:str,
-                 tag_3p:str='bb',hadron:str='proton_3', tag_2p:str='hspectrum',
-                 maxConf:int|None=None, max_n:int=3, T_to_remove_list:list[int]=[12], plot_folder:str="plots", skip3p=False, skipop=False, verbose:bool=False,
-                 operator_folder="operator_database") -> None:
+                 max_n:int=3, plot_folder:str="plots", skipop:bool=False, verbose:bool=False,
+                 operator_folder="operator_database", **kwargs) -> None:
         
         """
         Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
@@ -88,12 +87,12 @@ class moments_toolkit(bulding_block):
         Input:
             - p3_folder: folder having as sub folders all the folders with the 3-point correlators at different time separations T
             - p2_folder: folder with the 2-point correlators (related to the 3 point ones)
-            - tag_3p: tag of the 3-point correlator
-            - hadron: hadron type we want to read from the dataset (for both 3-points and 2-points)
-            - tag_2p: tag of the 2-points correlator
-            - maxConf: maximum number of configuration to be red
             - max_n: maximum number of indices  of the lattice operators we want to have to deal with (changing this parameter will change the number of available operators)
+            - plot_folder: str, the file path to the folder where the plot will be saved
+            - skipop, bool, if True the creation of the operator list will be avoided
+            - operator_folder: str, the file path to the folder where the operator database is
             - verbose: bool, if True info print are provided while the class instance is being constructed
+            - **kwargs: all the optional argument take as input by the part class building_block
 
         Output:
             - None (an instance of the moments_toolkit class is created)
@@ -105,7 +104,7 @@ class moments_toolkit(bulding_block):
             print("\nInitializing the moments_toolkit class instance...\n")
 
         #we call the initialization of the parent class
-        super().__init__(p3_folder=p3_folder, p2_folder=p2_folder, tag_3p=tag_3p, hadron=hadron, T_to_remove_list=T_to_remove_list, tag_2p=tag_2p, maxConf=maxConf, skip3p=skip3p, verbose=verbose)
+        super().__init__(p3_folder=p3_folder, p2_folder=p2_folder, verbose=verbose, **kwargs)
         
 
 
