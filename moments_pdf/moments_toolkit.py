@@ -32,8 +32,6 @@
 
 ## general libraries
 import numpy as np #to handle matrices
-#import h5py as h5 #to read the correlator
-#from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
 from pylatex import Document, Command, Section, Subsection, Alignat #to produce a pdf documents with catalogue of operators
 from pylatex.utils import NoEscape #also to produce a pdf document
@@ -41,11 +39,9 @@ import subprocess #to open pdf files
 import time #to use sleep and pause the code
 import matplotlib.pyplot as plt #to plot stuff
 from typing import Any, Callable #to use annotations for functions
-import itertools #to cycle through markers
 from scipy.optimize import curve_fit #to extract the mass using a fit of the two point correlator
 import gvar as gv #to handle gaussian variables (library by Lepage: https://gvar.readthedocs.io/en/latest/)
-from itertools import groupby #used in the function checking the equality of elements in a list
-import itertools as it #for fancy iterations #TO DO: adjust imports
+import itertools as it #for fancy iterations (product:to loop over indices; cycle: to cycle over markers; groupby: used to asses the equality of elements in a list)
 
 
 
@@ -112,9 +108,7 @@ class moments_toolkit(bulding_block):
         super().__init__(p3_folder=p3_folder, p2_folder=p2_folder, tag_3p=tag_3p, hadron=hadron, T_to_remove_list=T_to_remove_list, tag_2p=tag_2p, maxConf=maxConf, skip3p=skip3p, verbose=verbose)
         
 
-        ##we store the folder variables
-        #self.p3_folder=p3_folder
-        #self.p2_folder=p2_folder
+
 
         #we store the variable where we want the plots to be saved
         self.plots_folder = plot_folder
@@ -132,45 +126,8 @@ class moments_toolkit(bulding_block):
         #we initialize a list with all the available number of indices
         self.n_list = [i for i in range(2,self.max_n+1)] 
 
-        
-        #First we look into the given p3 folder to see how many different subfolders we have
-
-        ##we take the path of the folders with 3 points correlators subfolder
-        #p = Path(p3_folder)
-        ##we read the avalaible list of time separations T
-        #self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
-        ##we remove the times the user specified
-        #for T_to_remove in T_to_remove_list:
-        #    if T_to_remove in self.T_list:
-        #        self.T_list.remove(T_to_remove)
-        ##from that we obtain the paths of the folders containing the different building blocks
-        #bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
-
-        
-        #We now proceed to produce a  building_block class instance for each one of the times T
-
-        ##we instantiate the list with the building_block class instances
-        #self.bb_list = []
-        #
-        ##we loop over the bb paths available (loop over T)
-        #for i,bb_path in enumerate(bb_pathList):
-        #    #Info Print
-        #    if verbose:
-        #        print(f"\n\nReading data for T = {self.T_list[i]} ...\n")
-        #    self.bb_list.append( bulding_block(bb_path,p2_folder, hadron=hadron, tag_2p= tag_2p, tag=tag_3p, maxConf=maxConf, skip3p=skip3p, verbose=verbose) )
-
-
-        #We initialize some other class variables
-
-        ##number of configurations
-        #self.nconf = self.bb_list[0].nconf
-
-        #list with operators selected for the analysis, initialized as empty
+        #we initialize as empty the list with operators selected for the analysis
         self.selected_op = []
-
-        ##we store the two point correlator
-        #self.p2_corr = self.bb_list[0].p2_corr
-
 
 
         ##We build the list of all the available operators
@@ -200,19 +157,6 @@ class moments_toolkit(bulding_block):
 
             #to construct the the operators we loop over the related files
             for file in operator_files:
-
-                
-                ##we reconstruct the operator specifics from the file name
-                #_, id, n, X, irrep0, irrep1, block, index_block = file.stem.split('_')
-                #
-                ##we construct the operator
-                #op = Operator(cgmat = np.load(f"{operator_folder}/{file.name}"),
-                #                id = int(id),
-                #                X=X,
-                #                irrep =(int(irrep0), int(irrep1)),
-                #                block=block,
-                #                index_block=index_block
-                #                )
 
                 #we obtain the operator from the file (from its name)
                 op = Operator_from_file(file.as_posix())
@@ -383,7 +327,7 @@ class moments_toolkit(bulding_block):
 
     
     #function used to select which operators we want to study
-    def select_operator(self, *kwarg) -> None:
+    def select_operator(self, *kwarg: int) -> None:
         """
         Function used to select the operators on which perform the analysis.
 
@@ -402,6 +346,12 @@ class moments_toolkit(bulding_block):
 
         #then for every id we append the corresponding operator to the list of chosen ones
         for id in chosen_ids:
+
+            #we perform an input check
+            if type(id) is not int or id>len(self.operator_list) or id<1:
+                raise ValueError(f"\nAchtung: the operator id {id} is not valid, please select an id between 1 and {len(self.operator_list)}\n")
+
+            #we append the operator to the list
             self.selected_op.append(self.operator_list[id-1]) #-1 because in the pdf the numbering starts from 1
 
     
@@ -461,22 +411,16 @@ class moments_toolkit(bulding_block):
         #we initialize the output array with zeros
         R = np.zeros(shape=(nop, self.nconf, nT, maxT+1),dtype=complex) #+1 because tau goes from 0 to T included
 
-        #we now fill the array using the method of the building block class to extract R
-        #we have to loop over the dimensionalities to fill
+        #we now fill the array using the method of the building block class to extract R\
 
         #loop over the selected operators
         for iop,op in enumerate(self.selected_op):
 
-            #we extract the relevant info from the operator
-            #cgmat = op.cgmat #mat with cg coeff
-            #X = op.X # 'V','A' or 'T'
-            #nder = op.nder #number of derivatives in the operators = number of indices -1 (for V and A) or -2 (for T)
 
             #loop over the available times T
             for iT,T in enumerate(self.T_list):
 
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
-                #R[iop,:,iT,:T+1] = self.bb_list[iT].operatorBB(cgmat,X,isospin,nder) #the last axis is padded with zeros
                 R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op) #the last axis is padded with zeros
 
         #before calling the jackknife we add a cast of the ratio to real values #TO DO: check if that is correct
@@ -535,7 +479,7 @@ class moments_toolkit(bulding_block):
             fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
 
             #we cycle on the markers
-            marker = itertools.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
+            marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
 
 
             #we loop over T and each time we add a graph to the plot
@@ -747,6 +691,7 @@ class moments_toolkit(bulding_block):
         """
         Input:
             - 
+
         Output:
             - 
         """
@@ -967,9 +912,6 @@ class moments_toolkit(bulding_block):
 
 
 
-        
-
-
     #function that returns the operator according to the label given in the catalogue #TO DO: add input control
     def get_operator(self, op_number: int) -> Operator:
         """
@@ -980,6 +922,10 @@ class moments_toolkit(bulding_block):
             - an instance of the Operator class with all the specifics of the selected operator
         """
         
+        #we perform an input check
+        if type(op_number) is not int or op_number>len(self.operator_list) or op_number<1:
+            raise ValueError(f"\nAchtung: the operator id {op_number} is not valid, please select an id between 1 and {len(self.operator_list)}\n")
+
         #we just select the right operator and send it back
         return self.operator_list[op_number-1] #-1 because the numbering starts from 1 in the catalogue, not from 0
 
@@ -996,10 +942,10 @@ class moments_toolkit(bulding_block):
 
         #input check
         if type(new_operator) is not Operator:
-            print("\nAchtung: the input must be an instance of the Operator class!\n")
+            raise ValueError("\nAchtung: the input must be an instance of the Operator class!\n")
+        
         #if the input is ok we append the input operator to the list of selected operators
-        else:
-            self.selected_op.append(new_operator)
+        self.selected_op.append(new_operator)
         
         #we return None
         return None
@@ -1452,7 +1398,7 @@ def plot_fit_2pcorr(fit_result,correlator,axs,nstates=2, Ngrad = 30, Nsigma = 2)
     _ = axs.legend()
 
 
-#auxiliary function used to check if all elements in an iterable are equal
+#auxiliary function used to check if all elements in an iterable are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
 def all_equal(iterable):
     """
     Function used to check if all elements in a list are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
@@ -1463,7 +1409,7 @@ def all_equal(iterable):
     Output:
         - True if all elements are equal, False otherwise
     """
-    g = groupby(iterable)
+    g = it.groupby(iterable)
     return next(g, True) and not next(g, False)
 
 #auxiliary class used to fit the two point correlators

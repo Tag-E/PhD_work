@@ -34,7 +34,6 @@ import numpy as np #to handle matrices
 import h5py as h5 #to read the correlator
 from tqdm import tqdm #for a nice view of for loops with loading bars
 from pathlib import Path #to check whether directories exist or not
-#import itertools as it #for fancy iterations
 
 
 
@@ -94,18 +93,9 @@ class bulding_block:
 
     ## Global variable shared by all class instances
 
-    #variables we use to avoid reading multiple times the 2p corr for various class instances
-
-    #folder of the 2p correlators read by the last class instance
-    last_2p_folder = ''
-    #keys of the 2p correlators read by the last class instance
-    last_2p_parms = []
-    #last number of read configurations
-    last_nconf = 0
-    #values of the 2p corr read by the last class instance 
-    last_2p_corr = 0
 
 
+    ## Methods of the class
 
     #Initialization function
     def __init__(self, #bb_folder: str,
@@ -143,37 +133,35 @@ class bulding_block:
             print("\nInitializing the building block class instance...\n")
         
 
-        #First we look into the given p3 folder to see how many different subfolders we have
+        ## First we look into the given p3 folder to see how many different subfolders we have
 
         #we store the three point correlators folder
         self.p3_folder = p3_folder
 
         #we take the path of the folders with 3 points correlators subfolder
         p = Path(p3_folder)
+
         #we read the avalaible list of time separations T
         self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
+
         #we remove the times the user specified
         for T_to_remove in T_to_remove_list:
             if T_to_remove in self.T_list:
                 self.T_list.remove(T_to_remove)
+
         #from that we obtain the paths of the folders containing the different building blocks
         self.bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
 
         
-        #Then we look into the first 3p folder to see how many configurations we have
+        ## Then we look into the first 3p folder to see how many configurations we have
 
         #the folder we want to access for make a first inspection is
         bb_folder = self.bb_pathList[0]
-
-        #we store the folder for later use
-        #self.bb_folder = bb_folder
 
         #Path file to the data folder
         p = Path(bb_folder).glob('**/*')
         files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations according to ascending ids
 
-        #list with all the ids of the configurations (needed later to rearrange the 2point correlators)
-        #cfg_3p = [file.name.split('.')[1] for file in files]
 
         #we store the number of configurations into a class variable (nconf is given by the number of data files in the given folder)
         #if maxConf is not specified we take all the configurations, otherwise we read a smaller amount
@@ -186,13 +174,10 @@ class bulding_block:
         self.conflist = [file.name for file in files]
 
 
-        #Now looking only at the first configuration of the first 3p file we read the keys of the h5 file structure
+        ## Now looking only at the first configuration of the first 3p file we read the keys of the h5 file structure
 
         #first conf is
         firstconf = self.conflist[0]
-
-        #we instantiate the list of times T (read from file, not from the dir name)
-        #self.T_list_fromfile = []
 
         #we open the h5 file corresponding too the first configuration
         with h5.File(bb_folder+firstconf, 'r') as h5f:
@@ -213,9 +198,6 @@ class bulding_block:
             self.dstructure_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]])
             self.insmomementum_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]][self.dstructure_list[0]])
 
-            #we store the time extent of the correlator we have
-            #self.T_list_fromfile.append( len(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]][self.dstructure_list[0]][self.insmomementum_list[0]]) )
-
 
         #we update the momentum list by stripping the T from the string
         self.momentum_list = [mom.split('_T')[0] for mom in self.momentum_list]
@@ -226,7 +208,6 @@ class bulding_block:
         self.mass = self.mass_list[0]
         self.hadron = hadron
         self.momentum = [mom for mom in self.momentum_list if mom.startswith('PX0_PY0_PZ0')][0] #we take the 0 forward momentum as default
-        #self.momentum_prefix = 'PX0_PY0_PZ0'
         self.insmomentum = 'qx0_qy0_qz0' #same for the insertion momentum (this is the only choice available for every other key choice)
 
         #we store the dimensionality of the dimension we have not fixed and that we want to read
@@ -235,7 +216,7 @@ class bulding_block:
         self.ndstructures = len(self.dstructure_list)
 
 
-        #Now we loop 3p files and over the configurations and we convert the nconf h5 files into a single dictionary
+        ## Now we loop 3p files and over the configurations and we convert the nconf h5 files into a single dictionary
 
         #we instantiate a dict for the 3p correlators
         self.bb_array_dict = {}
@@ -285,11 +266,7 @@ class bulding_block:
             self.bb_array_dict[T] = bb_array[:]
 
 
-        #print(self.T_list)
-        #print(self.T_list_fromfile)
-        #return
-
-        #We read the 2 point functions
+        ## To read the 2 point functions, we look at the available keys first
 
         #we store the folder for later use
         self.p2_folder = p2_folder
@@ -298,10 +275,7 @@ class bulding_block:
         p = Path(p2_folder).glob('**/*')
         files = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
 
-        #list with all the ids of the configurations (needed to rearrange the 2point correlators)
-        #cfg_2p = [file.name.split('.')[1] for file in files_2p]
-
-        #we rearrange the files of the 2point correlators to match the order of the three point correlator
+        #TO DO: add consistency check between the ids list of the 3p function and the ids list of the 2p functions and raise error if they do not match
 
         #we store the tag and the momentum used for the two point correlators
         self.tag_2p = tag_2p
@@ -326,45 +300,19 @@ class bulding_block:
         self.p2_corr = np.zeros(shape=(self.nconf, self.latticeT),dtype=complex)
 
 
-        #We now read the 2p correlator, to do so there are two cases:
-        #   1) the same 2p correlator was read the last time the class was called, so we just have to read it from the shared class variable
-        #   2) we have to read another 2p correlator
+        ## Now we now read the 2p correlator
 
-        #so first thing first we check wheteher the 2p corr is different this time or not
+        #we loop over the configurations
+        for iconf, file in enumerate(tqdm(files[:self.nconf])):
 
-        #if all the specifics of the 2pcorr match, and the reading is not forced (case 1)
-        if self.__class__.last_2p_folder==p2_folder and self.__class__.last_2p_parms==[self.tag_2p, self.momentum_2p] and self.__class__.last_nconf==self.nconf and force_2preading==False:
-            #we just copy it
-            self.p2_corr = self.last_2p_corr[:]
-            #info print
-            if verbose:
-                print("\nTwo-point correlators retrieved from previous class instance...\n")
-        #if instead this does not happen (case 2)
-        else:
-            #looping over the configurations we read every 2 point correlators
+            #we open the h5 file corresponding too the current configuration
+            with h5.File(p2_folder+file.name, 'r') as h5f:
 
-            #info print
-            if verbose:
-                print("\nLooping over the configurations to read the 2-point correlators from the h5 files...\n")
+                #id of the given configuration (this is equal to firstconf)
+                cfgid = list(h5f.keys())[0]
 
-            #we loop over the configurations
-            for iconf, file in enumerate(tqdm(files[:self.nconf])):
-
-                #we open the h5 file corresponding too the current configuration
-                with h5.File(p2_folder+file.name, 'r') as h5f:
-
-                    #id of the given configuration (this is equal to firstconf)
-                    cfgid = list(h5f.keys())[0]
-
-                    #we read the 2-point correlator
-                    self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
-
-    
-        #in the end we update the variables shared by all the class instances
-        self.__class__.last_2p_folder = p2_folder
-        self.__class__.last_2p_parms = [self.tag_2p, self.momentum_2p]
-        self.__class__.last_nconf = self.nconf
-        self.__class__.last_2p_corr = self.p2_corr[:]
+                #we read the 2-point correlator
+                self.p2_corr[iconf] = h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]
 
 
 
@@ -386,13 +334,9 @@ class bulding_block:
         print(f"    -smearing: {self.smearing}")
         print(f"    -mass: {self.mass}")
         print(f"    -hadron: {self.hadron}")
-        #print(f"    -qcontent: {self.qcontent}")
         print(f"    -momentum: {self.momentum}")
-        #print(f"    -displacement: {self.displacement}")
-        #print(f"    -dstructure: {self.dstructure}")
         print(f"    -insmomentum: {self.insmomentum}")
         print(f"    -tag_2point: {self.tag_2p}")
-
 
 
         #Then we print the lists with all the available keys
@@ -408,6 +352,7 @@ class bulding_block:
         print(f"insmomementum_list: {self.insmomementum_list}")
         print(f"tag2p_list: {self.tag2p_list}")
 
+        #additional warning message for the user
         print("\nACHTUNG: not every combination of the above keys may be available\n")
 
     
@@ -460,7 +405,7 @@ class bulding_block:
                         self.tag_2p = k               #TO DO: this case shoulds be treated separately, as in this case only the 2point correlators need to be read again
                 update=True
             elif k is not None:
-                print(f"Error: {keys_name[i]} not valid (look at the available keys with the print_keys method)")
+                raise ValueError(f"Error: {keys_name[i]} not valid (look at the available keys with the print_keys method)")
         
         
         #if one of the keys has been updated we reread the h5 files
@@ -471,7 +416,7 @@ class bulding_block:
                 print("\nReading the building blocks from the h5 files according to the new keys...\n")
 
 
-            #this is a copy of the reading procedure from the __init__ function
+            ## this is a copy of the reading procedure from the __init__ function
 
 
             #we loop over the files
@@ -510,7 +455,7 @@ class bulding_block:
                 self.bb_array_dict[T] = bb_array[:]
 
 
-            #same procedure for the 2point correlator, with few adjustments
+            ## same procedure for the 2point correlator, with few adjustments
 
             #info print
             if verbose:
@@ -1017,44 +962,6 @@ class bulding_block:
         #we return the building block as calculated
         return bb_operator
     
-
-    ##function returning the building block of the specified operator
-    #def operatorBB(self, cgmat:np.ndarray, T:int, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
-    #    """
-    #    Input:
-    #        - cgmat: array with n_mu+1 (+2 if X==T) axes encoding the combination of basic operators 
-    #        - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
-    #        - isospin: either 'U', 'D', 'U+D' or 'U-D' (with U and D meaning up and down quark)
-    #        - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
-    #        - normalize: if True then the output is the ratio to the two point function
-    #
-    #    Output:
-    #        - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T))
-    #    """
-    #
-    #    #first thing first we fetch the building block of the basic operators
-    #    bb = self.get_bb(T, X, isospin, n_mu, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
-    #
-    #    #we then compute the total number of indices (of the operators)
-    #    n = n_mu+1 #the number of indices is number of derivatives +1 for V and A case...
-    #    if X=='T':      
-    #        n+=1   #... +2 for the T case
-    #
-    #    #we can then instantiate the ouput array with the right dimensionality
-    #    opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
-    #
-    #    #we now loop over all the possible indices combinations 
-    #    for indices in it.product(range(4),repeat=n):
-    #
-    #        #using the matrix with the cg coefficients related to the operator we construct its building block
-    #        opBB[:,:] += cgmat[indices] * bb[:,:,*indices]
-    #
-    #    #we return the building block of the operator identified by the cgmat passed as input
-    #    return opBB
-
-
-
-
 
 
 ################ Auxiliary Functions ###############################

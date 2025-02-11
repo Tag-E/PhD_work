@@ -69,26 +69,41 @@ class Operator:
             - cgmat: matrix of cg coeff
             - id: the number associated to the operator
             - X: etiher 'V', 'A' or 'T'
-            - irrep: the irrep the operator belongs to
+            - irrep: the irrep the operator belongs to, in the format (int,int) = (dimensionality, index for the given dimensionality)
             - block: the multiplicity of the selected irrep
             - index_block: the index of the operator inside its block
         """
 
+
+        ## We store all the specifics of the operators we want to construct
+
+        #we store the input parameters
         self.cgmat = cgmat[:]
         self.id = id
-        self.K = Kfactor_from_diracO( diracO_from_cgmat(cgmat, X) ) #the kinematic factor (the symbol) associated with the operator
         self.X = X
+        self.irrep = irrep 
+        self.block = block 
+        self.index_block = index_block 
+
+
+        ## We also store specifics fo the operators derived from the input parameters
+
+        #number of indices  and number of derivatives of the operator
         self.n = cgmat.ndim #the number of indices of the operator
-        self.irrep = irrep
-        self.block = block
-        self.index_block = index_block
-        self.C = C_parity(cgmat,X) #the C parity of the operator
-        self.symm = index_symm(cgmat) #the symmetry under index exchange of the operator
-        self.tr = trace_symm(cgmat) #the trace condition of the operator
-        self.O = symO_from_Cgmat(cgmat) #the symbolical expression of the operator
         self.nder = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
         if X=='T':
             self.nder -=1 #..and n derivatives = n indices -2 for X=T
+
+        #symbolic expression of the operator and of its kinematic factor
+        self.O = symO_from_Cgmat(cgmat) #the symbolical expression of the operator
+        self.K = Kfactor_from_diracO( diracO_from_cgmat(cgmat, X) ) #the kinematic factor (the symbol) associated with the operator
+        
+        #symmetry properties of the operator
+        self.C = C_parity(cgmat,X) #the C parity of the operator
+        self.symm = index_symm(cgmat) #the symmetry under index exchange of the operator
+        self.tr = trace_symm(cgmat) #the trace condition of the operator
+        
+        
 
 
     #overwrite of built in print methods
@@ -106,8 +121,7 @@ class Operator:
 
         #input check: the addition is allowed only if the two operators have the same amount of indices and the same X structure
         if self.X != other_operator.X or self.n != other_operator.n:
-            print("\nAchtung: operator addition is allowed only between operator with the same number of indices and with the same X structure\n")
-            return None
+            raise ValueError("\nAchtung: operator addition is allowed only between operator with the same number of indices and with the same X structure\n")
         
         #if the two operators also have the same irrep then the new operator also does
         new_irrep = None
@@ -141,8 +155,7 @@ class Operator:
 
         #input check: the subtraction is allowed only if the two operators have the same amount of indices and the same X structure
         if self.X != other_operator.X or self.n != other_operator.n:
-            print("\nAchtung: operator addition is allowed only between operator with the same number of indices and with the same X structure\n")
-            return None
+            raise ValueError("\nAchtung: operator addition is allowed only between operator with the same number of indices and with the same X structure\n")
         
         #if the two operators also have the same irrep then the new operator also does
         new_irrep = None
@@ -209,8 +222,7 @@ class Operator:
         
         #input check
         if coefficient == 0:
-            print("\nAchtung: cannot divide by 0\n")
-            return None
+            raise ValueError("\nAchtung: cannot divide by 0\n")
         
         #if the input is ok we istantiate the new operator just by changing its cgmat, K and O
         new_op = Operator(cgmat=self.cgmat / coefficient,
