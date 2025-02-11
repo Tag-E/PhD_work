@@ -48,7 +48,7 @@ import itertools as it #for fancy iterations (product:to loop over indices; cycl
 
 ## custom made libraries
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
-from moments_operator import Operator, Operator_from_file #to handle lattice operators
+from moments_operator import Operator, Operator_from_file, make_operator_database #to handle lattice operators
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 
 
@@ -105,8 +105,6 @@ class moments_toolkit(bulding_block):
 
         #we call the initialization of the parent class
         super().__init__(p3_folder=p3_folder, p2_folder=p2_folder, verbose=verbose, **kwargs)
-        
-
 
 
         #we store the variable where we want the plots to be saved
@@ -129,27 +127,39 @@ class moments_toolkit(bulding_block):
         self.selected_op = []
 
 
-        ##We build the list of all the available operators
+        ## We build the list of all the available operators
 
         #To Do: remove this option
         if skipop==False:
 
+            ## First we check that everything is ok with the database passed as input
+
+            #we compute the number elements that should be in the database
+            n_operators = np.sum([6*4**n for n in self.n_list]) # n V, and n A have 4**n operators each, n T has 4**(n+1)
+
+            #we check that the database exists and that it has all the elements it should have, if that is not the case we regenerate the database
+            if Path(operator_folder).is_dir()==False or len([x for x in Path(operator_folder).glob('**/*') if x.is_file()])<n_operators:
+
+                #info print
+                if verbose:
+                    print("\nBuilding the operator database ...\n")
+
+                #we regenerate the opeator database before going on
+                make_operator_database(operator_folder=operator_folder, max_n=max_n, verbose=True)
+
+
+            ## At this point we can go on and read all the operators from the database
+
             #info print
             if verbose:
-                print("\nBuilding the list of all available operators...\n")
+                print("\nReading the list of all the available operators from the database...\n")
 
             #we initialize the list as empty
             self.operator_list: list[Operator] = []
 
             #we also store all the operators in a dict, as to access them using their specifics (the keys of the dict)
             self.operators_dict: dict[Operator] = {}
-
-            #then we check whether the database passed as input exists or not
-            if Path(operator_folder).is_dir()==False:
-                raise ValueError(f"\nInput not valid: the path {operator_folder} does not exist\n")
-            
-            ##TO DO: add check whether folder is empty or has not all operators, make option to create the folder if empty
-    
+                
             #we instantiate the path object related to the folder
             path = Path(operator_folder).glob('**/*')
 
@@ -160,7 +170,7 @@ class moments_toolkit(bulding_block):
             operator_files.sort(key=lambda x: int(x.name.split("_")[1]))
 
             #to construct the the operators we loop over the related files
-            for file in operator_files:
+            for file in operator_files[:n_operators]:
 
                 #we obtain the operator from the file (from its name)
                 op = Operator_from_file(file.as_posix())
