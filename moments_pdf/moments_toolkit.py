@@ -963,6 +963,39 @@ class moments_toolkit(bulding_block):
         
         #we return None
         return None
+    
+    #function used to remove operators from the list of selected operators
+    def deselect_operator(self, old_operator: Operator|None=None) -> None:
+        """
+        Function used to remove an Operator from the list of selected operator (if no argument is passed the list is emptied)
+        
+        Input:
+            - old_operator: the operator already in the list of selected operators that want to be removed (if None all the operators are removed from the list)
+            
+        Output:
+            - None (the list of selected operators gets updated)
+        """
+
+        #we empty the list no input is specified
+        if old_operator is None:
+            self.selected_op = []
+            return None
+
+        #raise an error if the input is specified but it's not of the correct type
+        if type(old_operator) is not Operator:
+            raise ValueError("\nAchtung: the input must be an instance of the Operator class!\n")
+        
+        #if the operator is not in the list we raise an error
+        elif old_operator not in self.selected_op:
+            raise ValueError("\nThe specified operator is not in the list of selected operators, hence it cannot be removed\n")
+        
+        #if an operator is correctly specified we just remove it from the list
+        else:
+            self.selected_op.remove(old_operator)
+            return None
+            
+
+
 
 
 ######################## Auxiliary Functions ##########################

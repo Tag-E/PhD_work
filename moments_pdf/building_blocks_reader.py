@@ -267,7 +267,7 @@ class bulding_block:
             raise RuntimeError(f"\nAchtung: the 2 point and 3 point correlators in the dataset do not have the same configuration ids.\n2 point ids: {ids_2p}\n3 point ids: {ids_2p}\n")
 
 
-        ## We now decide whether we can avoid reading the whole dataset by looking into the fast acces folder
+        ## We now decide whether we can avoid reading the whole dataset by looking into the fast access folder
 
         #first we construct a dictionary with all the parameters related to this particular reading
         self.params_dict = {'p3_folder': self.p3_folder, 'p2_folder': self.p2_folder,
@@ -281,7 +281,7 @@ class bulding_block:
         self.p2corr_file_name = "p2_corr"
         self.p3corr_file_prefix = "p3_corr"
 
-        #we store also the folder where we are going to save the fast acces dataset
+        #we store also the folder where we are going to save the fast access dataset
         self.fast_data_folder = fast_data_folder
         
         #Case 1: all the conditions to avoid reading from the whole dataset are met
@@ -289,7 +289,7 @@ class bulding_block:
             
             #info print
             if verbose:
-                print("\nReading the 2 point and 3 point correlators from the fast acces dataset ...\n")
+                print("\nReading the 2 point and 3 point correlators from the fast access dataset ...\n")
 
             #we read the 3 point correlators in the fast way
 
