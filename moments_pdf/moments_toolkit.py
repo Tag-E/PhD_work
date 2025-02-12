@@ -499,10 +499,20 @@ class moments_toolkit(bulding_block):
                 r = ratio[1:-1]
                 r_err = ratio_err[1:-1]
 
-                #we rescale to the kfactor
+                #we rescale to the kfactor #TO DO: check the kinematics factors
                 if rescale:
-                    mass = self.get_meff()[0]
-                    ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
+                    #mass = self.get_meff()[0]
+                    #mass = self.fit_2pcorr(save=False,show=False).model_average()['est']['E0']
+                    a = 0.1163 #we cheat
+                    hc = 197.327
+                    mp_mev = 1000
+                    mass = mp_mev/hc * a
+                    kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
+                    if np.iscomplex(kin):
+                        kin *= -1j
+                    kin = kin.real
+                    ratio /= kin if kin!=0 else 1
+                    #ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
 
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
