@@ -999,8 +999,9 @@ class bulding_block:
             #for the axial case we have to take the product of each gamma mu with gamma5
             for mu, gamma in enumerate(gamma_mu):
 
-                #we look at what is the result of the product gamma_mu * gamma5 (both in overall sign and in gamma structure)
+                #we look at what is the result of the product gamma_mu * gamma5 (both in overall sign and in gamma structure) #TO DO: check convention: gamma gamma5 or gamma5 gamma ? 
                 sign_result, list_result = gamma_prod( gamma_to_list[gamma], gamma_to_list[gamma5]  )
+                #sign_result, list_result = gamma_prod( gamma_to_list[gamma5], gamma_to_list[gamma]  )
 
                 #from the result about the dirac structure we find the key
                 key = list_to_key(list_result)

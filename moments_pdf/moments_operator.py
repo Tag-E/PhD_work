@@ -103,11 +103,16 @@ class Operator:
         self.symm = index_symm(cgmat) #the symmetry under index exchange of the operator
         self.tr = trace_symm(cgmat) #the trace condition of the operator
         
-        #latex printable strings
-        self.latex_O = str(self.O.simplify(rational=True)).replace('*','').replace('[','^{'+self.X+'}_{').replace(']','}') 
+
+        ## Then we determine latex friendly strings that can be used to print the operator and its kinematic facor
+
+        #we latex adjust the expression for O
+        self.latex_O = str(self.O.simplify(rational=True)).replace('*','').replace('[','^{'+self.X+'}_{').replace(']','}')
+
+        #we do the same thing for the kinematic factor #TO DO: handle long string output
         self.latex_K = str(self.K).replace('**','^').replace('*','').replace('I','i')
-        #if len(op_print>50): #TO DO: handle long string output
-        #we try to use \frac{}{} instead of just a slash
+
+        #we try to substitute a simple slash with \frac{}{} in the kinematic factor
         if '/' in self.latex_K:
             self.latex_K = "\\frac{" + self.latex_K.split('/')[0] + "}{ " + self.latex_K.split('/')[1]  + "}"
 
@@ -356,7 +361,7 @@ def diracO_from_cgmat(cgmat: np.ndarray, X: str) -> sym.core.add.Add:
             gamma_prod = gamma_mu[indices[0]] @ gamma5
             start_ind = 1
         elif X=='T':
-            gamma_prod = gamma_mu[indices[0]] @ gamma_mu[indices[1]] - gamma_mu[indices[1]] @ gamma_mu[indices[0]]
+            gamma_prod = I/2 * ( gamma_mu[indices[0]] @ gamma_mu[indices[1]] - gamma_mu[indices[1]] @ gamma_mu[indices[0]] )
             start_ind = 2
 
         #then we compute the product of all the momenta

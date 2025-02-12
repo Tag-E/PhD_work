@@ -410,7 +410,7 @@ class moments_toolkit(bulding_block):
         maxT = np.max(self.T_list) #this is the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
 
         #we initialize the output array with zeros
-        R = np.zeros(shape=(nop, self.nconf, nT, maxT+1),dtype=complex) #+1 because tau goes from 0 to T included
+        R = np.zeros(shape=(nop, self.nconf, nT, maxT+1),dtype=float) #+1 because tau goes from 0 to T included
 
         #we now fill the array using the method of the building block class to extract R\
 
@@ -422,14 +422,13 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.T_list):
 
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
-                R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op) #the last axis is padded with zeros
 
+                #we have to take the real or imaginary part depending on the kinematic factor #TO DO: check convention for kin factor --> solved: there is an overall i in front of the kinematic factor
+                if I not in op.K.atoms():
+                    R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          
+                else:  
+                    R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).real          #the last axis of R is padded with zeros
 
-        #we cast to real or imaginary depending whether the kinematic factor is real or imaginary
-        if I in op.K.atoms():
-            R = R.imag
-        else:
-            R = R.real
 
         #we perform the jackknife analysis (the observable being the avg over the configuration axis)
         Rmean, Rstd, Rcovmat = jackknife(R, lambda x: np.mean(x,axis=1), jack_axis=1, time_axis=-1)
@@ -489,6 +488,7 @@ class moments_toolkit(bulding_block):
 
                 times = np.arange(-T/2+1,T/2)
 
+                #we grep the interesting part of the array and we ignore the padding along the last axis
                 ratio = Rmean[iop,iT,:T+1]
                 ratio_err = Rstd[iop,iT,:T+1]
                
@@ -983,13 +983,13 @@ class moments_toolkit(bulding_block):
 
 
 #function implementing the jackknife analysis
-def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int=0, time_axis:int=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
+def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int=0, time_axis:int|None=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
     """
     Input:
         - in_array: input array to be jackknifed
         - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
         - jack_axis: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations),
-        - time_axis: axis over to which look for the autocorrelation
+        - time_axis: axis over to which look for the autocorrelation (if None the covariance matrix is not computed)
         - binsize: binning of the jackknife procedure
         - first_conf: index of the first configuration taken into account while performing the jackknife procedure
         - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
@@ -1074,7 +1074,7 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
         for t1 in range(lenT):
             for t2 in range(lenT):
 
-                #we do a little of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
+                #we do a little bit of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
                 s = [slice(None)] * len(np.shape(covmat))
                 axe1 = new_time_axis #position of the first time axis
                 s[axe1] = slice(t1,t1+1)
