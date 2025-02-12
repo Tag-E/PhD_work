@@ -103,14 +103,20 @@ class Operator:
         self.symm = index_symm(cgmat) #the symmetry under index exchange of the operator
         self.tr = trace_symm(cgmat) #the trace condition of the operator
         
-        
+        #latex printable strings
+        self.latex_O = str(self.O.simplify(rational=True)).replace('*','').replace('[','^{'+self.X+'}_{').replace(']','}') 
+        self.latex_K = str(self.K).replace('**','^').replace('*','').replace('I','i')
+        #if len(op_print>50): #TO DO: handle long string output
+        #we try to use \frac{}{} instead of just a slash
+        if '/' in self.latex_K:
+            self.latex_K = "\\frac{" + self.latex_K.split('/')[0] + "}{ " + self.latex_K.split('/')[1]  + "}"
 
 
     #overwrite of built in print methods
     def __repr__(self):
         return str(self.O.simplify(rational=True))
     def __str__(self):
-        return str(self.O.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
+        return self.latex_O
 
 
     #we overload the addition with other operators

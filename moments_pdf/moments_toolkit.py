@@ -50,6 +50,7 @@ import itertools as it #for fancy iterations (product:to loop over indices; cycl
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
 from moments_operator import Operator, Operator_from_file, make_operator_database #to handle lattice operators
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
+from kinematic_data import I #simpy imaginary unit to check whether the 3p correlator is real or imag
 
 
 
@@ -266,28 +267,15 @@ class moments_toolkit(bulding_block):
 
                 #we loop over the operators in the dict
                 for op in self.operators_dict[(n,X)][(irrep,imul)]:
-                    
-                    #we do some string manipulation to obtain a nicer output
-                    op_print = str(op.O.simplify(rational=True)).replace('*','').replace('[','_{').replace(']','}')
 
                     #we append first the operator number (its id)
                     agn.append(r"\text{Operator "+str(op.id)+r"}&\\")
                 
                     #we append the output to the mathematical latex environment
-                    agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(op.index_block,'{'+f"{X}{irrep},{imul}"+'}',op_print))
-
-
-                    #we make a nicer output also for the kinematic factor
-                    K_print = str(op.K).replace('**','^').replace('*','').replace('I','i')
-
-                    #if len(op_print>50): #TO DO: handle long string output
-
-                    #we try to use \frac{}{} instead of just a slash
-                    if '/' in K_print:
-                        K_print = "\\frac{" + K_print.split('/')[0] + "}{ " + K_print.split('/')[1]  + "}"
+                    agn.append(r"\!"*20 + r" O_{}^{} &= {} \\".format(op.index_block,'{'+f"{X}{irrep},{imul}"+'}',op))
 
                     #we append the kinematic factor to the math environment
-                    agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(op.index_block,'{'+f"{X}{irrep},{imul}"+'}',K_print))
+                    agn.append(r"\!"*20 + r" K_{}^{} &= {} \\\\\\".format(op.index_block,'{'+f"{X}{irrep},{imul}"+'}',op.latex_K))
 
                 #we append the math expression to the subsection
                 subsection.append(agn)
@@ -306,7 +294,6 @@ class moments_toolkit(bulding_block):
             print("\nGenerating the operators catalogue ...\n")
 
         #pdf generation
-        #doc.generate_pdf(self.kfact_pdf_folder + '/'  + doc_name, clean_tex=clean_tex)
         doc.generate_pdf(doc_name, clean_tex=clean_tex)
 
         #info print
@@ -400,7 +387,7 @@ class moments_toolkit(bulding_block):
 
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin:str='U-D', component="real") -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self, isospin:str='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
@@ -437,11 +424,12 @@ class moments_toolkit(bulding_block):
                 #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
                 R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op) #the last axis is padded with zeros
 
-        #before calling the jackknife we add a cast of the ratio to real values #TO DO: check if that is correct
-        if component=="real":
-            R = R.real
-        if component=="imag":
+
+        #we cast to real or imaginary depending whether the kinematic factor is real or imaginary
+        if I in op.K.atoms():
             R = R.imag
+        else:
+            R = R.real
 
         #we perform the jackknife analysis (the observable being the avg over the configuration axis)
         Rmean, Rstd, Rcovmat = jackknife(R, lambda x: np.mean(x,axis=1), jack_axis=1, time_axis=-1)
@@ -453,7 +441,7 @@ class moments_toolkit(bulding_block):
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               abs=False, component="real", rescale=False) -> None:
+               abs=False, rescale=False) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -482,7 +470,7 @@ class moments_toolkit(bulding_block):
 
         
         #we first fetch R using the dedicate method
-        R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin,component=component)
+        R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)#,component=component)
 
 
 
@@ -500,17 +488,10 @@ class moments_toolkit(bulding_block):
             for iT, T in enumerate(self.T_list):
 
                 times = np.arange(-T/2+1,T/2)
-                 
-                ratio = R[iop,:,iT,:T+1]
-
-                ratio_err = np.abs(ratio[:,1:-1]).std(axis=0)/np.sqrt(np.shape(ratio)[0]-1)
-                ratio = ratio.mean(axis=0) #mean over cfg axis
 
                 ratio = Rmean[iop,iT,:T+1]
                 ratio_err = Rstd[iop,iT,:T+1]
-                #ratio
-                #ratio = ratio.real #cast to real
-                #ratio = ratio.imag
+               
                 if abs==True:
                     ratio = np.abs(ratio) #TO DO: check this cast
 
@@ -529,7 +510,7 @@ class moments_toolkit(bulding_block):
                 ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, linewidth = 0.3, linestyle='dashed',label=f"T{T}")
                 ax.legend()
 
-                ax.set_title(r"R(T,$\tau$) - Operator " + str(op.id),fontsize=fontsize_title)
+                ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
                 ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
                 ax.set_ylabel('R', fontsize=fontsize_y)
 

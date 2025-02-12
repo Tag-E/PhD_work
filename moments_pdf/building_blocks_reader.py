@@ -624,7 +624,7 @@ class bulding_block:
             #knowing which displacements to use we can now compute the right covariant derivative as follows
 
             #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-            covD_r1_array[:, :, :, :, i] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] #TO DO: add 1/2 factor everywhere
+            covD_r1_array[:, :, :, :, i] = 1/2 * ( bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] )
 
         #we return the right covariant derivative
         return covD_r1_array
@@ -667,7 +667,7 @@ class bulding_block:
             #(in particular for the temporal component the temporal axis has to be shifted by -1 for backward displacement and by +1 for forward displacement)
 
             #smart of way of getting the shift only for i==3
-            covD_l1_array[:, :, :, :, i] = np.roll(bb_array[:, :, idisp1, :, :], shift=-(i//3), axis=-1) - np.roll(bb_array[:, :, idisp2, :, :], shift=i//3, axis=-1) #axis=-1 is the time axis
+            covD_l1_array[:, :, :, :, i] = 1/2 * ( np.roll(bb_array[:, :, idisp1, :, :], shift=-(i//3), axis=-1) - np.roll(bb_array[:, :, idisp2, :, :], shift=i//3, axis=-1) ) #axis=-1 is the time axis
             
 
         #we return the right covariant derivative
@@ -717,7 +717,7 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the right-right covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_r2_array[:, :, :, :, i1, i2] = bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] - bb_array[:, :, idisp3, :, :] + bb_array[:, :, idisp4, :, :] #TO DO: add 1/4 factor everywhere
+                covD_r2_array[:, :, :, :, i1, i2] = 1/4 * ( bb_array[:, :, idisp1, :, :] - bb_array[:, :, idisp2, :, :] - bb_array[:, :, idisp3, :, :] + bb_array[:, :, idisp4, :, :] )
 
         #we return the right-right covariant derivative
         return covD_r2_array
@@ -769,10 +769,10 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the left-left covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_l2_array[:, :, :, :, i1, i2] = np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                covD_l2_array[:, :, :, :, i1, i2] = 1/4 * ( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
                                                      -  np.roll( bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
                                                      -  np.roll( bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
-                                                     +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1)
+                                                     +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
         #we return the left-left covariant derivative
         return covD_l2_array
     
@@ -824,7 +824,7 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the left-left covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_l1_r1_array[:, :, :, :, i1, i2] = -( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                covD_l1_r1_array[:, :, :, :, i1, i2] = - 1/4 * ( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
                                                             -  np.roll( bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
                                                             -  np.roll( bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
                                                             +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
@@ -878,7 +878,7 @@ class bulding_block:
                  #knowing which displacements to use we can now compute the left-left covariant derivative as follows
 
                 #       conf,quarks,dstruct,T,mu            conf,quarks,displacements,dstruct,T
-                covD_r1_l1_array[:, :, :, :, i1, i2] = -( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
+                covD_r1_l1_array[:, :, :, :, i1, i2] = - 1/4 * ( np.roll( bb_array[:, :, idisp1, :, :], shift=shift1, axis=-1) \
                                                              -  np.roll( bb_array[:, :, idisp2, :, :], shift=shift2, axis=-1) \
                                                              -  np.roll( bb_array[:, :, idisp3, :, :], shift=shift3, axis=-1) \
                                                              +  np.roll( bb_array[:, :, idisp4, :, :], shift=shift4, axis=-1) )
@@ -907,18 +907,15 @@ class bulding_block:
 
         #input check on X
         if X not in ['V','A','T']:
-            print("Error: X must be either 'V', 'A' or 'T'")
-            return None
+            raise ValueError("Error: X must be either 'V', 'A' or 'T'")
         
         #input check on isospin
         if isospin not in ['U','D', 'U+D', 'U-D']:
-            print("Error: isospin must be either 'U', 'D', 'U+D' or 'U-D'")
-            return None
+            raise ValueError("Error: isospin must be either 'U', 'D', 'U+D' or 'U-D'")
         
         #input check on n_mu
         if n_mu not in [1,2]:
-            print("Error: n_mu must be either 1 or 2")
-            return None
+            raise ValueError("Error: n_mu must be either 1 or 2")
         
 
         #we fetch the 3p correlator corresponding to the given T
