@@ -125,7 +125,7 @@ class moments_toolkit(bulding_block):
         self.n_list = [i for i in range(2,self.max_n+1)] 
 
         #we initialize as empty the list with operators selected for the analysis
-        self.selected_op = []
+        self.selected_op: list[Operator] = []
 
 
         ## We build the list of all the available operators
@@ -410,7 +410,7 @@ class moments_toolkit(bulding_block):
         maxT = np.max(self.T_list) #this is the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
 
         #we initialize the output array with zeros
-        R = np.zeros(shape=(nop, self.nconf, nT, maxT+1),dtype=float) #+1 because tau goes from 0 to T included
+        R = np.zeros(shape=(nop, self.nconf, nT, maxT+1), dtype=float) #+1 because tau goes from 0 to T included
 
         #we now fill the array using the method of the building block class to extract R\
 
@@ -575,6 +575,75 @@ class moments_toolkit(bulding_block):
 
         #we return S
         return S, Smean, Sstd
+
+
+    #function used to plot S
+    def plot_S(self, tskip:int, isospin:str='U-D', show:bool=True, save:bool=True, figname:str='plotS',
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
+               abs=False, rescale=False) -> None:
+        """
+        Input:
+            - tskip = tau_skip = gap in time when performing the sum of ratios
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+            - show: bool, if True plots are shown to screen
+            - save: bool, if True plots are saved to .png files
+
+        Output:
+            - None (the plots are shown or saved to file)
+        """
+
+        #first thing first we compute S with the fiven t skip 
+        S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
+
+        #we instantiate the figure
+        fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
+
+        #we cycle on the markers
+        #marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
+
+        #we loop over the operators
+        for iop, op in enumerate(self.selected_op):
+
+            #depending on the X structure of the operator we decide in which of the three plots to put it
+            plot_index = self.X_list.index(op.X)
+
+
+            #To Do: adjust kin factor 
+            a = 0.1163 #we cheat
+            hc = 197.327
+            mp_mev = 1000
+            mass = mp_mev/hc * a
+            kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
+            if np.iscomplex(kin):
+                kin *= -1j
+            kin = kin.real
+
+            #we only plot if the kin factor is not 0
+            if kin!=0:
+                
+
+
+                #then we plot it
+                ax[plot_index].errorbar(self.T_list, Smean[iop]/kin,yerr=Sstd[iop]/np.abs(kin), marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
+
+
+        #we set the title of the plot
+        for i,X in enumerate(self.X_list):
+            ax[i].set_title(X)
+            ax[i].set_xlabel('T/a')
+            ax[i].legend()
+
+        ax[0].set_ylabel(r'$S(T, t_{skip}=$' +str(tskip) +r'$)$')
+
+
+        #we save the plot if the user asks for it
+        if save:
+            plt.savefig(f"{self.plots_folder}/{figname}_tskip{tskip}.png")
+
+        #we show the plot if the user asks for it
+        if show:
+            plt.show()
+
 
 
 
@@ -1119,7 +1188,7 @@ def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
         - S: the sum of ratios, with dimensionalities (nop,nconf,nT)
     """
     #then based on the shape of R we instantiate S
-    S = np.zeros(shape=np.shape(Ratios)[:-1], dtype=complex) #shape = (nop, nconf, nT)
+    S = np.zeros(shape=np.shape(Ratios)[:-1], dtype=float) #shape = (nop, nconf, nT)
 
     #we compute S
     for iT,T in enumerate(Tlist):

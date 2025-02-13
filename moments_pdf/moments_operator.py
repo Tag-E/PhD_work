@@ -31,7 +31,6 @@ from pathlib import Path #to check whether directories exist or not (before savi
 import sys #to fetch command line argument
 from tqdm import tqdm #for a nice view of for loops with loading bars
 
-
 ##Persoal Libraries
 from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
 
@@ -52,6 +51,11 @@ from kinematic_data import p_mu, pslash                      #symbols for p_mu a
 from kinematic_data import den                               #symbolic expression of the denominator of the kinematic factor
 from kinematic_data import Gamma_pol                         #symbolic expression of the polarization matrix in Dirac space
 from kinematic_data import Id_4                              #4x4 identity matrix in Dirac space
+
+from kinematic_data import numerics_to_latex_conv #coefficients to latex formula conversion dictionary
+
+## We instantiate a dictionary for numerical coefficients to latex formule convertions
+
 
 
 
@@ -107,7 +111,8 @@ class Operator:
         ## Then we determine latex friendly strings that can be used to print the operator and its kinematic facor
 
         #we latex adjust the expression for O
-        self.latex_O = str(self.O.simplify(rational=True)).replace('*','').replace('[','^{'+self.X+'}_{').replace(']','}')
+        #self.latex_O = str(self.O.simplify(rational=True)).replace('*','').replace('[','^{'+self.X+'}_{').replace(']','}')
+        self.latex_O = latexO_from_diracO(self.O, self.X)
 
         #we do the same thing for the kinematic factor #TO DO: handle long string output
         self.latex_K = str(self.K).replace('**','^').replace('*','').replace('I','i')
@@ -770,6 +775,58 @@ def Operator_from_database(operator_id:int, operator_database:str) -> Operator:
     
     #we read the operator from the file corresponding to the given id and we return it (-1 because the counting starts from 1, not 0)
     return Operator_from_file(operator_files[operator_id-1].as_posix())
+
+
+#function used to construct a latex printable expression of the operator from its symbolical O expression
+def latexO_from_diracO(operatorO: sym.core.add.Add, X:str) -> str:
+    """
+    Function used to convert the symbolical expression of the operator into a latex printable string
+    
+    Input:
+        - operatorO: the symbolical expression of the operator
+        - X: str, either 'V', 'A' or 'T' depending on the structue of the operator
+        
+    Output:
+        - str: the latex printable expression of the input
+    """
+
+    #input check on X
+    if X not in ['V','A','T']:
+        raise ValueError("X must be either 'V', 'A' or 'T'")
+
+    #we instantiate the output string as empty
+    latex_str = r""
+
+    #we loop over all the monomials in the symbolical expression of the operator
+    for i, e in enumerate(sym.Add.make_args(operatorO)):
+
+        #from each monomial we grep the sign, the numerical coefficient and the actual symbol
+        sign = e.as_coeff_mul()[0]
+        coeff = e.as_coeff_mul()[1][0]
+        symbol = e.as_coeff_mul()[1][1]
+
+        #depending on the sign we add "+" or "-" to the output string (we don't add "+" if it's the first character of the string) 
+        if sign==1 and i!=0:
+            latex_str += "+"
+        elif sign == -1:
+            latex_str += "-"
+
+        #if we find the coefficient in the latex conversion dictionary we add its latex printable expression
+        if coeff in numerics_to_latex_conv.keys():
+            latex_str += numerics_to_latex_conv[coeff]
+        #we also take care of integers
+        elif float(coeff) in numerics_to_latex_conv.keys():
+            latex_str += numerics_to_latex_conv[float(coeff)]
+        #otherwise we just add the coefficient as it is
+        else:
+            latex_str += str(coeff)
+        
+        #then we add also the symbol, with some latex friendly adjustments, and we include the X structure of the operator
+        latex_str += str(symbol).replace('[','^{'+X+'}_{').replace(']','}')
+
+    #we return the latex friednly string
+    return latex_str
+
 
 
 ###################### Execution of the Program as Main ############################

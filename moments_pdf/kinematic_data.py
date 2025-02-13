@@ -33,6 +33,7 @@
 import sympy as sym #to handle symbolic computations
 from sympy import I # = imaginary unit
 import numpy as np #to handle just everything
+from math import gcd #to construct the coefficients - latex conversion dict
 
 
 
@@ -123,3 +124,56 @@ pslash_s = sym.Symbol("\cancel{p}")
 
 #denominator appearing in every kinematic factor
 den = 2 * E * sym.trace( Gamma_pol * (-I*pslash + mN*Id_4) ).simplify(rational=True)
+
+
+## We instantiate a dictionary to convert from numerical coefficients to Latex espression (to do so we define some useful functions #TO DO: move this into a  general utility python script
+
+# function used to asses whether an int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
+def is_square(apositiveint:int) -> bool:
+    """
+    Function used to to asses whether the input int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
+    
+    Input:
+        - apositive int: an int bigger than 1
+    
+    Output:
+        - bool: True if the input is a perfect square, False otherwise
+    """
+    
+    #input check
+    if type(apositiveint) is not int or apositiveint<2:
+        raise ValueError("The function checking for the perfect square condition work only with integer numbers bigger than 1!")
+
+    #algorithmic determination of perfect square condition
+    x = apositiveint // 2
+    seen = set([x])
+    while x * x != apositiveint:
+        x = (x + (apositiveint // x)) // 2
+        if x in seen: return False
+        seen.add(x)
+    return True
+
+
+#to generate this dict we use numbers up to this max int
+max_int = 100
+
+#we instantiate the dictionary as empty and we fill it later on (after defining the appropiate function)
+numerics_to_latex_conv = {}
+
+#we fill the dictionary looping over possible values of the numerator and the denominator
+for num in range(1,max_int+1):
+    for den in range(2,max_int+1):
+        
+        #we append the frac num/den if they do not have common divisors
+        if gcd(num,den)==1:
+            numerics_to_latex_conv[num/den] = r"\frac{"+str(num)+r"}{"+str(den)+r"}"
+
+        #we append num/sqrt(den) if the same key is not already there (due to simplification) and if den is not a perfect square
+        if is_square(den) == False and num/np.sqrt(den) not in numerics_to_latex_conv.keys():
+            numerics_to_latex_conv[num/np.sqrt(den)] = r"\frac{"+str(num)+r"}{\sqrt{"+str(den)+r"}}"
+
+    #we also take care of integers
+    if num != 1:
+        numerics_to_latex_conv[num] = r""+str(num)
+    else:
+        numerics_to_latex_conv[num] = r""
