@@ -123,7 +123,7 @@ pslash = np.einsum('ijk,i->jk',gamma_mu,p_mu)
 pslash_s = sym.Symbol("\cancel{p}")
 
 #denominator appearing in every kinematic factor
-den = 2 * E * sym.trace( Gamma_pol * (-I*pslash + mN*Id_4) ).simplify(rational=True)
+den_K = 2 * E * sym.trace( Gamma_pol * (-I*pslash + mN*Id_4) ).simplify(rational=True)
 
 
 ## We instantiate a dictionary to convert from numerical coefficients to Latex espression (to do so we define some useful functions #TO DO: move this into a  general utility python script
@@ -155,7 +155,7 @@ def is_square(apositiveint:int) -> bool:
 
 
 #to generate this dict we use numbers up to this max int
-max_int = 100
+max_int = 1000
 
 #we instantiate the dictionary as empty and we fill it later on (after defining the appropiate function)
 numerics_to_latex_conv = {}

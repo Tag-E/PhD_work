@@ -48,7 +48,7 @@ from kinematic_data import gamma_mu, gamma5                  #gamma matrices in 
 from kinematic_data import p_mu                              #symbolic expression of the momentum
 from kinematic_data import I                                 #complex unit in sympy
 from kinematic_data import p_mu, pslash                      #symbols for p_mu and the contraction p_mu gamma_mu
-from kinematic_data import den                               #symbolic expression of the denominator of the kinematic factor
+from kinematic_data import den_K                             #symbolic expression of the denominator of the kinematic factor
 from kinematic_data import Gamma_pol                         #symbolic expression of the polarization matrix in Dirac space
 from kinematic_data import Id_4                              #4x4 identity matrix in Dirac space
 
@@ -394,10 +394,10 @@ def Kfactor_from_diracO(operator:sym.core.add.Add) -> sym.core.mul.Mul:
     """
 
     #at the numerator of the kin factor there is the following term
-    num =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
+    num_K =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
 
     #we obtain the result as numerator divided by denominator (we explicit the dispersion relation to obtain a nicer output)
-    return (num/den).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2})
+    return (num_K/den_K).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2})
 
 
 
@@ -797,8 +797,17 @@ def latexO_from_diracO(operatorO: sym.core.add.Add, X:str) -> str:
     #we instantiate the output string as empty
     latex_str = r""
 
-    #we loop over all the monomials in the symbolical expression of the operator
-    for i, e in enumerate(sym.Add.make_args(operatorO)):
+    #we fetch the list with all the esymbolical pieces (monoms) appearing in the expression of the operator
+    monoms_list = list ( sym.Add.make_args( operatorO ) )
+
+    #we grep the int corresponding to the combination of indices
+    index_list = [ int(  ''.join( str(monom.as_coeff_mul()[1][1]).replace('O','').replace('[','').replace(']','').replace(' ', '').split(',') ) )  for monom in monoms_list]
+
+    #we sort the terms appearing the symbolic expression of the operators according to the order of their indices
+    monoms_list = [monom for _, monom in sorted(zip(index_list, monoms_list))]
+
+    #then we can loop over all the monomials in the symbolical expression of the operator
+    for i, e in enumerate(monoms_list):
 
         #from each monomial we grep the sign, the numerical coefficient and the actual symbol
         sign = e.as_coeff_mul()[0]
