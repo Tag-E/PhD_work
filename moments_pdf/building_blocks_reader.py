@@ -890,13 +890,12 @@ class bulding_block:
 
 
     #function used to obtain the building block of the relevant operators
-    def get_bb(self, T:int, X:str, isospin:str, n_mu:int, normalize:bool=True) -> np.ndarray:
+    def get_bb(self, T:int, X:str, isospin:str, n_mu:int) -> np.ndarray:
         """
         Input:
             - X: either 'V', 'A' or 'T' (for vector, axial or tensorial operators)
             - isospin: either 'U', 'D', 'U+D' or 'U-D' (with U and D meaning up and down quark)
             - n_mu: the number of mu indices of the operator (either 1 or 2) (the indices after the ones due to the gamma matrices, i.e. the number of covariant derivatives) !!!! TO DO: add support for n_mu=0 
-            - normalize: if True then the output is the ratio giving the matrix element (i.e the 3point correlator divided to the 2point one)
 
         Output:
             - the building block (a np array) of the operator with the features specified in input
@@ -1048,10 +1047,11 @@ class bulding_block:
         #    pass #TO BE IMPLEMENTED
 
         
-        #we normalize the operator if the user requested so (in this case the output will be the ratio giving the matrix element)
-        if normalize==True:
-            for iconf in range(self.nconf):
-                bb_operator[iconf] /= self.p2_corr[iconf,T].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
+        #This was wrong: before this normalization the gauge average should be performed
+        ##we normalize the operator if the user requested so (in this case the output will be the ratio giving the matrix element)
+        #if normalize==True:
+        #    for iconf in range(self.nconf):
+        #        bb_operator[iconf] /= self.p2_corr[iconf,T].real #to obtain the matrix element we have to divide by the 2pcorr computed at the sink position (= to source-sink separation, being the sink at t=0) #TO DO: check cast to real here
 
 
         #to do: reverse index

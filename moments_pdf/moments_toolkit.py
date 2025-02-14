@@ -358,7 +358,7 @@ class moments_toolkit(bulding_block):
     
 
     #function returning the building block of the specified operator
-    def operatorBB(self, T:int, isospin: str, operator: Operator, normalize:bool=True) -> np.ndarray:
+    def operatorBB(self, T:int, isospin: str, operator: Operator) -> np.ndarray:
         """
         Input:
             - T: int, the time separation of the 3-point correlator
@@ -366,11 +366,11 @@ class moments_toolkit(bulding_block):
             - normalize: if True then the output is the ratio to the two point function
 
         Output:
-            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T))
+            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T+1))
         """
 
         #first thing first we fetch the building block of the basic operators
-        bb = self.get_bb(T, operator.X, isospin, operator.nder, normalize=normalize) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+        bb = self.get_bb(T, operator.X, isospin, operator.nder) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
 
         #we can then instantiate the ouput array with the right dimensionality
         opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
@@ -384,6 +384,67 @@ class moments_toolkit(bulding_block):
         #we return the building block of the operator identified by the cgmat passed as input
         return opBB    
 
+
+    #function used to get the 3 point correlation functions related to the selected operators
+    def get_p3corr(self, isospin:str='U-D') -> np.ndarray:
+        """
+        Function used to get the 3 point correlators (the building block, one for each configuration) of the selected operators
+
+        Input:
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+
+        Output:
+            - p3_corr: array with the 3 point correlators of the selected operators, shape = (nop, nconf, nT, maxT+1), dtype=float
+        """
+
+        #input control
+        if isospin not in ['U', 'D', 'U-D', 'U+D']:
+            print("Selected isospin not valid, defaulting to 'U-D'")
+            isospin='U-D'
+
+        #the axis have dimensionalities
+        nop = len(self.selected_op)
+        nT = len(self.T_list)
+        maxT = np.max(self.T_list) #this is the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
+
+        #we initialize the output array with zeros
+        p3_corr = np.zeros(shape=(nop, self.nconf, nT, maxT+1), dtype=float) #+1 because tau goes from 0 to T included
+
+        #we now fill the array using the method of the building block class to extract the combination corresponding to the selected operator
+
+        #loop over the selected operators
+        for iop,op in enumerate(self.selected_op):
+
+
+            #loop over the available times T
+            for iT,T in enumerate(self.T_list):
+
+                #we compute the relevant 3 point correlator (that isthe building block related to the operator under study)
+
+                #we have to take the real or imaginary part depending on the kinematic factor (according to the chosen convention, this 3p corr has to be real or imaginary depending if i*Kinematic_factor is)
+                if I not in op.K.atoms():
+                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          
+                else:  
+                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).real          #the last axis of R is padded with zeros
+
+        #we return the 3 point correlators
+        return p3_corr
+    
+
+    #function used to get the 2 point correlators (with the correct cast)
+    def get_p2corr(self) -> np.ndarray:
+        """
+        Function used to get the 2 point correlators (one for each configuration)
+        
+        Input:
+            - None: every information is stored inside the class
+        
+        Output:
+            - p2_corr: two point correlator, shape = (nconf, latticeT), dtype=float (i.e. they are casted to real numbers)
+        """
+
+        #we just return what we have already stored, just casting it to real
+        return self.p2_corr.real
 
 
     #function used to compute the ratio R(T,tau)
@@ -404,37 +465,26 @@ class moments_toolkit(bulding_block):
             print("Selected isospin not valid, defaulting to 'U-D'")
             isospin='U-D'
 
-        #the axis have dimensionalities
-        nop = len(self.selected_op)
-        nT = len(self.T_list)
-        maxT = np.max(self.T_list) #this is the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
+        #We first take the 3 point and 2 point correlators needed to compute the ratio
+        p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+        p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
-        #we initialize the output array with zeros
-        R = np.zeros(shape=(nop, self.nconf, nT, maxT+1), dtype=float) #+1 because tau goes from 0 to T included
+        #the shape of the ratio is given by (nop, nT, maxT+1), i.e.
+        R_shape = p3_corr[:,0,:,:].shape
 
-        #we now fill the array using the method of the building block class to extract R\
+        #we instantiate the output ratio
+        Rmean = np.zeros(shape=R_shape, dtype=float) 
+        Rstd = np.zeros(shape=R_shape, dtype=float)
+        Rcovmat = np.zeros(shape=R_shape + (R_shape[-1],), dtype=float)
 
-        #loop over the selected operators
-        for iop,op in enumerate(self.selected_op):
+        #we loop over all the T values we have
+        for iT,T in enumerate(self.T_list):
 
-
-            #loop over the available times T
-            for iT,T in enumerate(self.T_list):
-
-                #we compute the ratio R (that is just the building block normalized to the 2 point correlator)
-
-                #we have to take the real or imaginary part depending on the kinematic factor #TO DO: check convention for kin factor --> solved: there is an overall i in front of the kinematic factor
-                if I not in op.K.atoms():
-                    R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          
-                else:  
-                    R[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).real          #the last axis of R is padded with zeros
-
-
-        #we perform the jackknife analysis (the observable being the avg over the configuration axis)
-        Rmean, Rstd, Rcovmat = jackknife(R, lambda x: np.mean(x,axis=1), jack_axis=1, time_axis=-1)
+            #we perform the jackknife analysis (the observable being the ratio we want to compute)
+            Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = jackknife([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), jack_axis_list=[1,0], time_axis=-1)
 
         #we return the ratios just computed and the results of the jackknife analysis
-        return R, Rmean, Rstd, Rcovmat
+        return Rmean, Rstd, Rcovmat
     
 
     #function used to plot the ratio R for all the selected operators
@@ -464,12 +514,11 @@ class moments_toolkit(bulding_block):
 
         #check on the number of selected operators
         if len(self.selected_op)==0:
-            print("\nAchtung: no operator has been selected so no plot will be shown (operators can be selected using the select_operator method)\n")
-            return
+            raise ValueError("\nAchtung: no operator has been selected so no plot will be shown (operators can be selected using the select_operator method)\n")
 
         
         #we first fetch R using the dedicate method
-        R, Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)#,component=component)
+        Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)#,component=component)
 
 
 
@@ -554,7 +603,7 @@ class moments_toolkit(bulding_block):
 
         
         #we first fetch R using the dedicate method
-        R,_,_,_= self.get_R(isospin=isospin) #shape = (nop, nconf, nT, ntau)
+        #R,_,_,_= self.get_R(isospin=isospin) #shape = (nop, nconf, nT, ntau)
 
         #then based on the shape of R we instantiate S
         #S = np.zeros(shape=np.shape(R)[:-1], dtype=complex) #shape = (nop, nconf, nT)
@@ -567,14 +616,31 @@ class moments_toolkit(bulding_block):
         #ratio = ratio.mean(axis=0) #mean over cfg axis
         #ratio = np.abs(ratio)
 
+        #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
+        p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+        p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+
+        #the shape of the ratio is given by (nop, nT), i.e.
+        S_shape =  (len(self.selected_op),  len(self.T_list))
+
+        #we instantiate the output ratio
+        Smean = np.zeros(shape=S_shape, dtype=float) 
+        Sstd = np.zeros(shape=S_shape, dtype=float)
+
         #we compute S for each configuration
-        S = sum_ratios(R,Tlist=self.T_list, tskip=tskip)
+        #S = sum_ratios(R,Tlist=self.T_list, tskip=tskip)
 
         #we compute S with the jackknife
-        Smean, Sstd, _ = jackknife(R, lambda x: np.mean( sum_ratios(x,Tlist=self.T_list, tskip=tskip), axis=1), jack_axis=1, time_axis=None)
+        #Smean, Sstd, _ = jackknife(R, lambda x: np.mean( sum_ratios(x,Tlist=self.T_list, tskip=tskip), axis=1), jack_axis_list=1, time_axis=None) # TO DO: review if the jackknife analysis is correct in this case
+
+        #we loop over all the T values we have
+        for iT,T in enumerate(self.T_list):
+            
+            #we compute S using the jackknife algorithm
+            Smean[:,iT], Sstd[:,iT], _ = jackknife( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), jack_axis_list=[1,0], time_axis=None )
 
         #we return S
-        return S, Smean, Sstd
+        return Smean, Sstd
 
 
     #function used to plot S
@@ -593,7 +659,8 @@ class moments_toolkit(bulding_block):
         """
 
         #first thing first we compute S with the fiven t skip 
-        S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
+        #S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
+        Smean, Sstd = self.get_S(tskip=tskip)  #shapes =  (Nop, NT), (Nop, NT)
 
         #we instantiate the figure
         fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
@@ -620,8 +687,6 @@ class moments_toolkit(bulding_block):
 
             #we only plot if the kin factor is not 0
             if kin!=0:
-                
-
 
                 #then we plot it
                 ax[plot_index].errorbar(self.T_list, Smean[iop]/kin,yerr=Sstd[iop]/np.abs(kin), marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
@@ -633,7 +698,7 @@ class moments_toolkit(bulding_block):
             ax[i].set_xlabel('T/a')
             ax[i].legend()
 
-        ax[0].set_ylabel(r'$S(T, t_{skip}=$' +str(tskip) +r'$)$')
+        ax[0].set_ylabel(r'$\bar{S}(T, t_{skip}=$' +str(tskip) +r'$)$')
 
 
         #we save the plot if the user asks for it
@@ -665,10 +730,10 @@ class moments_toolkit(bulding_block):
         #corr_2p = self.bb_list[0].p2_corr
         #corr_2p = np.abs( self.bb_list[0].p2_corr )
         #corr_2p = self.bb_list[0].p2_corr.real
-        corr_2p = self.p2_corr.real
+        corr_2p = self. get_p2corr()
 
         #we use the jackknife to compute the effective mass (mean and std)
-        meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis=0, time_axis=-1)
+        meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis_list=0, time_axis=-1)
 
         #we determine the time extent of the lattice
         #Tlat = np.shape(meff)[0]
@@ -752,10 +817,10 @@ class moments_toolkit(bulding_block):
 
         #first we recall the two point correlators
         #corr_2p = self.bb_list[0].p2_corr.real
-        corr_2p = self.p2_corr.real
+        corr_2p = self.get_p2corr()
 
         #then we use the jackknife to compute the fit mass and its std
-        mfit, mfit_std , _= jackknife(corr_2p, fit_mass, jack_axis=0, time_axis=None)
+        mfit, mfit_std , _= jackknife(corr_2p, fit_mass, jack_axis_list=0, time_axis=None)
 
         #we return the fit mass and its std
         return mfit, mfit_std
@@ -775,10 +840,10 @@ class moments_toolkit(bulding_block):
             print("\nPreparing the fit for the two point correlator...\n")
 
         #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(self.p2_corr.real, lambda x: np.mean( x, axis=0), jack_axis=0, time_axis=-1)
+        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(self.get_p2corr(), lambda x: np.mean( x, axis=0), jack_axis_list=0, time_axis=-1)
 
         #then we se the jackknife to compute a value of the effective mass (mean, std and cov)
-        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(self.p2_corr.real, effective_mass, jack_axis=0, time_axis=-1) #raw becaus there still are values of the mass that are 0
+        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(self.get_p2corr(), effective_mass, jack_axis_list=0, time_axis=-1) #raw becaus there still are values of the mass that are 0
 
         #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
@@ -898,8 +963,8 @@ class moments_toolkit(bulding_block):
             prior = gv.BufferDict()
 
             #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
-            mfit, mfit_std , _= jackknife(self.p2_corr.real, lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="mass"), jack_axis=0, time_axis=None)
-            Afit, Afit_std , _= jackknife(self.p2_corr.real, lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="amp"), jack_axis=0, time_axis=None)
+            mfit, mfit_std , _= jackknife(self.get_p2corr(), lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="mass"), jack_axis_list=0, time_axis=None)
+            Afit, Afit_std , _= jackknife(self.get_p2corr(), lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="amp"), jack_axis_list=0, time_axis=None)
 
             #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't trust the simple scipy fit
             prior["A0"] = gv.gvar(Afit,Afit_std * fit_doubt_factor)
@@ -1062,13 +1127,16 @@ class moments_toolkit(bulding_block):
 
 
 #function implementing the jackknife analysis
-def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int=0, time_axis:int|None=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
+def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int]=0, time_axis:int|None=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
     """
+    Function implemeneting the Jackknife mean and std estimation. The input array(s) has to match the input required by the observable function. If a list of array is given then also a list of
+    jackknife axis and time axis has to be given.
+
     Input:
-        - in_array: input array to be jackknifed
+        - in_array_list: input array to be jackknifed, or a list containing such arrays
         - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
-        - jack_axis: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations),
-        - time_axis: axis over to which look for the autocorrelation (if None the covariance matrix is not computed)
+        - jack_axis_list: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations) (or a list with such axis for every input array)
+        - time_axis: axis on the output array (i.e. after observable is applyied!!) over to which look for the autocorrelation, (if None the covariance matrix is not computed)
         - binsize: binning of the jackknife procedure
         - first_conf: index of the first configuration taken into account while performing the jackknife procedure
         - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
@@ -1077,52 +1145,62 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
         - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
     """
 
+    #we make a check on the input to asses that the number of input_array, jackknife axes and time_axes is consistend
+    if type(in_array_list) is list and (type(jack_axis_list) is not list or len(in_array_list)!=len(jack_axis_list) ):
+        raise ValueError("The input array is a list, hence also the jackknife axis should be a list and have the same lenght, but that is not the case")
+    
+    #if the given input is just one array and not a list of arrays, then we put it in a list
+    if type(in_array_list) is not list:
+        in_array_list = [in_array_list]
+        jack_axis_list = [jack_axis_list]
+
     #we set last conf to its default value
     if last_conf is None:
-        last_conf = np.shape(in_array)[jack_axis]
+        last_conf = np.shape(in_array_list[0])[jack_axis_list[0]]
 
-    #step 1: creation of the jackknife resamples
-    jack_resamples = np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=jack_axis) for iconf in range(first_conf,last_conf,binsize)] ) #shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
+    #step 1: creation of the jackknife resamples (we create a jack resample for input array in the list)
+    jack_resamples_list = [ np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=jack_axis_list[i]) for iconf in range(first_conf,last_conf,binsize)] ) for i,in_array in enumerate(in_array_list)]#shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
     #print("jack resamples")
-    #print(np.shape(jack_resamples))
+    #for e in jack_resamples_list:
+    #    print(np.shape(e))
 
     #the number of resamples is len(jack_resmaples[0]) or also
     #nresamp = int((last_conf-first_conf)/binsize)
-    nresamp = np.shape(jack_resamples)[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
+    nresamp = np.shape(jack_resamples_list[0])[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
 
     #step 2; for each resample we compute the observable of interest
     #we use the resampled input array to compute the observable we want, and we have nresamp of them
-    obs_resamp = np.asarray( [observable(jack_resamples[i]) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + shape(in_array) - jack_dimension   (jack dimension replaced by replica dimension) (the observable function removes the jackdimension -> jack_resamp[i] has the same shape as in_array)
+    obs_resamp = np.asarray( [observable( *[jack_resamples[i] for jack_resamples in jack_resamples_list] ) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + output_shape
     #print("obs resamples")
     #print(np.shape(obs_resamp))
 
     #step 3: we compute the observable also on the whole dataset
-    obs_total = observable(in_array)                                                                                                                                   #shape = shape(in_array) - jack_dimension (the observable function removes the jackdimension)
+    obs_total = observable(*in_array_list)                                                                                                                                   #shape = output_shape
     #print("obs")
-    #print(np.shape(obs))
+    #print(np.shape(obs_total))
 
     #step4: compute estimate, bias and std according to the jackknife method
     
     #the estimate is the mean of the resamples
-    jack_mean = np.mean(obs_resamp,axis=0) #axis 0 is the resamples one                                                                                         #shape = shape(in_array) - jack_dimension
+    jack_mean = np.mean(obs_resamp,axis=0) #axis 0 is the resamples one                                                                                         #shape = (nresamp,) + output_shape - (nresamp,) = output_shape
     #print("jack mean")
     #print(np.shape(jack_mean))
 
     #the jackknife bias is given by the following formula 
-    bias = (nresamp-1) * (jack_mean - obs_total)                                                                                                                     #shape = shape(in_array) - jack_dimension
+    bias = (nresamp-1) * (jack_mean - obs_total)                                                                                                                     #shape = output_shape
     #print("bias")
     #print(np.shape(bias))
 
     #TO DO: add proper cast to real
 
     #the jack std is given by the following formula
-    obs_std = np.sqrt( (nresamp-1)/nresamp * np.sum( (obs_resamp - jack_mean)**2, axis=0 ) ) #the axis is the resamples one                                        #shape = shape(in_array) - jack_dimension
+    obs_std = np.sqrt( (nresamp-1)/nresamp * np.sum( (obs_resamp - jack_mean)**2, axis=0 ) ) #the axis is the resamples one                                        #shape = (nresamp,) + output_shape - (nresamp,) = output_shape
     #print("obs std")
     #print(np.shape(obs_std))
 
     #to obtain the final estimate we correct the jack mean by the bias
     #obs_mean = jack_mean - bias 
-    obs_mean = obs_total - bias                                                                                                                                  #shape = shape(in_array) - jack_dimension
+    obs_mean = obs_total - bias                                                                                                                                  #shape = output_shape
 
 
     #step 5: covariance matrix computation
@@ -1132,20 +1210,16 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
 
         #to account for the fact that we have removed the jackknife dimension we change the time dimension
 
-        #first we compute the lenght in the time dimension
-        lenT = np.shape(in_array)[time_axis]
+        #first we compute the lenght in the time dimension (by looking at the output array)
+        lenT = np.shape(obs_total)[time_axis]
+
+        #we the instantiate the covariance matrix (we add an extra time dimension so that we can compute the correlation)
+        covmat = np.zeros(shape = np.shape(obs_mean) + (lenT,), dtype=float )
 
         #the time axis is translated to a positive value
         if time_axis<0:
             #time_axis = lenT+time_axis
-            time_axis = len(np.shape(in_array))+time_axis
-
-        #then we check if the time dimension has to be reduced by one (i.e. if the just deleted jack axis causes the time axis to be smaller by 1)
-        if jack_axis < time_axis :
-            new_time_axis = time_axis - 1
-
-        #we the instantiate the covariance matrix
-        covmat = np.zeros(shape = np.shape(obs_mean) + (lenT,), dtype=float )
+            time_axis = len(np.shape(obs_total))+time_axis
 
         #TO DO: add cast to real values before computing covariance matrix
 
@@ -1155,7 +1229,7 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
 
                 #we do a little bit of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
                 s = [slice(None)] * len(np.shape(covmat))
-                axe1 = new_time_axis #position of the first time axis
+                axe1 = time_axis #position of the first time axis
                 s[axe1] = slice(t1,t1+1)
                 axe2 =  len(np.shape(covmat))-1 #because the new time axis is at the end of the array
                 s[axe2] = slice(t2,t2+1)
@@ -1163,8 +1237,8 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
                 #we update the covariance matrix
                 #covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(obs,t1,axis=new_time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(obs,t2,axis=new_time_axis) ), axis=0 ),
                  #                                  [axe1,axe2])
-                covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(jack_mean,t1,axis=new_time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(jack_mean,t2,axis=new_time_axis) ), axis=0 ),
-                                                   [axe1,axe2])
+                covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis+1) - np.take(jack_mean,t1,axis=time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis+1) - np.take(jack_mean,t2,axis=time_axis) ), axis=0 ),
+                                                   [axe1,axe2]) #--> obs_resamp has a +1 because it has the resample dimension at the beginning!
     #if instead there is not a time axis we just send back the std in place of the covmat
     else:
         covmat = obs_std
@@ -1175,27 +1249,53 @@ def jackknife(in_array: np.ndarray, observable: Callable[[], Any], jack_axis:int
 
 
 
+#function used to compute the ratio of the 3 point correlator to the two point correlator
+def ratio_formula( p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int=0) -> np.ndarray:
+    """
+    Function implementing the formula for the ratio of the three point correlator to the two point correalator
+    
+    Input:
+        - p3_corr: the 3 point correlator, i.e the numerator of the ration, with shape (..., nconf, ..., T+1, ...), related to the indices (iconf, tau)
+        - p2_corr: the 2 point correlator, i.e. the denominator of the ratio, with shape (nconf, latticeT)
+        - T: int, the source sink separation related to the p3_corr
+        - gauge_axis: int, the axis of the 3 point corr over which there are the configurations
+        
+    Output:
+        - R(tau): the ratio of the 3 point to the 2 point correlator, with shape (..., ..., T+1, ...)
+    """
+    
+    #First thing first we compute the correlators, and to do so we have to perform the gauge averages
+    C_3pt = np.mean( p3_corr, axis=gauge_axis) 
+    C_2pt = np.mean( p2_corr, axis=0) #the gauge axis is the first one for the 2 point function
+
+    #then we return the ratio according to the formula
+    return C_3pt / C_2pt[T]
+
+
 
 #function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately)
-def sum_ratios(Ratios: np.ndarray, Tlist: list[int], tskip: int) -> np.ndarray:
+def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis=-1) -> np.ndarray:
     """
     Input:
-        - Ratios: the array R, with shape (nop,nconf,nT,max(ntau))
-        - Tlist: a list of all the available T corresponding the third dimensionality
+        - Ratios: the array R, with shape (T+1), as obtained from the ratio formula
+        - T: int, the source sink separation related to the p3_corr
         - tskip: the tau skip used while summing the ratios
 
     Output:
-        - S: the sum of ratios, with dimensionalities (nop,nconf,nT)
+        - S: the sum of ratios, with only one dimension (it's a number)
     """
-    #then based on the shape of R we instantiate S
-    S = np.zeros(shape=np.shape(Ratios)[:-1], dtype=float) #shape = (nop, nconf, nT)
+    ##then based on the shape of R we instantiate S
+    #S = np.zeros(shape=np.shape(Ratios)[:-1], dtype=float) #shape = (nop, nconf, nT)
+    #
+    ##we compute S
+    #for iT,T in enumerate(Tlist):
+    #    S[:,:,iT] = np.sum(Ratios[:,:,iT,tskip:T+1-tskip], axis =-1)
+    #
+    ##we return S
+    #return S
 
-    #we compute S
-    for iT,T in enumerate(Tlist):
-        S[:,:,iT] = np.sum(Ratios[:,:,iT,tskip:T+1-tskip], axis =-1)
-
-    #we return S
-    return S
+    #we implement the fomrula in a fancy way
+    return np.sum( np.take(ratio, range(tskip, T+1-tskip), axis=time_axis) , axis=time_axis) #TO DO: check if also the pace of the sum is tskip (instead of 1 as it is used here)
 
 
 
