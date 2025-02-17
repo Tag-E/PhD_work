@@ -492,7 +492,7 @@ class moments_toolkit(bulding_block):
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               abs=False, rescale=False) -> None:
+               rescale=False) -> None:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -542,9 +542,6 @@ class moments_toolkit(bulding_block):
                 #we grep the interesting part of the array and we ignore the padding along the last axis
                 ratio = Rmean[iop,iT,:T+1]
                 ratio_err = Rstd[iop,iT,:T+1]
-               
-                if abs==True:
-                    ratio = np.abs(ratio) #TO DO: check this cast
 
                 #we discard the endpoints
                 r = ratio[1:-1]
@@ -705,7 +702,7 @@ class moments_toolkit(bulding_block):
             - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
         
         Output:
-            - mat_ele: np array with shape (Nop,), with one value of the matrix element for each operator
+            - mat_ele: np array with shape (Nop, nT-1), with one value of the matrix element for each operator and for each allowed time value
         """
 
         #we first take the correlators we need to compute everything
@@ -713,7 +710,7 @@ class moments_toolkit(bulding_block):
         p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
 
         #we instantiate the output array
-        mat_ele_array = np.zeros(shape=(self.Nop,), dtype=object ) #shape = (Nop,)
+        mat_ele_array = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
 
         #we fill the output array using the formula for the matrix element from S
         for iop in range(self.Nop):
@@ -723,6 +720,10 @@ class moments_toolkit(bulding_block):
 
             #we put them into a gvar variable and store it into the array
             mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
+
+        #if delta=0 is not in the list then we do not have to consider the last time value (there are no allowed values for it, so it is just empty)
+        if 0 not in delta_list:
+            mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
 
         #we return the matrix element array
         return mat_ele_array
@@ -1308,7 +1309,7 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
         - delta_list: list with the deltas to be used in the analysis (for the meaning of tau and delta see the reference paper) 
     
     Output:
-        - mat_ele: float, the value of the matrix element obteined as the average over the possible deltas and tau skip #To DO: implement something more than a plain unweighted average
+        - mat_ele_array: array, with len nT, containing the values of the matrix element obteined as the average over the possible deltas and tau skip #To DO: implement something more than a plain unweighted average
     """
 
     ## First the calculation of the the summed ratios using the formula
@@ -1328,10 +1329,13 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
     ## Then the computation of all the matrix elements (one for each available compination of delta+T, and one for each tau skip)
 
     #we instantiate the list with the allowed matrix elements as empty
-    MatEle_list = []
+    mat_ele_array = np.zeros(shape=(len(T_list),), dtype=float) #shape = (nT,)
 
     #we loop over the source-sink separations T
     for iT, T in enumerate(T_list):
+
+        #we instantiate a tmp list where we store all the matrix elements related to the given T
+        tmp_mat_ele_list = []
 
         #we loopv over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
         for delta in delta_list:
@@ -1343,18 +1347,13 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
                 iT_plus_delta = T_list.index(T + delta)
 
                 #we compute the matrix element as the slope of the summed ratio function
-                MatEle_list.append( (S_list[iT_plus_delta,:] - S_list[iT,:])/delta )
+                tmp_mat_ele_list.append( (S_list[iT_plus_delta,:] - S_list[iT,:])/delta )
 
-    #we convert the matrix element list to an array, shape = (Nallowed, Ntskip), where Nallowed is the number of allowed T,delta combinations
-    MatEle_list = np.asarray( MatEle_list )
+        #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
+        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) #TO DO: check if something better can be done than the plain unweighted average
 
-    ## We now extract one value of the matrix element from all the ones we have computed (this we can do becasue they all relate to the same op and momentum, that is becasue p3_corr has a fixed shape)
-
-    #we just take a simple unweighted average #TO DO: check if something better can be done
-    mat_ele = np.mean(MatEle_list)
-
-    #we return the matrix element just computed
-    return mat_ele
+    #we return the array with the matrix element just computed
+    return mat_ele_array
 
 
 
