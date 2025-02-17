@@ -90,11 +90,11 @@ class Operator:
         self.index_block = index_block 
 
 
-        ## We also store specifics fo the operators derived from the input parameters
+        ## We also store specifics of the operators derived from the input parameters
 
         #number of indices  and number of derivatives of the operator
-        self.n = cgmat.ndim #the number of indices of the operator
-        self.nder = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
+        self.n:int = cgmat.ndim #the number of indices of the operator
+        self.nder:int = self.n-1 #we also store the number of derivatives, which is number of indices -1 for X=V and X=A..
         if X=='T':
             self.nder -=1 #..and n derivatives = n indices -2 for X=T
 
@@ -103,10 +103,12 @@ class Operator:
         self.K = Kfactor_from_diracO( diracO_from_cgmat(cgmat, X) ) #the kinematic factor (the symbol) associated with the operator
         
         #symmetry properties of the operator
-        self.C = C_parity(cgmat,X) #the C parity of the operator
-        self.symm = index_symm(cgmat) #the symmetry under index exchange of the operator
-        self.tr = trace_symm(cgmat) #the trace condition of the operator
+        self.C:int|str = C_parity(cgmat,X) #the C parity of the operator
+        self.symm:str = index_symm(cgmat) #the symmetry under index exchange of the operator
+        self.tr:str = trace_symm(cgmat) #the trace condition of the operator
         
+        #reality of the 3 point correlator related to the operator
+        self.p3corr_is_real:bool = I in self.K.atoms() #according to the chosen convention, if K her is imag then the p3corr is real
 
         ## Then we determine latex friendly strings that can be used to print the operator and its kinematic facor
 
@@ -254,7 +256,7 @@ class Operator:
     
     
     #function used to evaluate the kinematic factor of the operator
-    def evaluate_K(self, m_value:float, E_value:float, p1_value:float ,p2_value:float, p3_value:float) -> float:
+    def evaluate_K(self, m_value:float, E_value:float, p1_value:float ,p2_value:float, p3_value:float) -> complex:
         """
         Function returning the value of the kinematic factor after the input values have been substituted
         
@@ -270,6 +272,32 @@ class Operator:
         
         #we just substitute and send back the numeric value
         return complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))
+    
+
+    #function used to evaluate the kinematic factor of the operator and cast it to a real value (according to the p3 corr)
+    def evaluate_K_real(self, m_value:float, E_value:float, p1_value:float ,p2_value:float, p3_value:float) -> float:
+        """
+        Function returning the value of the kinematic factor after the input values have been substituted (with a proper cast, i.e. we return what is needed to normalize the matrix elements)
+        
+        Input:
+            - m: the value of the mass
+            - E: the value of the energy
+            - p1: the value of the momentum along x
+            - p2: the value of the momentum along y
+            - p3: the value of the momentum along z
+            
+        Output:
+            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression"""
+        
+        #the kinematic factor also wit an i factor is given by
+        kin = 1j * complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))  #this 1j in front comes from the fact that mat_ele = <x> * i K (look reference paper for expalantion)
+
+        #we cast the kinematic factor to a real value (so that casting also correlators we can deal only with real numbers)
+        if self.p3corr_is_real:
+            return kin.real
+        else:
+            return kin.imag
+    
     
     #function used to save the operator in a file
     def save(self, folder:str) -> None:

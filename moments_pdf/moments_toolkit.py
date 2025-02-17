@@ -50,7 +50,6 @@ import itertools as it #for fancy iterations (product:to loop over indices; cycl
 from building_blocks_reader import bulding_block #to read the 3p and 2p correlators
 from moments_operator import Operator, Operator_from_file, make_operator_database #to handle lattice operators
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
-from kinematic_data import I #simpy imaginary unit to check whether the 3p correlator is real or imag
 
 
 
@@ -426,10 +425,10 @@ class moments_toolkit(bulding_block):
                 #we compute the relevant 3 point correlator (that isthe building block related to the operator under study)
 
                 #we have to take the real or imaginary part depending on the kinematic factor (according to the chosen convention, this 3p corr has to be real or imaginary depending if i*Kinematic_factor is)
-                if I not in op.K.atoms():
-                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          
+                if op.p3corr_is_real:
+                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).real          
                 else:  
-                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).real          #the last axis of R is padded with zeros
+                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          #the last axis of R is padded with zeros
 
         #we return the 3 point correlators
         return p3_corr
@@ -559,10 +558,11 @@ class moments_toolkit(bulding_block):
                     hc = 197.327
                     mp_mev = 1000
                     mass = mp_mev/hc * a
-                    kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
-                    if np.iscomplex(kin):
-                        kin *= -1j
-                    kin = kin.real
+                    #kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
+                    #if np.iscomplex(kin):
+                    #    kin *= -1j
+                    #kin = kin.real
+                    kin = op.evaluate_K_real(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0)
                     ratio /= kin if kin!=0 else 1
                     #ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
 
