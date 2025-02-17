@@ -42,6 +42,8 @@ from typing import Any, Callable #to use annotations for functions
 from scipy.optimize import curve_fit #to extract the mass using a fit of the two point correlator
 import gvar as gv #to handle gaussian variables (library by Lepage: https://gvar.readthedocs.io/en/latest/)
 import itertools as it #for fancy iterations (product:to loop over indices; cycle: to cycle over markers; groupby: used to asses the equality of elements in a list)
+from typing import Any #to use annotations for fig and ax
+from matplotlib.figure import Figure #to use annotations for fig and ax
 
 
 
@@ -492,7 +494,7 @@ class moments_toolkit(bulding_block):
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               rescale=False) -> None:
+               rescale=False) -> tuple[Figure, Any]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -506,7 +508,7 @@ class moments_toolkit(bulding_block):
             - markersize: size of the markers on the plot
 
         Output:
-            - None (the function is used just to have the plots with R printed to screen)
+            - fig, ax: the output of the plt.subplots() call, so that the user can modify the figure if he wants to
         """
         
         #input control
@@ -520,7 +522,7 @@ class moments_toolkit(bulding_block):
 
         
         #we first fetch R using the dedicate method
-        Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)#,component=component)
+        Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
 
 
 
@@ -583,6 +585,8 @@ class moments_toolkit(bulding_block):
             if show:
                 plt.show()
 
+        #we return fig and ax
+        return fig, ax
 
     #function used to to compute the sum of ratios S
     def get_S(self, tskip: int, isospin:str='U-D') -> tuple[np.ndarray, float, float]:
@@ -627,7 +631,7 @@ class moments_toolkit(bulding_block):
     #function used to plot S
     def plot_S(self, tskip:int, isospin:str='U-D', show:bool=True, save:bool=True, figname:str='plotS',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               abs=False, rescale=False) -> None:
+               abs=False, rescale=False) -> tuple[Figure, Any]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
@@ -636,7 +640,7 @@ class moments_toolkit(bulding_block):
             - save: bool, if True plots are saved to .png files
 
         Output:
-            - None (the plots are shown or saved to file)
+            - fig, ax: the output of the plt.subplots() call, so that the user can modify the figure if he wants to
         """
 
         #first thing first we compute S with the fiven t skip 
@@ -690,24 +694,32 @@ class moments_toolkit(bulding_block):
         if show:
             plt.show()
 
+        #we return fig and ax
+        return fig, ax
 
 
     #method to extract the matrix element from the summed ratios
-    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3]) -> np.ndarray:
+    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str='U-D') -> np.ndarray:
         """
         Function returning a value of the (unrenormalized) matrix element for each operator, extracting them from the summed ratios S
         
         Input:
             - tskip_list: list of tau skip we want to use in the analysis
             - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
         
         Output:
             - mat_ele: np array with shape (Nop, nT-1), with one value of the matrix element for each operator and for each allowed time value
         """
 
+        #input control
+        if isospin not in ['U', 'D', 'U-D', 'U+D']:
+            print("Selected isospin not valid, defaulting to 'U-D'")
+            isospin='U-D'
+
         #we first take the correlators we need to compute everything
         p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
-        p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
+        p3corr = self.get_p3corr(isospin=isospin) #shape = (Nop, Nconf, NT, maxT+1)
 
         #we instantiate the output array
         mat_ele_array = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
@@ -716,15 +728,15 @@ class moments_toolkit(bulding_block):
         for iop in range(self.Nop):
 
             #we compute mean and std of the matrix element using the jackknife
-            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x,p2_corr=y,T_list=self.T_list,delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
+            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
 
             #we put them into a gvar variable and store it into the array
             mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
 
-        #if delta=0 is not in the list then we do not have to consider the last time value (there are no allowed values for it, so it is just empty)
+        #if delta=0 is not one of the values considered then the last value of T is removed (since it has no allowed value of T+delta)
         if 0 not in delta_list:
             mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
-
+        
         #we return the matrix element array
         return mat_ele_array
 
@@ -1350,7 +1362,7 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
                 tmp_mat_ele_list.append( (S_list[iT_plus_delta,:] - S_list[iT,:])/delta )
 
         #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
-        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) #TO DO: check if something better can be done than the plain unweighted average
+        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done than the plain unweighted average
 
     #we return the array with the matrix element just computed
     return mat_ele_array
@@ -1501,7 +1513,7 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
     #first we compute the len of the array
     len_array = np.shape(in_array)[0]
 
-    #we loop over all the possible plateau lenghts, starting from the biggest possible one and then diminishing it up to a plataeau of len 1
+    #we loop over all the possible plateau lenghts, starting from the biggest possible one and then diminishing it up to a plataeau of len 2
     for len_plat in range(len_array,0,-1):
 
         #then we loop over the possible initial points of the plateau
@@ -1518,13 +1530,13 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
                 plat_value = np.average(plat, weights = np.diag(np.linalg.inv(covmat_plat)), axis=0, keepdims=True) #the weights are the inverse of the sigma squared
 
                 #we see if the chi2 meets the condition
-                if redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig) < chi2_treshold:
+                if redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig) < chi2_treshold: #TO DO: in this case put the value in a list and then at the end of the inner loop search for the better one
 
                     #in that case we return the values of the starting and ending point fo the plateau
                     return start_plateau, start_plateau+len_plat
 
-    #if by the end of the loop the chi2 condition is never met we return the points corresponding to the whole dataset
-    return 0, len_array
+    #if by the end of the loop the chi2 condition is never met (i.e. if len_plat is 1) we return the point corresponding to the middle of the dataset
+    return int(len_array/2), int(len_array/2)+1
 
 
 
