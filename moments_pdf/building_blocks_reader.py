@@ -154,6 +154,10 @@ class bulding_block:
             if T_to_remove in self.T_list:
                 self.T_list.remove(T_to_remove)
 
+
+        #we store the number of source-sink separation values T we are using in the analysis
+        self.nT = len(self.T_list)
+
         #from that we obtain the paths of the folders containing the different building blocks
         self.bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
 

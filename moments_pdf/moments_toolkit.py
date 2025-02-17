@@ -109,7 +109,7 @@ class moments_toolkit(bulding_block):
 
 
         #we store the variable where we want the plots to be saved
-        self.plots_folder = plot_folder
+        self.plots_folder: str = plot_folder
         #we create such folder if it does not exist
         Path(plot_folder).mkdir(parents=True, exist_ok=True)
 
@@ -122,10 +122,13 @@ class moments_toolkit(bulding_block):
             self.max_n = max_n
 
         #we initialize a list with all the available number of indices
-        self.n_list = [i for i in range(2,self.max_n+1)] 
+        self.n_list: list[int] = [i for i in range(2,self.max_n+1)] 
 
         #we initialize as empty the list with operators selected for the analysis
         self.selected_op: list[Operator] = []
+
+        #and we also put the number of selected operators to 0
+        self.Nop: int = 0
 
 
         ## We build the list of all the available operators
@@ -355,6 +358,9 @@ class moments_toolkit(bulding_block):
             #we append the operator to the list
             self.selected_op.append(self.operator_list[id-1]) #-1 because in the pdf the numbering starts from 1
 
+        #we update the number of selected operators
+        self.Nop = len(self.selected_op)
+
     
 
     #function returning the building block of the specified operator
@@ -402,13 +408,11 @@ class moments_toolkit(bulding_block):
             print("Selected isospin not valid, defaulting to 'U-D'")
             isospin='U-D'
 
-        #the axis have dimensionalities
-        nop = len(self.selected_op)
-        nT = len(self.T_list)
-        maxT = np.max(self.T_list) #this is the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
+        #we compute the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
+        maxT = np.max(self.T_list)
 
         #we initialize the output array with zeros
-        p3_corr = np.zeros(shape=(nop, self.nconf, nT, maxT+1), dtype=float) #+1 because tau goes from 0 to T included
+        p3_corr = np.zeros(shape=(self.Nop, self.nconf, self.nT, maxT+1), dtype=float) #+1 because tau goes from 0 to T included
 
         #we now fill the array using the method of the building block class to extract the combination corresponding to the selected operator
 
@@ -448,16 +452,15 @@ class moments_toolkit(bulding_block):
 
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin:str='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self, isospin:str='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
 
         Output:
-            - R(iop,iconf,T,tau): a np array with axis (iop,iconf,T,tau) and shape [n_selected_operators, nconf, n_T, max_T] 
-            - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed on R
-            - Rstd(iop,T,tau): the std reasulting from the jackknife analysis performed on R
-            - Rcovmat(iop,T,tau1, tau2): the whole covariance matrix reasulting from the jackknife analysis performed on R
+            - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
+            - Rstd(iop,T,tau): the std reasulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
+            - Rcovmat(iop,T,tau1, tau2): the whole covariance matrix reasulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
         """
         
         #input control
@@ -513,7 +516,7 @@ class moments_toolkit(bulding_block):
             isospin='U-D'
 
         #check on the number of selected operators
-        if len(self.selected_op)==0:
+        if self.Nop==0:
             raise ValueError("\nAchtung: no operator has been selected so no plot will be shown (operators can be selected using the select_operator method)\n")
 
         
@@ -587,13 +590,15 @@ class moments_toolkit(bulding_block):
     #function used to to compute the sum of ratios S
     def get_S(self, tskip: int, isospin:str='U-D') -> tuple[np.ndarray, float, float]:
         """
+        Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
+
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
             - isospin: either 'U', 'D', 'U-D' or 'U+D'
 
         Output:
-            - S: the sum of ration given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t) (with shape (nop,nconf,nT))
-            - Smean, Sstd: mean and std from jackknife procedure applied on S (with shape (nop, nT))
+            - Smean: the mean resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
+            - Sstd: the std resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
         """
         
         #input control
@@ -601,37 +606,16 @@ class moments_toolkit(bulding_block):
             print("Selected isospin not valid, defaulting to 'U-D'")
             isospin='U-D'
 
-        
-        #we first fetch R using the dedicate method
-        #R,_,_,_= self.get_R(isospin=isospin) #shape = (nop, nconf, nT, ntau)
-
-        #then based on the shape of R we instantiate S
-        #S = np.zeros(shape=np.shape(R)[:-1], dtype=complex) #shape = (nop, nconf, nT)
-
-        #we compute S
-        #for iT,T in enumerate(self.T_list):
-            #S[:,:,iT] = np.sum(R[:,:,iT,tskip:T+1-tskip], axis =-1)
-
-        #ratio = ok.operatorBB(op,'V','U-D',1)
-        #ratio = ratio.mean(axis=0) #mean over cfg axis
-        #ratio = np.abs(ratio)
-
         #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
         p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
         p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
         #the shape of the ratio is given by (nop, nT), i.e.
-        S_shape =  (len(self.selected_op),  len(self.T_list))
+        S_shape =  (self.Nop, self.nT)
 
         #we instantiate the output ratio
         Smean = np.zeros(shape=S_shape, dtype=float) 
         Sstd = np.zeros(shape=S_shape, dtype=float)
-
-        #we compute S for each configuration
-        #S = sum_ratios(R,Tlist=self.T_list, tskip=tskip)
-
-        #we compute S with the jackknife
-        #Smean, Sstd, _ = jackknife(R, lambda x: np.mean( sum_ratios(x,Tlist=self.T_list, tskip=tskip), axis=1), jack_axis_list=1, time_axis=None) # TO DO: review if the jackknife analysis is correct in this case
 
         #we loop over all the T values we have
         for iT,T in enumerate(self.T_list):
@@ -711,6 +695,39 @@ class moments_toolkit(bulding_block):
 
 
 
+    #method to extract the matrix element from the summed ratios
+    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3]) -> np.ndarray:
+        """
+        Function returning a value of the (unrenormalized) matrix element for each operator, extracting them from the summed ratios S
+        
+        Input:
+            - tskip_list: list of tau skip we want to use in the analysis
+            - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
+        
+        Output:
+            - mat_ele: np array with shape (Nop,), with one value of the matrix element for each operator
+        """
+
+        #we first take the correlators we need to compute everything
+        p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
+        p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
+
+        #we instantiate the output array
+        mat_ele_array = np.zeros(shape=(self.Nop,), dtype=object ) #shape = (Nop,)
+
+        #we fill the output array using the formula for the matrix element from S
+        for iop in range(self.Nop):
+
+            #we compute mean and std of the matrix element using the jackknife
+            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x,p2_corr=y,T_list=self.T_list,delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
+
+            #we put them into a gvar variable and store it into the array
+            mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
+
+        #we return the matrix element array
+        return mat_ele_array
+
+
 
     #function to get a value of the mass from the two point function
     def get_meff(self, show:bool=False, save:bool=False, chi2_treshold:float=1.0, zoom:int=0, figname:str='mass_plateau') -> tuple[float, float]:
@@ -727,25 +744,10 @@ class moments_toolkit(bulding_block):
         """
 
         #first we recall the two point correlators
-        #corr_2p = self.bb_list[0].p2_corr
-        #corr_2p = np.abs( self.bb_list[0].p2_corr )
-        #corr_2p = self.bb_list[0].p2_corr.real
-        corr_2p = self. get_p2corr()
+        corr_2p = self. get_p2corr() #the cast to real is done here
 
         #we use the jackknife to compute the effective mass (mean and std)
         meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis_list=0, time_axis=-1)
-
-        #we determine the time extent of the lattice
-        #Tlat = np.shape(meff)[0]
-
-        #we discard the padding coming from the effective_mass function
-        #meff = meff[:-1]
-        #meff_std = meff_std[:-1]
-        #meff_covmat = meff_covmat[:-1,:-1]
-
-
-        #we remove from the effective mass the part that is too noisy (and that leads to a singular covariance matrix) 
-        #(doing so we remove also the padding coming from the effective mass function)
 
         #to remove this problematic part we look for the first time the std is 0
         cut=np.where(meff_std<=0)[0][0]
@@ -765,8 +767,6 @@ class moments_toolkit(bulding_block):
         meff_plat = np.mean(meff[start_plateau:end_plateau])
         #its std is given by sqrt of sum variance/ N
         meff_plat_std = np.sqrt( np.mean( meff_std[start_plateau:end_plateau]**2 ) )
-
-
 
         #we make a plot 
 
@@ -798,7 +798,6 @@ class moments_toolkit(bulding_block):
             #we show the figure if asked
             if show:
                 plt.show()
-
 
 
         #we return the plateau values
@@ -1085,6 +1084,9 @@ class moments_toolkit(bulding_block):
         
         #if the input is ok we append the input operator to the list of selected operators
         self.selected_op.append(new_operator)
+
+        #we update the number of selected operators
+        self.Nop +=1
         
         #we return None
         return None
@@ -1104,6 +1106,7 @@ class moments_toolkit(bulding_block):
         #we empty the list no input is specified
         if old_operator is None:
             self.selected_op = []
+            self.Nop = 0
             return None
 
         #raise an error if the input is specified but it's not of the correct type
@@ -1117,6 +1120,7 @@ class moments_toolkit(bulding_block):
         #if an operator is correctly specified we just remove it from the list
         else:
             self.selected_op.remove(old_operator)
+            self.Nop -= 1
             return None
             
 
@@ -1127,7 +1131,7 @@ class moments_toolkit(bulding_block):
 
 
 #function implementing the jackknife analysis
-def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int]=0, time_axis:int|None=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
+def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int|None]=0, time_axis:int|None=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> list[np.ndarray]:
     """
     Function implemeneting the Jackknife mean and std estimation. The input array(s) has to match the input required by the observable function. If a list of array is given then also a list of
     jackknife axis and time axis has to be given.
@@ -1250,7 +1254,7 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
 
 
 #function used to compute the ratio of the 3 point correlator to the two point correlator
-def ratio_formula( p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int=0) -> np.ndarray:
+def ratio_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int=0) -> np.ndarray:
     """
     Function implementing the formula for the ratio of the three point correlator to the two point correalator
     
@@ -1274,32 +1278,87 @@ def ratio_formula( p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int
 
 
 #function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately)
-def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis=-1) -> np.ndarray:
+def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -> np.ndarray:
     """
     Input:
-        - Ratios: the array R, with shape (T+1), as obtained from the ratio formula
+        - ratio: the arrays R, with a generic shape, as obtained from the ratio formula
         - T: int, the source sink separation related to the p3_corr
-        - tskip: the tau skip used while summing the ratios
+        - tskip: int, the tau skip used while summing the ratios
+        - time_axis: int, the axis over which the sum should be performed (the tau axis)
 
     Output:
         - S: the sum of ratios, with only one dimension (it's a number)
     """
-    ##then based on the shape of R we instantiate S
-    #S = np.zeros(shape=np.shape(Ratios)[:-1], dtype=float) #shape = (nop, nconf, nT)
-    #
-    ##we compute S
-    #for iT,T in enumerate(Tlist):
-    #    S[:,:,iT] = np.sum(Ratios[:,:,iT,tskip:T+1-tskip], axis =-1)
-    #
-    ##we return S
-    #return S
 
-    #we implement the fomrula in a fancy way
+    #we implement the formula for the sum of rations in a fancy way (so that we can index the right dimension without knowing how many other dimensions there are)
     return np.sum( np.take(ratio, range(tskip, T+1-tskip), axis=time_axis) , axis=time_axis) #TO DO: check if also the pace of the sum is tskip (instead of 1 as it is used here)
 
 
 
-#function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice) TO DO: double check this function with computations (!!!!)
+#function used to extract the matrix element as the slop of the summed ratio function
+def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3]) -> float:
+    """
+    Function implementing the extraction of the matrix element as the slope of the summed ratios
+    
+    Input:
+        - p3_corr: the 3 point correlator, i.e the numerator of the ration, with shape (Nconf, NT, maxT+1 )
+        - p2_corr: the 2 point correlator, i.e. the denominator of the ratio, with shape (nconf, latticeT)
+        - T_list: int, the lsit with the source sink separation related to the p3_corr
+        - tskip_list: list with the taus to be used in the analysis
+        - delta_list: list with the deltas to be used in the analysis (for the meaning of tau and delta see the reference paper) 
+    
+    Output:
+        - mat_ele: float, the value of the matrix element obteined as the average over the possible deltas and tau skip #To DO: implement something more than a plain unweighted average
+    """
+
+    ## First the calculation of the the summed ratios using the formula
+
+    #we start by instantiatinh the list with the summed ratios we are going to use, shape = (NT, Ntskip)
+    S_list = np.zeros(shape=(len(T_list), len(tskip_list)),  dtype=float)
+
+    #loop over selected tau skip
+    for i_tskip, tskip in enumerate(tskip_list):
+
+        #loop over available source sink seprations T
+        for iT , T in enumerate(T_list):
+
+            #we compute the summed ratio with the formula
+            S_list[iT,i_tskip] = sum_ratios_formula( ratio_formula(p3_corr[:,iT,:], p2_corr, T=T, gauge_axis=1), T, tskip, time_axis=-1)
+
+    ## Then the computation of all the matrix elements (one for each available compination of delta+T, and one for each tau skip)
+
+    #we instantiate the list with the allowed matrix elements as empty
+    MatEle_list = []
+
+    #we loop over the source-sink separations T
+    for iT, T in enumerate(T_list):
+
+        #we loopv over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
+        for delta in delta_list:
+            
+            #a combination T,delta is allowed only if their sum is in the available Ts
+            if T + delta in T_list:
+
+                #we check what is the index of the T we have to consider
+                iT_plus_delta = T_list.index(T + delta)
+
+                #we compute the matrix element as the slope of the summed ratio function
+                MatEle_list.append( (S_list[iT_plus_delta,:] - S_list[iT,:])/delta )
+
+    #we convert the matrix element list to an array, shape = (Nallowed, Ntskip), where Nallowed is the number of allowed T,delta combinations
+    MatEle_list = np.asarray( MatEle_list )
+
+    ## We now extract one value of the matrix element from all the ones we have computed (this we can do becasue they all relate to the same op and momentum, that is becasue p3_corr has a fixed shape)
+
+    #we just take a simple unweighted average #TO DO: check if something better can be done
+    mat_ele = np.mean(MatEle_list)
+
+    #we return the matrix element just computed
+    return mat_ele
+
+
+
+#function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice) TO DO: double check this function with computations (!!!!) #TO DO: remove this function if not used
 def ratio2p_to_mass(ratio2p: float, t: int, T: int, case:int=2, max_it:int=1000) -> float:
     """
     Input:
@@ -1368,7 +1427,7 @@ def effective_mass(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
     """
     Input:
         - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
-        - conf_axis: the axis with the configurations
+        - conf_axis: int, the axis with the configurations
 
     Output:
         - m_eff(t): the effective mass, with shape (Tlat,) (the configuration axis gets removed) (the shape is Tlat and not Tlat-1, so that the jackknife function can be used)
@@ -1392,7 +1451,6 @@ def effective_mass(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
         #then we just need to take the log, but for that the ratio has to be bigger than 1 (??)   (if that does not happen then the mass is set to 0 -> as done in the initialization above)
         if ratio_2p > 1.0:
             meff[t] = np.log( ratio_2p )
-        #meff[t] = ratio2p_to_mass(ratio_2p,t,48)
 
     #we send back the effective mass
     return meff
