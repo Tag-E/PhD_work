@@ -494,7 +494,7 @@ class moments_toolkit(bulding_block):
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               rescale=False) -> tuple[Figure, Any]:
+               rescale=False) -> list[tuple[Figure, Any]]:
         """
         Input:
             - isospin: either 'U', 'D', 'U-D' or 'U+D
@@ -508,7 +508,7 @@ class moments_toolkit(bulding_block):
             - markersize: size of the markers on the plot
 
         Output:
-            - fig, ax: the output of the plt.subplots() call, so that the user can modify the figure if he wants to
+            - fig_ax_list: list with each element being a tuple of the kind (fig, ax), which are the output of the plt.subplots() call, so that the user can modify the figures if he wants to
         """
         
         #input control
@@ -524,6 +524,8 @@ class moments_toolkit(bulding_block):
         #we first fetch R using the dedicate method
         Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
 
+        #wewe instantiate the output list where we will store all the figure and axes
+        fig_ax_list:list[tuple[Figure, Any]]  = []
 
 
         #loop over selected operators (for each we make a plot)
@@ -532,9 +534,11 @@ class moments_toolkit(bulding_block):
             #instantiate figure
             fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
 
+            #we add figure and axes to the output list
+            fig_ax_list.append((fig,ax))
+
             #we cycle on the markers
             marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
-
 
             #we loop over T and each time we add a graph to the plot
             for iT, T in enumerate(self.T_list):
@@ -586,7 +590,7 @@ class moments_toolkit(bulding_block):
                 plt.show()
 
         #we return fig and ax
-        return fig, ax
+        return fig_ax_list
 
     #function used to to compute the sum of ratios S
     def get_S(self, tskip: int, isospin:str='U-D') -> tuple[np.ndarray, float, float]:
@@ -851,11 +855,14 @@ class moments_toolkit(bulding_block):
         if verbose:
             print("\nPreparing the fit for the two point correlator...\n")
 
+        #we first take the 2point corr
+        p2corr = self.get_p2corr()
+
         #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(self.get_p2corr(), lambda x: np.mean( x, axis=0), jack_axis_list=0, time_axis=-1)
+        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(p2corr, lambda x: np.mean( x, axis=0), jack_axis_list=0, time_axis=-1)
 
         #then we se the jackknife to compute a value of the effective mass (mean, std and cov)
-        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(self.get_p2corr(), effective_mass, jack_axis_list=0, time_axis=-1) #raw becaus there still are values of the mass that are 0
+        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(p2corr, effective_mass, jack_axis_list=0, time_axis=-1) #raw becaus there still are values of the mass that are 0
 
         #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
@@ -948,6 +955,10 @@ class moments_toolkit(bulding_block):
 
         ## we now proceed with the proper fit of the two point correlator
 
+        #we construct the resamples for the 2 point correlator
+        p2corr_resamples = jackknife_resamples(p2corr, lambda x: np.mean( x, axis=0), jack_axis_list=0)
+        nres = p2corr_resamples.shape[0]
+
         #we define the parameters of interest
         nstates_list = [1,2] #only 1 or two state fits
         t_start_list = np.arange(start_plateau, int(start_plateau/2), -1)
@@ -975,8 +986,8 @@ class moments_toolkit(bulding_block):
             prior = gv.BufferDict()
 
             #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
-            mfit, mfit_std , _= jackknife(self.get_p2corr(), lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="mass"), jack_axis_list=0, time_axis=None)
-            Afit, Afit_std , _= jackknife(self.get_p2corr(), lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="amp"), jack_axis_list=0, time_axis=None)
+            mfit, mfit_std , _= jackknife(p2corr, lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="mass"), jack_axis_list=0, time_axis=None) #TO DO: have a look at this fit to be sure that it is ok to use it as prior
+            Afit, Afit_std , _= jackknife(p2corr, lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="amp"), jack_axis_list=0, time_axis=None)
 
             #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't trust the simple scipy fit
             prior["A0"] = gv.gvar(Afit,Afit_std * fit_doubt_factor)
@@ -1007,23 +1018,23 @@ class moments_toolkit(bulding_block):
 
                     abscissa                = np.arange(t_start,t_end),
                     
-                    ordinate_est            = np.mean(self.p2_corr.real[:,t_start:t_end], axis = 0),
-                    ordinate_std            = np.std (self.p2_corr.real[:,t_start:t_end], axis = 0),
-                    ordinate_cov            = np.cov (self.p2_corr.real[:,t_start:t_end], rowvar=False),
+                    ordinate_est            = np.mean(p2corr_resamples[:,t_start:t_end], axis = 0), #np.mean(p2corr[:,t_start:t_end], axis = 0),
+                    ordinate_std            = np.sqrt((nres-1)/nres) * np.std(p2corr_resamples[:,t_start:t_end], axis = 0), #np.std (p2corr[:,t_start:t_end], axis = 0),
+                    ordinate_cov            =  (nres-1)/nres * np.cov(p2corr_resamples[:,t_start:t_end], rowvar=False), #np.cov (p2corr[:,t_start:t_end], rowvar=False),
                     
-                    #resample_ordinate_est   = p2corr_resamples[:,t_start:t_end],
-                    #resample_ordinate_std   = np.std (p2corr_resamples[:,t_start:t_end], axis = 0),
-                    #resample_ordinate_cov   = np.cov (p2corr_resamples[:,t_start:t_end], rowvar=False),
+                    resample_ordinate_est   = p2corr_resamples[:,t_start:t_end],
+                    resample_ordinate_std   = np.sqrt((nres-1)/nres) * np.std (p2corr_resamples[:,t_start:t_end], axis = 0),
+                    resample_ordinate_cov   = (nres-1)/nres * np.cov (p2corr_resamples[:,t_start:t_end], rowvar=False),
 
                     # fit strategy, default: only uncorrelated central value fit:
                     central_value_fit            = True,
-                    central_value_fit_correlated = False,
+                    central_value_fit_correlated = True,
 
-                    resample_fit                 = False,
-                    resample_fit_correlated      = False,
+                    resample_fit                 = True,
+                    resample_fit_correlated      = True,
                     
                     resample_fit_resample_prior  = False,
-                    resample_type               = "jkn",
+                    resample_type               = "bst", #"jkn",
 
                     # args for lsqfit:
                     model   = SumOrderedExponentials(nstates),
@@ -1060,6 +1071,241 @@ class moments_toolkit(bulding_block):
 
         #we return the fit state
         return fit_state
+
+
+
+
+    def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=10, tskip_list=[1], show=True, save=True, verbose=False, rescale=True,
+                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8):
+        """
+        Input:
+            - 
+
+        Output:
+            - 
+        """
+
+        #info print
+        if verbose:
+            print("\nPreparing the fit for the ratio of the correlators...\n")
+
+        ## We construct the abscissa for the fit as the list of tuples (T,tau) of values that have a plateau
+
+        #we instantiate the abscissa as an empty list
+        #abscissa = np.empty(shape=(self.Nop,), dtype=list)
+        abscissa_list = []
+
+        #we take the values of R
+        Rmean, Rstd, Rcovmat = self.get_R()
+
+        #we instantiate the dict where we will store the range of the plateaux used to define the abscissa
+        plateau_dict = {}
+
+        for iop,op in enumerate(self.selected_op):
+
+            #abscissa[iop] = []
+            tmp_a = []
+
+            for iT,T in enumerate(self.T_list):
+
+                start_plateau, end_plateau = plateau_search(Rmean[iop,iT,:T+1 ], Rcovmat[iop,iT,:T+1 , :T+1 ], only_sig=False, chi2_treshold=1.0)
+
+                plateau_dict[(iop,iT)] = start_plateau, end_plateau
+
+                for tau in range(start_plateau,end_plateau):
+                    #abscissa[iop].append( (T,tau) )
+                    tmp_a.append( (T,tau) )
+
+            abscissa_list.append( np.asarray(tmp_a) )
+
+        #the number of resamples is given by
+        nres = abscissa_list[0].shape[0]
+
+
+        ## Next we construct the ordinate
+
+        #we take the correlators
+        p3corr = self.get_p3corr() #shape = (Nop, nconf, nT, maxT+1)
+        p2corr = self.get_p2corr()
+
+        #we resample the ratios, len = Nop,, each element with shape = (Nres, Nallowed(T,tau) )
+        ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
+
+
+
+        ## Then the prior construction
+
+        #we use the fit of the 2 point function
+        fit2p_parms = self.fit_2pcorr(show=False,save=False).model_average()
+
+        #from the result of the fit we take the energy
+        #dE = gv.gvar(fit2p_parms['est']['dE1'], fit2p_parms['err']['dE1'])
+
+        #we will use as prior the value extracted from S
+        matele_fromS = self.MatEle_from_S(tskip_list=tskip_list)
+
+        #we instantiate a prior dict for each operator
+        priordict_list = []
+
+        for iop in range(self.Nop):
+
+            #we instantiate the dict
+            prior = gv.BufferDict()
+
+            #we fill it
+            prior["dE"] = gv.gvar(fit2p_parms['est']['dE1'], fit2p_parms['err']['dE1'])
+
+            prior["M"] = np.average(matele_fromS[iop], weights= [ele.sdev**(-2) for ele in matele_fromS[iop]] )
+
+            prior["R1"] = gv.gvar(0,10)
+            prior["R2"] = gv.gvar(0,10)
+            prior["R3"] = gv.gvar(0,10)
+        
+
+        ## Now we are ready to do the fit
+
+        #we instanatiate the states of the fits we want to do (one fit state for each operator)
+        fit_state_list = [ CA.FitState() for iop in range(self.Nop) ]
+
+
+        #for each operator we do a series of fits
+
+        for iop in range(self.Nop):
+
+            #we take the right resampling
+            ratio_res = ratio_resamples_list[iop]
+
+            #we loop over the possible parameters
+            for r2 in [False, True]:
+                for r3 in [False, True]:
+
+
+                    #we do the fit
+                    fit_result = CA.fit(
+
+                        abscissa                = abscissa_list[iop],
+                        
+                        ordinate_est            = np.mean(ratio_res, axis = 0),
+                        ordinate_std            = np.sqrt((nres-1)/nres) * np.std (ratio_res, axis = 0),
+                        ordinate_cov            = (nres-1)/nres * np.cov (ratio_res, rowvar=False),
+                        
+                        resample_ordinate_est   = ratio_res,
+                        resample_ordinate_std   = np.sqrt((nres-1)/nres) * np.std (ratio_res, axis = 0),
+                        resample_ordinate_cov   = (nres-1)/nres * np.cov (ratio_res, rowvar=False),
+
+                        # fit strategy, default: only uncorrelated central value fit:
+                        central_value_fit            = True,
+                        central_value_fit_correlated = True,
+
+                        resample_fit                 = True,
+                        resample_fit_correlated      = True,
+                        
+                        resample_fit_resample_prior  = False,
+                        resample_type               = "bst",#"jkn",
+
+                        # args for lsqfit:
+                        model   = ratio_func_form(r1=True,r2=r2,r3=r3),
+                        prior   = prior,
+                        p0      = None,
+
+                        svdcut  = None,
+                        maxiter = 10_000,
+                    )
+
+                    #we append the fit to the list
+                    fit_state_list[iop].append(fit_result)
+
+
+        if show or save:
+
+            #we first fetch R using the dedicate method
+            Rmean, Rstd, Rcovmat = self.get_R()
+
+            #wewe instantiate the output list where we will store all the figure and axes
+            #fig_ax_list:list[tuple[Figure, Any]]  = []
+            #fig_ax_list = self.plot_R(show=False,save=True) #TO DO: adjust save - show condition in plot_R
+
+
+
+            #loop over selected operators (for each we make a plot)
+            for iop,op in enumerate(self.selected_op):
+                
+
+                
+                
+                
+                #fit avg results
+                avg_result = fit_state_list[iop].model_average()
+                dE = gv.gvar(avg_result["est"]['dE'], avg_result["err"]['dE'])
+                matele = gv.gvar(avg_result["est"]['M'], avg_result["err"]['M'])
+                R1 = gv.gvar(avg_result["est"]['R1'], avg_result["err"]['R1'])
+                R2 = gv.gvar(avg_result["est"]['R2'], avg_result["err"]['R2'])
+                R3 = gv.gvar(avg_result["est"]['R3'], avg_result["err"]['R3'])
+
+                post_dict = {key:gv.gvar(avg_result["est"][key], avg_result["err"][key]) for key in avg_result["est"].keys()}
+
+                
+                #instantiate figure
+                fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
+
+                #we add figure and axes to the output list
+                #fig_ax_list.append((fig,ax))
+
+                #we cycle on the markers
+                marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
+
+                #we loop over T and each time we add a graph to the plot
+                for iT, T in enumerate(self.T_list):
+
+                    #times = np.arange(-T/2+1,T/2)
+
+                    start_plateau, end_plateau = plateau_dict[(iop,iT)]
+
+                    times = np.arange(start_plateau, end_plateau)
+
+                    #we grep the interesting part of the array and we ignore the padding along the last axis
+                    ratio = Rmean[iop,iT,start_plateau:end_plateau]
+                    ratio_err = Rstd[iop,iT,start_plateau:end_plateau]
+
+                    #we discard the endpoints
+                    r = ratio#[1:-1]
+                    r_err = ratio_err#[1:-1]
+
+                    #we rescale to the kfactor #TO DO: check the kinematics factors
+                    if rescale:
+                        #mass = self.get_meff()[0]
+                        #mass = self.fit_2pcorr(save=False,show=False).model_average()['est']['E0']
+                        a = 0.1163 #we cheat
+                        hc = 197.327
+                        mp_mev = 1000
+                        mass = mp_mev/hc * a
+                        #kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
+                        #if np.iscomplex(kin):
+                        #    kin *= -1j
+                        #kin = kin.real
+                        kin = op.evaluate_K_real(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0)
+                        ratio /= kin if kin!=0 else 1
+                        #ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
+
+
+                    #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
+                    #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
+                    ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, linewidth = 0.3, linestyle='dashed',label=f"T{T}")
+                    ax.legend()
+
+                    ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
+                    ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
+                    ax.set_ylabel('R', fontsize=fontsize_y)
+
+                    model = ratio_func_form(r1=True,r2=True,r3=True)
+
+                    ax.plot(times,model( np.asarray( [(T,tau) for tau in times] ).mean ,post_dict))
+
+
+                plt.show()
+
+
+
 
 
 
@@ -1265,6 +1511,49 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
     return [obs_mean, obs_std, covmat]
 
 
+#function used to obtain the jackknife resamplings for the given observable with the given input
+def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int|None]=0, binsize:int=1,first_conf:int=0, last_conf:int|None=None) -> list[np.ndarray]:
+    """
+    Function returning the jackknife resamples of the given observablem that can be computed with the given inputs.
+
+    Input:
+        - in_array_list: input array to be jackknifed, or a list containing such arrays
+        - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
+        - jack_axis_list: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations) (or a list with such axis for every input array)
+        - binsize: binning of the jackknife procedure
+        - first_conf: index of the first configuration taken into account while performing the jackknife procedure
+        - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
+
+    Output:
+        - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
+    """
+
+    #we make a check on the input to asses that the number of input_array, jackknife axes and time_axes is consistend
+    if type(in_array_list) is list and (type(jack_axis_list) is not list or len(in_array_list)!=len(jack_axis_list) ):
+        raise ValueError("The input array is a list, hence also the jackknife axis should be a list and have the same lenght, but that is not the case")
+    
+    #if the given input is just one array and not a list of arrays, then we put it in a list
+    if type(in_array_list) is not list:
+        in_array_list = [in_array_list]
+        jack_axis_list = [jack_axis_list]
+
+    #we set last conf to its default value
+    if last_conf is None:
+        last_conf = np.shape(in_array_list[0])[jack_axis_list[0]]
+
+    #step 1: creation of the jackknife resamples (we create a jack resample for input array in the list)
+    jack_resamples_list = [ np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=jack_axis_list[i]) for iconf in range(first_conf,last_conf,binsize)] ) for i,in_array in enumerate(in_array_list)]#shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
+
+    #the number of resamples is len(jack_resmaples[0]) or also
+    #nresamp = int((last_conf-first_conf)/binsize)
+    nresamp = np.shape(jack_resamples_list[0])[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
+
+    #step 2; for each resample we compute the observable of interest
+    #we use the resampled input array to compute the observable we want, and we have nresamp of them
+    obs_resamp = np.asarray( [observable( *[jack_resamples[i] for jack_resamples in jack_resamples_list] ) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + output_shape
+
+    return obs_resamp
+
 
 #function used to compute the ratio of the 3 point correlator to the two point correlator
 def ratio_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int=0) -> np.ndarray:
@@ -1302,6 +1591,8 @@ def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -
     Output:
         - S: the sum of ratios, with only one dimension (it's a number)
     """
+
+    #tskip=tskip+1 #TO DO: check whether this should be done, i.e. if the range should be (1+tskip, T-tskip)
 
     #we implement the formula for the sum of rations in a fancy way (so that we can index the right dimension without knowing how many other dimensions there are)
     return np.sum( np.take(ratio, range(tskip, T+1-tskip), axis=time_axis) , axis=time_axis) #TO DO: check if also the pace of the sum is tskip (instead of 1 as it is used here)
@@ -1514,7 +1805,10 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
     len_array = np.shape(in_array)[0]
 
     #we loop over all the possible plateau lenghts, starting from the biggest possible one and then diminishing it up to a plataeau of len 2
-    for len_plat in range(len_array,0,-1):
+    for len_plat in range(len_array,1,-1):
+
+        #we instantiate a tmp dictionary where we are gonna store the values of the chi2 corresponding to the different starting value of the plateau (for a fixed lenght)
+        tmp_chi2_dict = {}
 
         #then we loop over the possible initial points of the plateau
         for start_plateau in range(0,len_array-len_plat+1,1):
@@ -1526,15 +1820,21 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
                 covmat_plat = covmat[start_plateau:start_plateau+len_plat, start_plateau:start_plateau+len_plat]
 
                 #the value of the plateau is
-                #plat_value = np.mean(plat,axis=0,keepdims=True)
                 plat_value = np.average(plat, weights = np.diag(np.linalg.inv(covmat_plat)), axis=0, keepdims=True) #the weights are the inverse of the sigma squared
 
+                #we compute the chi2 of the current plateau
+                chi2 = redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig)
+
                 #we see if the chi2 meets the condition
-                if redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig) < chi2_treshold: #TO DO: in this case put the value in a list and then at the end of the inner loop search for the better one
+                if chi2 < chi2_treshold: #TO DO: in this case put the value in a list and then at the end of the inner loop search for the better one
 
-                    #in that case we return the values of the starting and ending point fo the plateau
-                    return start_plateau, start_plateau+len_plat
-
+                    #in that case we add the values of the starting and ending point fo the plateau to a dictionary, along with the associated chi2
+                    tmp_chi2_dict[(start_plateau, start_plateau+len_plat)] = chi2
+        
+        #after looking at all the possible starting values, for a fixed plateau len, if at least one chi2 was <1, we return the smallest
+        if len(tmp_chi2_dict) > 0:
+            return min(tmp_chi2_dict, key=tmp_chi2_dict.get)
+                
     #if by the end of the loop the chi2 condition is never met (i.e. if len_plat is 1) we return the point corresponding to the middle of the dataset
     return int(len_array/2), int(len_array/2)+1
 
@@ -1704,4 +2004,35 @@ class SumOrderedExponentials:
     
             out += p[f"A{n}"] * np.exp( -t*E )
     
+        return out
+
+#auxiliary class used to fit the ratios
+class ratio_func_form:
+
+    def __init__(self,r1:bool=True,r2:bool=True,r3:bool=False):
+        self.r1:bool=r1
+        self.r2:bool=r2
+        self.r3:bool=r3
+        
+    def __call__(self, t:tuple[int,int], parms:dict):
+
+        #we grep the input
+        T = t[:,0]
+        tau = t[:,1]
+        MatEle = parms["M"]
+        R1 = parms["R1"]
+        R2 = parms["R2"]
+        R3 = parms["R3"]
+        dE = parms["dE"]
+
+        out = MatEle
+
+        if self.r1:
+            out += R1 * np.exp(-T/2*dE)*np.cosh( (T/2 - tau) * dE)
+        if self.r2:
+            out += R2 * np.exp(-T*dE)
+
+        if self.r3:
+            out /= (1 + R3 * np.exp(-T*dE))
+
         return out
