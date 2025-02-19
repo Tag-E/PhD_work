@@ -73,6 +73,23 @@ class moments_toolkit(bulding_block):
     #list of available structures = vector,axial,tensor
     X_list = ['V', 'A', 'T']
 
+    #values of hbar times c
+    hbarc = gv.gvar(197.3269631, 0.0000049)
+
+    #useful mass values
+    #from PDG
+    m_p = gv.gvar(938.27208816, 0.00000029)
+    m_pi = gv.gvar(139.5701, 0.0003) #pi+-
+    m_pi0 = gv.gvar(134.9770, 0.0005) #pi0
+    #from reference paper
+    m_pi_coarse = gv.gvar(136, 2)
+    m_pi_fine = gv.gvar(133, 1)
+
+    #values of the lattice spacing for the two lattices of interest
+    a_coarse = gv.gvar(0.1163, 0.0004) 
+    a_fine = gv.gvar(0.0926, 0.0006)
+                        
+
 
 
 
@@ -130,6 +147,9 @@ class moments_toolkit(bulding_block):
 
         #and we also put the number of selected operators to 0
         self.Nop: int = 0
+
+        #we initialize the value of the ground state energy
+        self.E0: gv._gvarcore.GVar | None = None
 
 
         ## We build the list of all the available operators
@@ -836,13 +856,18 @@ class moments_toolkit(bulding_block):
         corr_2p = self.get_p2corr()
 
         #then we use the jackknife to compute the fit mass and its std
-        mfit, mfit_std , _= jackknife(corr_2p, fit_mass, jack_axis_list=0, time_axis=None)
+        m_A_fit, m_A_fit_std , _= jackknife(corr_2p, fit_mass, jack_axis_list=0, time_axis=None)
+        mfit = m_A_fit[0]
+        mfit_std = m_A_fit_std[0]
 
         #we return the fit mass and its std
         return mfit, mfit_std
 
 
-    def fit_2pcorr(self, chi2_treshold=1.0, zoom=0, fit_doubt_factor=10, show=True, save=True, verbose=False):
+    def fit_2pcorr(self, chi2_treshold=1.0, zoom=0, fit_doubt_factor=3, show=True, save=True, verbose=False,
+                   central_value_fit            = True, central_value_fit_correlated = True,
+                   resample_fit                 = False, resample_fit_correlated      = False,
+                   resample_fit_resample_prior  = False,):
         """
         Input:
             - 
@@ -964,6 +989,8 @@ class moments_toolkit(bulding_block):
         t_start_list = np.arange(start_plateau, int(start_plateau/2), -1)
         t_end = end_plateau
 
+        
+
         #we instanatiate the states of the fits we want to do
         fit_state = CA.FitState()
 
@@ -985,55 +1012,56 @@ class moments_toolkit(bulding_block):
             #we instantiate a prior dict
             prior = gv.BufferDict()
 
-            #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
-            mfit, mfit_std , _= jackknife(p2corr, lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="mass"), jack_axis_list=0, time_axis=None) #TO DO: have a look at this fit to be sure that it is ok to use it as prior
-            Afit, Afit_std , _= jackknife(p2corr, lambda x: fit_mass(x, guess_mass=gv_meff_plateau.mean, par="amp"), jack_axis_list=0, time_axis=None)
-
-            #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't trust the simple scipy fit
-            prior["A0"] = gv.gvar(Afit,Afit_std * fit_doubt_factor)
-            prior["E0"] = gv.gvar(mfit, mfit_std * fit_doubt_factor)
-
-            #we then model a prior for the exponential corresponding to the efirst excited state, if needed
-            if nstates==2:
-
-                #for the energy we don't know, so we just give a wide prior assuming the energy doubles from ground to first excited state
-                prior[f"dE1"]= gv.gvar(
-                                        gv.mean(mfit),
-                                        gv.mean(mfit),
-                                    )
-
-                #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
-                t_probe = 1
-                tmp = (np.mean(self.p2_corr.real,axis=0)[t_probe] - prior["A0"] * np.exp(-t_probe*prior["E0"]) ) * np.exp( t_probe * ( prior["dE1"] + prior["E0"]) )
-                prior[f"A1"] = gv.gvar( 
-                    gv.mean(tmp),gv.mean(tmp)
-                )
-
-
             #we then loop over the starting times
             for i_tstart, t_start in enumerate(t_start_list):
+
+                #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
+                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = jackknife(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), jack_axis_list=0, time_axis=-1)
+                p2corr_resamples_plat = jackknife_resamples(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), jack_axis_list=0)
+
+                #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
+                m_A_fit, m_A_fit_std , _= jackknife(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), jack_axis_list=0, time_axis=None) #TO DO: have a look at this fit to be sure that it is ok to use it as prior
+                #Afit, Afit_std , _= jackknife(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), jack_axis_list=0, time_axis=None)
+
+                #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't trust the simple scipy fit
+                prior["A0"] = gv.gvar(m_A_fit[1],m_A_fit_std[1] * fit_doubt_factor)
+                prior["E0"] = gv.gvar(m_A_fit[0], m_A_fit_std[0] * fit_doubt_factor)
+
+                #we then model a prior for the exponential corresponding to the efirst excited state, if needed
+                if nstates==2:
+
+                    #for the energy we don't know, so we just give a wide prior assuming the energy doubles from ground to first excited state
+                    prior[f"dE1"]= self.m_pi / self.hbarc * self.a_coarse
+
+                    #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
+                    t_probe = t_start
+                    tmp = (p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*prior["E0"]) ) * np.exp( t_probe * ( prior["dE1"] + prior["E0"]) )
+                    prior[f"A1"] = gv.gvar( 
+                        gv.mean(tmp),gv.mean(tmp)
+                    )
+
 
                 #we do the fit
                 fit_result = CA.fit(
 
                     abscissa                = np.arange(t_start,t_end),
                     
-                    ordinate_est            = np.mean(p2corr_resamples[:,t_start:t_end], axis = 0), #np.mean(p2corr[:,t_start:t_end], axis = 0),
-                    ordinate_std            = np.sqrt((nres-1)/nres) * np.std(p2corr_resamples[:,t_start:t_end], axis = 0), #np.std (p2corr[:,t_start:t_end], axis = 0),
-                    ordinate_cov            =  (nres-1)/nres * np.cov(p2corr_resamples[:,t_start:t_end], rowvar=False), #np.cov (p2corr[:,t_start:t_end], rowvar=False),
+                    ordinate_est            = p2corr_jack_plat, #p2corr_jack[t_start:t_end], #np.mean(p2corr[:,t_start:t_end], axis = 0), #np.mean(p2corr[:,t_start:t_end], axis = 0),
+                    ordinate_std            =  p2corr_jack_plat_std, #p2corr_jack_std[t_start:t_end], #np.std(p2corr[:,t_start:t_end], axis = 0), #np.std (p2corr[:,t_start:t_end], axis = 0),
+                    ordinate_cov            =   p2corr_jack_plat_cov, #np.cov(p2corr[:,t_start:t_end], rowvar=False), #np.cov (p2corr[:,t_start:t_end], rowvar=False),
                     
-                    resample_ordinate_est   = p2corr_resamples[:,t_start:t_end],
-                    resample_ordinate_std   = np.sqrt((nres-1)/nres) * np.std (p2corr_resamples[:,t_start:t_end], axis = 0),
-                    resample_ordinate_cov   = (nres-1)/nres * np.cov (p2corr_resamples[:,t_start:t_end], rowvar=False),
+                    resample_ordinate_est   = p2corr_resamples_plat,
+                    resample_ordinate_std   = p2corr_jack_plat_std, #np.sqrt((nres-1)/nres) * np.std (p2corr_resamples[:,t_start:t_end], axis = 0),
+                    resample_ordinate_cov   = p2corr_jack_plat_cov, #(nres-1)/nres * np.cov (p2corr_resamples[:,t_start:t_end], rowvar=False),
 
                     # fit strategy, default: only uncorrelated central value fit:
-                    central_value_fit            = True,
-                    central_value_fit_correlated = True,
+                    central_value_fit            = central_value_fit,
+                    central_value_fit_correlated = central_value_fit_correlated,
 
-                    resample_fit                 = True,
-                    resample_fit_correlated      = True,
+                    resample_fit                 = resample_fit,
+                    resample_fit_correlated      = resample_fit_correlated,
                     
-                    resample_fit_resample_prior  = False,
+                    resample_fit_resample_prior  = resample_fit_resample_prior,
                     resample_type               = "bst", #"jkn",
 
                     # args for lsqfit:
@@ -1052,10 +1080,12 @@ class moments_toolkit(bulding_block):
                 if show or save:
 
                     #first we compute the 2p correlator in the region of interest
-                    C = gv.gvar( np.mean(self.p2_corr.real[:,fit_result.ts:fit_result.te], axis = 0), np.std(self.p2_corr.real[:,fit_result.ts:fit_result.te], axis = 0))
+                    #Corr = gv.gvar( np.mean(p2corr[:,fit_result.ts:fit_result.te], axis = 0), np.std(p2corr[:,fit_result.ts:fit_result.te], axis = 0))
+                    #Corr = gv.gvar(p2corr_jack[fit_result.ts:fit_result.te+1],p2corr_jack_std[fit_result.ts:fit_result.te+1] )
+                    Corr = gv.gvar(p2corr_jack_plat, p2corr_jack_plat_std )
 
                     #we plot the fit
-                    plot_fit_2pcorr(fit_result=fit_result,correlator=C, axs=axs[i_tstart,i_state], nstates=nstates, Ngrad=15)
+                    plot_fit_2pcorr(fit_result=fit_result,correlator=Corr, axs=axs[i_tstart,i_state], nstates=nstates, Ngrad=15)
 
 
 
@@ -1072,6 +1102,32 @@ class moments_toolkit(bulding_block):
         #we return the fit state
         return fit_state
 
+
+    #function used to obtain the groundenergy from the fit to the two point function
+    def get_E_from_p2corr(self, force_fit:bool=False) -> gv._gvarcore.GVar:
+        """
+        Function returning the gvar variable with the ground state energy obtained from the fit to the two point corerlator
+        
+        Input:
+            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            
+        Output:
+            - E0: gv.gvar, mean value and std of the ground state energy
+        """
+
+        #we check whether we can avoid doing the fit
+        if self.E0 is None or force_fit==True:
+            #first we perform the fit with the main method
+            fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples
+
+            #then we grep the parameters from the models average
+            results = fit2p.model_average()
+
+            #we update the value of the ground state energy stored in the class
+            self.E0 = gv.gvar( results["est"]["E0"], results["err"]["E0"] )
+
+        #then we return a gv variable containing mean and std of the best estimate of the ground state energy
+        return self.E0
 
 
 
@@ -1215,6 +1271,7 @@ class moments_toolkit(bulding_block):
                     #we append the fit to the list
                     fit_state_list[iop].append(fit_result)
 
+        return fit_state_list
 
         if show or save:
 
@@ -1860,12 +1917,14 @@ def exp_fit_func(t: np.ndarray, amp: float, mass: float) -> np.ndarray:
 
 
 #function used to extract the fit mass from the two-point correlators
-def fit_mass(corr_2p: np.ndarray, conf_axis:int=0, guess_mass:float|None=None, guess_amp:float|None=None, par:str="mass") -> np.ndarray:
+def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None=None, guess_amp:float|None=None) -> np.ndarray:
     """
     Input:
         - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
+        - t0: int, the starting lattice time of the input correlator
         - conf_axis: the axis with the configurations
         - guess_mass: the first guess for the mass we want to extract from the fit
+        - guess_amp: the first guess for the amplitude we want to extract from the fit
 
     Output:
         - (mift, mfit_std): the mean value and the std of the mass extracted from the fit
@@ -1884,33 +1943,28 @@ def fit_mass(corr_2p: np.ndarray, conf_axis:int=0, guess_mass:float|None=None, g
     guess = [guess_amp,guess_mass]
 
     #we define the x and y arrays used for the fit (which are respectively times and corr_gavg)
-    times = np.arange(np.shape(corr_gavg)[conf_axis])
+    times = np.arange(t0, t0+np.shape(corr_gavg)[0])
 
     #we perform the fit
     popt,pcov = curve_fit(exp_fit_func, times, corr_gavg, p0=guess)#,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
-    perr = np.sqrt(np.diag(pcov)) #perr being the std of the parameters extracted from the fit
+    #perr = np.sqrt(np.diag(pcov)) #perr being the std of the parameters extracted from the fit
 
     #we read the mass (that's the only thing we're interested about, the amplitude we discard)
     fit_mass = np.array( popt[1] )
-    fit_mass_std = np.array( perr[1] )
+    #fit_mass_std = np.array( perr[1] )
 
     #same thing for amplitude
     fit_amp = np.array( popt[0] )
-    fit_amp_std = np.array( perr[0] )
+    #fit_amp_std = np.array( perr[0] )
 
 
-    #we return the fit mass or the amp depending on the user request
-    if par=="mass":
-        #we return the fit mass and its std
-        return fit_mass#, fit_mass_std, fit_amp, fit_amp_std 
-    elif par=="amp":
-        return fit_amp
-    
+    #we return the fit mass and the fit amp
+    return np.asarray([fit_mass,fit_amp])
 
 #auxiliary function used to plot the fit of the two point correlators
 def plot_fit_2pcorr(fit_result,correlator,axs,nstates=2, Ngrad = 30, Nsigma = 2):
 
-    abscissa = np.arange(fit_result.ts, fit_result.te)
+    abscissa = np.arange(fit_result.ts, fit_result.te+1)
     ordinate = fit_result.eval(abscissa)
     #nstates = fit_result.fcn.Nstates
 
