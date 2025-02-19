@@ -30,6 +30,8 @@ import itertools as it #to have fancy loops
 from pathlib import Path #to check whether directories exist or not (before saving files)
 import sys #to fetch command line argument
 from tqdm import tqdm #for a nice view of for loops with loading bars
+import gvar as gv #to propagate gaussian uncertainties in the kinematic factor
+from sympy import lambdify #to evaluate symbolic expression with gvar variables
 
 ##Persoal Libraries
 from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
@@ -268,7 +270,8 @@ class Operator:
             - p3: the value of the momentum along z
             
         Output:
-            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression"""
+            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression
+        """
         
         #we just substitute and send back the numeric value
         return complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))
@@ -287,9 +290,10 @@ class Operator:
             - p3: the value of the momentum along z
             
         Output:
-            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression"""
+            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression
+        """
         
-        #the kinematic factor also wit an i factor is given by
+        #the kinematic factor also with an i factor is given by
         kin = 1j * complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))  #this 1j in front comes from the fact that mat_ele = <x> * i K (look reference paper for expalantion)
 
         #we cast the kinematic factor to a real value (so that casting also correlators we can deal only with real numbers)
@@ -297,8 +301,35 @@ class Operator:
             return kin.real
         else:
             return kin.imag
+        
+
+    #function used to evaluate the kinematic factor of the operator and cast it to a real value (according to the p3 corr) and propagate the uncertainties
+    def evaluate_K_gvar(self, m_value:gv._gvarcore.GVar, E_value:gv._gvarcore.GVar, p1_value:gv._gvarcore.GVar ,p2_value:gv._gvarcore.GVar, p3_value:gv._gvarcore.GVar) -> gv._gvarcore.GVar:
+        """
+        Function returning the value of the kinematic factor after the input values have been substituted (with a proper cast, i.e. we return what is needed to normalize the matrix elements)
+        
+        Input:
+            - m: the value of the mass
+            - E: the value of the energy
+            - p1: the value of the momentum along x
+            - p2: the value of the momentum along y
+            - p3: the value of the momentum along z
+            
+        Output:
+            - K: the numeric value of the kinematic factor, obtained plugging the input variables into the symbolic expression
+            """
+        
+        #the kinematic factor also with an i factor is given by
+        kin = I * self.K  #this I in front comes from the fact that mat_ele = <x> * i K (look reference paper for expalantion)
+
+        #we cast the kinematic factor to a real value (so that casting also correlators we can deal only with real numbers)
+        if self.p3corr_is_real==False: #if p3 corr is imag, then we want iK.imag, and this we obtain by multiplying by -i
+            kin *= -I
     
+        #we return the expression for the kinematic factor with the input values substituted
+        return lambdify([E, mN, p1,p2,p3], kin)(E_value, m_value, p1_value, p2_value, p3_value)
     
+
     #function used to save the operator in a file
     def save(self, folder:str) -> None:
         """
