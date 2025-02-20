@@ -573,22 +573,30 @@ class moments_toolkit(bulding_block):
                 r = ratio[1:-1]
                 r_err = ratio_err[1:-1]
 
+                #we put R into a gvar variable
+                r_gvar = gv.gvar(r,r_err)
+
                 #we rescale to the kfactor #TO DO: check the kinematics factors
                 if rescale:
-                    #mass = self.get_meff()[0]
-                    #mass = self.fit_2pcorr(save=False,show=False).model_average()['est']['E0']
-                    a = 0.1163 #we cheat
-                    hc = 197.327
-                    mp_mev = 1000
-                    mass = mp_mev/hc * a
-                    #kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
-                    #if np.iscomplex(kin):
-                    #    kin *= -1j
-                    #kin = kin.real
-                    kin = op.evaluate_K_real(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0)
-                    ratio /= kin if kin!=0 else 1
-                    #ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
+                    #we take mass and energy of g.s.
+                    E0 = self.get_E_from_p2corr()
+                    mass = E0
 
+                    #we set the momentum to 0
+                    p1 = gv.gvar(0,0)
+                    p2 = gv.gvar(0,0)
+                    p3 = gv.gvar(0,0)
+
+                    #we compute the kinematic factor
+                    kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
+
+                    #ratio /= kin if kin!=0 else 1
+                    
+                    r_gvar /= kin if kin!=0 else 1
+
+                #we recast everything into np array
+                r = np.asarray( [c.mean for c in r_gvar])
+                r_err = np.asarray( [c.sdev for c in r_gvar])
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
                 #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
@@ -684,21 +692,33 @@ class moments_toolkit(bulding_block):
             plot_index = self.X_list.index(op.X)
 
 
-            #To Do: adjust kin factor 
-            a = 0.1163 #we cheat
-            hc = 197.327
-            mp_mev = 1000
-            mass = mp_mev/hc * a
-            kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
-            if np.iscomplex(kin):
-                kin *= -1j
-            kin = kin.real
+            #we take mass and energy of g.s.
+            E0 = self.get_E_from_p2corr()
+            mass = E0
+
+            #we set the momentum to 0
+            p1 = gv.gvar(0,0)
+            p2 = gv.gvar(0,0)
+            p3 = gv.gvar(0,0)
+
+            #we compute the kinematic factor
+            kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
 
             #we only plot if the kin factor is not 0
             if kin!=0:
 
+                #we put S into a gvar var
+                S_gvar = gv.gvar(Smean[iop],Sstd[iop])
+
+                #we normalize to the kin factor
+                S_gvar /= kin
+
+                #we recast into np array
+                Smean[iop] = np.asarray( [c.mean for c in S_gvar] )
+                Sstd[iop] = np.asarray( [c.sdev for c in S_gvar] )
+
                 #then we plot it
-                ax[plot_index].errorbar(self.T_list, Smean[iop]/kin,yerr=Sstd[iop]/np.abs(kin), marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
+                ax[plot_index].errorbar(self.T_list, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
 
 
         #we set the title of the plot
@@ -1131,8 +1151,11 @@ class moments_toolkit(bulding_block):
 
 
 
-    def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=10, tskip_list=[1], show=True, save=True, verbose=False, rescale=True,
-                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8):
+    def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=3, tskip_list=[1,2], show=True, save=True, verbose=False, rescale=True,
+                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
+                        central_value_fit            = True, central_value_fit_correlated = True,
+                        resample_fit                 = False,resample_fit_correlated      = False,
+                        resample_fit_resample_prior  = False):
         """
         Input:
             - 
@@ -1164,7 +1187,7 @@ class moments_toolkit(bulding_block):
 
             for iT,T in enumerate(self.T_list):
 
-                start_plateau, end_plateau = plateau_search(Rmean[iop,iT,:T+1 ], Rcovmat[iop,iT,:T+1 , :T+1 ], only_sig=False, chi2_treshold=1.0)
+                start_plateau, end_plateau = plateau_search(Rmean[iop,iT,:T+1 ], Rcovmat[iop,iT,:T+1 , :T+1 ], only_sig=False, chi2_treshold=chi2_treshold)
 
                 plateau_dict[(iop,iT)] = start_plateau, end_plateau
 
@@ -1175,7 +1198,7 @@ class moments_toolkit(bulding_block):
             abscissa_list.append( np.asarray(tmp_a) )
 
         #the number of resamples is given by
-        nres = abscissa_list[0].shape[0]
+        #nres = abscissa_list[0].shape[0]
 
 
         ## Next we construct the ordinate
@@ -1187,7 +1210,14 @@ class moments_toolkit(bulding_block):
         #we resample the ratios, len = Nop,, each element with shape = (Nres, Nallowed(T,tau) )
         ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
 
+        #the number of resamples is given by
+        nres = ratio_resamples_list[0].shape[0]
 
+        #ratio_list = [ np.asarray( [e for l in [ ratio_formula(p3corr, p2corr, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop) ]
+        ratio_list = [ jackknife([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
+        ratio_mean_list = [ np.asarray([e for l in  [Rmean[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop)]
+        ratio_std_list = [ np.asarray([e for l in  [Rstd[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop)]
+        #ratio_cov_list = [ np.asarray([e for l in  [Rcovmat[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1], plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop)]
 
         ## Then the prior construction
 
@@ -1213,9 +1243,11 @@ class moments_toolkit(bulding_block):
 
             prior["M"] = np.average(matele_fromS[iop], weights= [ele.sdev**(-2) for ele in matele_fromS[iop]] )
 
-            prior["R1"] = gv.gvar(0,10)
-            prior["R2"] = gv.gvar(0,10)
-            prior["R3"] = gv.gvar(0,10)
+            prior["R1"] = gv.gvar(0.5,1)
+            prior["R2"] = gv.gvar(0,1)
+            prior["R3"] = gv.gvar(0,1)
+
+            priordict_list.append(prior)
         
 
         ## Now we are ready to do the fit
@@ -1231,9 +1263,12 @@ class moments_toolkit(bulding_block):
             #we take the right resampling
             ratio_res = ratio_resamples_list[iop]
 
+            #we take the ratio
+            ratio, ratio_std, ratio_cov = ratio_list[iop]
+
             #we loop over the possible parameters
             for r2 in [False, True]:
-                for r3 in [False, True]:
+                for r3 in [False]:#, True]:
 
 
                     #we do the fit
@@ -1241,27 +1276,27 @@ class moments_toolkit(bulding_block):
 
                         abscissa                = abscissa_list[iop],
                         
-                        ordinate_est            = np.mean(ratio_res, axis = 0),
-                        ordinate_std            = np.sqrt((nres-1)/nres) * np.std (ratio_res, axis = 0),
-                        ordinate_cov            = (nres-1)/nres * np.cov (ratio_res, rowvar=False),
+                        ordinate_est            = ratio, #np.mean(ratio_res, axis = 0), # ratio_mean_list[iop], #ratio, #np.mean(ratio_res, axis = 0),
+                        ordinate_std            = ratio_std, #np.sqrt(nres-1) *np.std (ratio_res, axis = 0), # ratio_std_list[iop], #ratio_std, ##np.sqrt((nres-1)/nres) * np.std (ratio_res, axis = 0),
+                        ordinate_cov            = ratio_cov, #(nres-1) * np.cov (ratio_res, rowvar=False), #(nres-1)/nres * np.cov (ratio_res, rowvar=False),
                         
                         resample_ordinate_est   = ratio_res,
-                        resample_ordinate_std   = np.sqrt((nres-1)/nres) * np.std (ratio_res, axis = 0),
-                        resample_ordinate_cov   = (nres-1)/nres * np.cov (ratio_res, rowvar=False),
+                        resample_ordinate_std   = np.sqrt((nres-1)) * np.std (ratio_res, axis = 0),
+                        resample_ordinate_cov   = (nres-1) * np.cov (ratio_res, rowvar=False),
 
                         # fit strategy, default: only uncorrelated central value fit:
-                        central_value_fit            = True,
-                        central_value_fit_correlated = True,
+                        central_value_fit            = central_value_fit,
+                        central_value_fit_correlated = central_value_fit_correlated,
 
-                        resample_fit                 = True,
-                        resample_fit_correlated      = True,
+                        resample_fit                 = resample_fit,
+                        resample_fit_correlated      = resample_fit_correlated,
                         
-                        resample_fit_resample_prior  = False,
+                        resample_fit_resample_prior  = resample_fit_resample_prior,
                         resample_type               = "bst",#"jkn",
 
                         # args for lsqfit:
                         model   = ratio_func_form(r1=True,r2=r2,r3=r3),
-                        prior   = prior,
+                        prior   = priordict_list[iop],
                         p0      = None,
 
                         svdcut  = None,
@@ -1649,15 +1684,13 @@ def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -
         - S: the sum of ratios, with only one dimension (it's a number)
     """
 
-    #tskip=tskip+1 #TO DO: check whether this should be done, i.e. if the range should be (1+tskip, T-tskip)
-
     #we implement the formula for the sum of rations in a fancy way (so that we can index the right dimension without knowing how many other dimensions there are)
-    return np.sum( np.take(ratio, range(tskip, T+1-tskip), axis=time_axis) , axis=time_axis) #TO DO: check if also the pace of the sum is tskip (instead of 1 as it is used here)
+    return np.sum( np.take(ratio, range(1 + tskip, T+1 -1 -tskip), axis=time_axis) , axis=time_axis) #the extra +1 and -1 are there to discard the endpoints
 
 
 
 #function used to extract the matrix element as the slop of the summed ratio function
-def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3]) -> float:
+def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2], delta_list:list[int] = [1,2,3]) -> float:
     """
     Function implementing the extraction of the matrix element as the slope of the summed ratios
     
@@ -2082,6 +2115,7 @@ class ratio_func_form:
         out = MatEle
 
         if self.r1:
+            #out += np.sqrt(R1*R1) * np.exp(-T/2*dE)*np.cosh( (T/2 - tau) * dE)
             out += R1 * np.exp(-T/2*dE)*np.cosh( (T/2 - tau) * dE)
         if self.r2:
             out += R2 * np.exp(-T*dE)
