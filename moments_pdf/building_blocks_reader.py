@@ -102,6 +102,7 @@ class bulding_block:
     def __init__(self, #bb_folder: str,
                  p3_folder:str, p2_folder: str,
                  tag_3p:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
+                 insertion_momentum:str='qx0_qy0_qz0', momentum:str='PX0_PY0_PZ0',
                  fast_data_folder:str='fast_data', force_reading:bool=False,
                  T_to_remove_list:list[int]=[12], skip3p:bool=False, 
                  maxConf:int|None=None, verbose:bool=False) -> None:
@@ -114,6 +115,8 @@ class bulding_block:
             - p2_folder: folder with the 2-point correlators (related to the 3 point ones)
             - tag_3p: tag of the 3-point correlator
             - hadron: hadron type we want to read from the dataset (for both 3-points and 2-points)
+            - insertion_momentum: str, the momentum of the operator inserted in the 3 point correlator
+            - momentum: str, the momentum of the hadron
             - tag_2p: tag of the 2-points correlator
             - fast_data_folder: str, the path to the folder where the dataset gets saved in a reduced format suitable for fast access
             - force_reading: bool, if True the correlators will be read from the complete dataset even if a fast access dataset is available
@@ -217,12 +220,17 @@ class bulding_block:
         self.momentum_list = [mom.split('_T')[0] for mom in self.momentum_list]
 
         #we choose a default values for the different keys we want to be specified at reading time (for the other keys instead we loop over and read them)
-        self.tag_3p = tag_3p
+        self.tag_3p = tag_3p if tag_3p in self.tag_list else None
         self.smearing = self.smearing_list[0]
         self.mass = self.mass_list[0]
-        self.hadron = hadron
-        self.momentum = [mom for mom in self.momentum_list if mom.startswith('PX0_PY0_PZ0')][0] #we take the 0 forward momentum as default
-        self.insmomentum = 'qx0_qy0_qz0' #same for the insertion momentum (this is the only choice available for every other key choice)
+        self.hadron = hadron if hadron in self.hadron_list else None
+        self.momentum = [mom for mom in self.momentum_list if mom.startswith(momentum)][0] if len([mom for mom in self.momentum_list if mom.startswith(momentum)])>0 else None  #we take the 0 forward momentum as default
+        self.insmomentum = insertion_momentum if insertion_momentum in self.insmomementum_list else None #same for the insertion momentum (this is the only choice available for every other key choice)
+
+        #we perform an input control on the input parameter and raise an error if not everything is ok
+        if None in [self.tag_3p,self.hadron, self.momentum, self.insmomentum]:
+            error_index = [self.tag_3p,self.hadron, self.momentum, self.insmomentum].index(None)
+            raise ValueError(f"The chosen value for {['tag_3p','hadron','momentum','insertion_momentum'][error_index]} is not allowed, please chose one value from the following list: {[self.tag_list,self.hadron_list,self.momentum_list,self.insmomementum_list][error_index]}")
 
         #we store the dimensionality of the dimension we have not fixed and that we want to read
         self.nquarks = len(self.qcontent_list)
@@ -239,13 +247,6 @@ class bulding_block:
         p = Path(p2_folder).glob('**/*')
         files_2p = sorted( [x for x in p if x.is_file()] ) #we sort the configurations, so that index by index the configurations match the ones of the 3 points correlators
 
-        #TO DO: add consistency check between the ids list of the 3p function and the ids list of the 2p functions and raise error if they do not match
-
-        #we store the tag and the momentum used for the two point correlators
-        self.tag_2p = tag_2p
-        #self.momentum_2p = '_'.join(self.momentum.split('_')[:-1]) #we adjust the string formatting between the 3p and the 2p h5 files
-        self.momentum_2p = self.momentum
-
         #we open the first configuration just to read the lenght of the lattice
         firstconf = files_2p[0].name
         with h5.File(p2_folder+firstconf, 'r') as h5f:
@@ -257,8 +258,15 @@ class bulding_block:
             self.tag2p_list = list(h5f[cfgid])
 
             #we store the time extent of the 2 point correlator we have
-            self.latticeT = len(h5f[cfgid][tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p])
+            self.latticeT = len(h5f[cfgid][self.tag2p_list[0]][self.smearing][self.mass][self.hadron][self.momentum]) #momentum is in the right format to read the 2 point correlator
         
+        #we store the tag and the momentum used for the two point correlators
+        self.tag_2p = tag_2p if tag_2p in self.tag2p_list else None
+        self.momentum_2p = self.momentum
+
+        #we perform an input check on the chosen 2point tag and raise an error if not everything is ok
+        if self.tag_2p is None: raise ValueError(f"The chosen value for tag_2p is not allowed, please chose a value from the following list: {self.tag2p_list}")
+
 
         ## We perform an extra check on the ids of the configuration to be sure that they are the same for the 2 point and the 3 point correlators
 
@@ -341,7 +349,7 @@ class bulding_block:
                 bb_array = np.zeros(shape=(self.nconf, self.nquarks, self.ndisplacements, self.ndstructures, T+1),dtype=complex)
 
                 #we select the momentum we want to read
-                momentum = self.momentum+f'_T{T}'
+                momentum_3p = self.momentum+f'_T{T}'
 
                 #we skip the reading of the 3point if the user asks for it
                 if skip3p==False:
@@ -361,7 +369,7 @@ class bulding_block:
                                     for idstruct, dstructure in enumerate(self.dstructure_list):
 
                                         #we read the building block and store it in the np array
-                                        bb_array[iconf, iq, idisp, idstruct] = h5f[f"{cfgid}/{self.tag_3p}/{self.smearing}/{self.mass}/{self.hadron}/{qcontent}/{momentum}/{displacement}/{dstructure}/{self.insmomentum}"] #TO DO: conf index last
+                                        bb_array[iconf, iq, idisp, idstruct] = h5f[f"{cfgid}/{self.tag_3p}/{self.smearing}/{self.mass}/{self.hadron}/{qcontent}/{momentum_3p}/{displacement}/{dstructure}/{self.insmomentum}"] #TO DO: conf index last
 
                 #we store the 3p correlators in a dict of the type T:3p_corr
                 self.bb_array_dict[T] = bb_array[:]
@@ -369,6 +377,10 @@ class bulding_block:
 
 
             ## Now we now read the 2p correlator
+
+            #info print
+            if verbose:
+                print("\n2 Points Correlators: looping over the configurations to read the h5 files...\n")
 
             #we initialize the np array with the 2 point correlators
             self.p2_corr = np.zeros(shape=(self.nconf, self.latticeT),dtype=complex)

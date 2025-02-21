@@ -179,4 +179,5 @@ moments_pdf/test_notebooks/plots/
 !moments_pdf/operator_catalogue.pdf
 moments_pdf/operator_database/
 moments_pdf/fast_data/
-moments_pdf/test_notebooks/fast_data/
+moments_pdf/test_notebooks/fast_data*
+moments_pdf/fast_data*
