@@ -104,7 +104,7 @@ class bulding_block:
                  tag_3p:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
                  insertion_momentum:str='qx0_qy0_qz0', momentum:str='PX0_PY0_PZ0',
                  fast_data_folder:str='fast_data', force_reading:bool=False,
-                 T_to_remove_list:list[int]=[12], skip3p:bool=False, 
+                 T_no_read_list:list[int]=[], skip3p:bool=False, 
                  maxConf:int|None=None, verbose:bool=False) -> None:
         
         """
@@ -120,7 +120,7 @@ class bulding_block:
             - tag_2p: tag of the 2-points correlator
             - fast_data_folder: str, the path to the folder where the dataset gets saved in a reduced format suitable for fast access
             - force_reading: bool, if True the correlators will be read from the complete dataset even if a fast access dataset is available
-            - T_to_remove_list: list of the times T (hence 3 point correlators) for which the reading can be avoided
+            - T_no_read_list: list of the times T (hence 3 point correlators) for which the reading can be avoided
             - skip3p: bool, if True the reading of the 3 point correlators is skipped alltogether
             - maxConf: maximum number of configuration to be red
             - verbose: bool, if True info print are provided while the class instance is being constructed
@@ -153,13 +153,13 @@ class bulding_block:
         self.T_list = sorted( [int(x.name[1:]) for x in p.iterdir() if x.is_dir() and x.name.startswith('T')] )
 
         #we remove the times the user specified
-        for T_to_remove in T_to_remove_list:
+        for T_to_remove in T_no_read_list:
             if T_to_remove in self.T_list:
                 self.T_list.remove(T_to_remove)
 
 
         #we store the number of source-sink separation values T we are using in the analysis
-        self.nT = len(self.T_list)
+        #self.nT = len(self.T_list)
 
         #from that we obtain the paths of the folders containing the different building blocks
         self.bb_pathList = [f"{p3_folder}T{T}/" for T in self.T_list]
@@ -283,7 +283,7 @@ class bulding_block:
 
         #first we construct a dictionary with all the parameters related to this particular reading
         self.params_dict = {'p3_folder': self.p3_folder, 'p2_folder': self.p2_folder,
-                       'nconf': self.nconf, 'T_to_remove_list': T_to_remove_list, 'skip3p': skip3p, 
+                       'nconf': self.nconf, 'T_list': self.T_list, 'skip3p': skip3p, 
                        'tag_3p': self.tag_3p, 'smearing': self.smearing, 'mass': self.mass, 'hadron': self.hadron, 'momentum': self.momentum, 'insmomentum': self.insmomentum,
                        'tag_2p': self.tag_2p, 'momentum_2p': self.momentum_2p
                        }

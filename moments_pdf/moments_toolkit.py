@@ -151,6 +151,10 @@ class moments_toolkit(bulding_block):
         #we initialize the value of the ground state energy
         self.E0: gv._gvarcore.GVar | None = None
 
+        #we initialize the values of the times chosen in the analysis
+        self.chosen_T_list = self.T_list
+        self.nT = len(self.chosen_T_list)
+
 
         ## We build the list of all the available operators
 
@@ -218,6 +222,38 @@ class moments_toolkit(bulding_block):
         if verbose:
             print("\nClass Initialization Complete!\n")
 
+
+
+    #function used to deselect some source-sink separation values T from the analysis
+    def remove_T(self, *args: int, verbose:bool=True) -> None:
+        """
+        Function used to deselect some source-sink separation values T from the analyses performed by the class
+        
+        Input:
+            - args: list[int], list containing the values T of the source-sink separation that won't be used by the analysy (if this is empty then all the available T will be used)
+            - verbose: bool, if True an info print will be given along the function call
+            
+        Output:
+            - None: the list with the chosen T value for the analysis gets updated
+        """
+
+        #we read the list with the values of T to remove from the analysis from the input
+        T_to_remove_list = args
+
+        #we reset the chosen T to be all the availables ones
+        self.chosen_T_list = self.T_list
+
+        #for each T specified by the user we remove it from the analysis
+        for T_to_remove in T_to_remove_list:
+            if T_to_remove in self.chosen_T_list:
+                self.chosen_T_list.remove(T_to_remove)
+
+        #we also update the total number of T in the analysis
+        self.nT = len(self.chosen_T_list)
+
+        #info print
+        if verbose:
+                print(f"\nAvailable source-skink separation values: {self.T_list}\nChosen source-sink separation values: {self.chosen_T_list}")
 
 
 
@@ -430,7 +466,7 @@ class moments_toolkit(bulding_block):
             isospin='U-D'
 
         #we compute the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
-        maxT = np.max(self.T_list)
+        maxT = np.max(self.chosen_T_list)
 
         #we initialize the output array with zeros
         p3_corr = np.zeros(shape=(self.Nop, self.nconf, self.nT, maxT+1), dtype=float) #+1 because tau goes from 0 to T included
@@ -442,7 +478,7 @@ class moments_toolkit(bulding_block):
 
 
             #loop over the available times T
-            for iT,T in enumerate(self.T_list):
+            for iT,T in enumerate(self.chosen_T_list):
 
                 #we compute the relevant 3 point correlator (that isthe building block related to the operator under study)
 
@@ -502,7 +538,7 @@ class moments_toolkit(bulding_block):
         Rcovmat = np.zeros(shape=R_shape + (R_shape[-1],), dtype=float)
 
         #we loop over all the T values we have
-        for iT,T in enumerate(self.T_list):
+        for iT,T in enumerate(self.chosen_T_list):
 
             #we perform the jackknife analysis (the observable being the ratio we want to compute)
             Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = jackknife([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), jack_axis_list=[1,0], time_axis=-1)
@@ -561,7 +597,7 @@ class moments_toolkit(bulding_block):
             marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
 
             #we loop over T and each time we add a graph to the plot
-            for iT, T in enumerate(self.T_list):
+            for iT, T in enumerate(self.chosen_T_list):
 
                 times = np.arange(-T/2+1,T/2)
 
@@ -651,7 +687,7 @@ class moments_toolkit(bulding_block):
         Sstd = np.zeros(shape=S_shape, dtype=float)
 
         #we loop over all the T values we have
-        for iT,T in enumerate(self.T_list):
+        for iT,T in enumerate(self.chosen_T_list):
             
             #we compute S using the jackknife algorithm
             Smean[:,iT], Sstd[:,iT], _ = jackknife( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), jack_axis_list=[1,0], time_axis=None )
@@ -718,7 +754,7 @@ class moments_toolkit(bulding_block):
                 Sstd[iop] = np.asarray( [c.sdev for c in S_gvar] )
 
                 #then we plot it
-                ax[plot_index].errorbar(self.T_list, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
+                ax[plot_index].errorbar(self.chosen_T_list, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
 
 
         #we set the title of the plot
@@ -772,7 +808,7 @@ class moments_toolkit(bulding_block):
         for iop in range(self.Nop):
 
             #we compute mean and std of the matrix element using the jackknife
-            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
+            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
 
             #we put them into a gvar variable and store it into the array
             mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
@@ -1185,7 +1221,7 @@ class moments_toolkit(bulding_block):
             #abscissa[iop] = []
             tmp_a = []
 
-            for iT,T in enumerate(self.T_list):
+            for iT,T in enumerate(self.chosen_T_list):
 
                 start_plateau, end_plateau = plateau_search(Rmean[iop,iT,:T+1 ], Rcovmat[iop,iT,:T+1 , :T+1 ], only_sig=False, chi2_treshold=chi2_treshold)
 
@@ -1208,16 +1244,16 @@ class moments_toolkit(bulding_block):
         p2corr = self.get_p2corr()
 
         #we resample the ratios, len = Nop,, each element with shape = (Nres, Nallowed(T,tau) )
-        ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
+        ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
 
         #the number of resamples is given by
         nres = ratio_resamples_list[0].shape[0]
 
-        #ratio_list = [ np.asarray( [e for l in [ ratio_formula(p3corr, p2corr, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop) ]
-        ratio_list = [ jackknife([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
-        ratio_mean_list = [ np.asarray([e for l in  [Rmean[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop)]
-        ratio_std_list = [ np.asarray([e for l in  [Rstd[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop)]
-        #ratio_cov_list = [ np.asarray([e for l in  [Rcovmat[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1], plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.T_list) ] for e in l] ) for iop in range(self.Nop)]
+        #ratio_list = [ np.asarray( [e for l in [ ratio_formula(p3corr, p2corr, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop) ]
+        ratio_list = [ jackknife([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
+        ratio_mean_list = [ np.asarray([e for l in  [Rmean[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
+        ratio_std_list = [ np.asarray([e for l in  [Rstd[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
+        #ratio_cov_list = [ np.asarray([e for l in  [Rcovmat[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1], plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
 
         ## Then the prior construction
 
@@ -1347,7 +1383,7 @@ class moments_toolkit(bulding_block):
                 marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
 
                 #we loop over T and each time we add a graph to the plot
-                for iT, T in enumerate(self.T_list):
+                for iT, T in enumerate(self.chosen_T_list):
 
                     #times = np.arange(-T/2+1,T/2)
 
