@@ -418,16 +418,22 @@ class bulding_block:
                 np.save(f"{fast_data_folder}/{self.p3corr_file_prefix}_T{T}.npy", corr)
 
             
-            ## We construct the 3-vector of the momentum and of the insertion momentum and we store them to class variables
+        ## We construct first the numer vectors of the momentum and of the insertion momentum and we store them to class variables
 
-            #we initialize the two vectors as empty lists
-            self.P_vec = np.zeros(shape=(3,), dtype =int)
-            self.q_vec = np.zeros(shape=(3,), dtype =int)
+        #we initialize the two vectors as empty lists
+        self.n_P_vec = np.zeros(shape=(3,), dtype=int) #number vectors
+        self.n_q_vec = np.zeros(shape=(3,), dtype=int)
+        self.P_vec = np.zeros(shape=(3,), dtype=float) #actual momentum vectors (in lattice units)
+        self.q_vec = np.zeros(shape=(3,), dtype=float)
 
-            #we construct the P vector and the q vector from the value of the momentum string (something like 'PX-2_PY0_PZ0' and 'qx-1_qy-1_qz-1')
-            for i, (Pi,qi) in enumerate(zip(self.momentum.split('_'), self.insmomentum.split('_'))):
-                self.P_vec[i] = int( Pi[2:] )
-                self.q_vec[i] = int( qi[2:] )
+        #we construct the P vector and the q vector from the value of the momentum string (something like 'PX-2_PY0_PZ0' and 'qx-1_qy-1_qz-1')
+        for i, (Pi,qi) in enumerate(zip(self.momentum.split('_'), self.insmomentum.split('_'))):
+            self.n_P_vec[i] = int( Pi[2:] )
+            self.n_q_vec[i] = int( qi[2:] )
+
+        #we then construct the 3-vectors for P and q just by adding the right prefactors
+        self.P_vec = (2 * np.pi / self.latticeT ) * self.n_P_vec
+        self.q_vec = (2 * np.pi / self.latticeT ) * self.n_q_vec
 
 
 

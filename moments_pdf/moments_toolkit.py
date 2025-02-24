@@ -151,8 +151,11 @@ class moments_toolkit(bulding_block):
         #we initialize the value of the ground state energy
         self.E0: gv._gvarcore.GVar | None = None
 
+        #we initialize the value of the mass
+        self.m: gv._gvarcore.GVar | None = None
+
         #we initialize the values of the times chosen in the analysis
-        self.chosen_T_list = self.T_list
+        self.chosen_T_list = self.T_list[:]
         self.nT = len(self.chosen_T_list)
 
 
@@ -241,7 +244,7 @@ class moments_toolkit(bulding_block):
         T_to_remove_list = args
 
         #we reset the chosen T to be all the availables ones
-        self.chosen_T_list = self.T_list
+        self.chosen_T_list = self.T_list[:]
 
         #for each T specified by the user we remove it from the analysis
         for T_to_remove in T_to_remove_list:
@@ -614,14 +617,16 @@ class moments_toolkit(bulding_block):
 
                 #we rescale to the kfactor #TO DO: check the kinematics factors
                 if rescale:
-                    #we take mass and energy of g.s.
-                    E0 = self.get_E_from_p2corr()
-                    mass = E0
 
-                    #we set the momentum to 0
-                    p1 = gv.gvar(0,0)
-                    p2 = gv.gvar(0,0)
-                    p3 = gv.gvar(0,0)
+                    #we take mass and energy of g.s.
+                    E0 = self.get_E()
+                    mass = self.get_m()
+                    
+
+                    #we set the momentum to its value
+                    p1 = gv.gvar(self.P_vec[0], 0)
+                    p2 = gv.gvar(self.P_vec[1] ,0)
+                    p3 = gv.gvar(self.P_vec[2] ,0)
 
                     #we compute the kinematic factor
                     kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
@@ -729,13 +734,14 @@ class moments_toolkit(bulding_block):
 
 
             #we take mass and energy of g.s.
-            E0 = self.get_E_from_p2corr()
-            mass = E0
+            E0 = self.get_E()
+            mass = self.get_m()
+            
 
-            #we set the momentum to 0
-            p1 = gv.gvar(0,0)
-            p2 = gv.gvar(0,0)
-            p3 = gv.gvar(0,0)
+            #we set the momentum to its value
+            p1 = gv.gvar(self.P_vec[0], 0)
+            p2 = gv.gvar(self.P_vec[1] ,0)
+            p3 = gv.gvar(self.P_vec[2] ,0)
 
             #we compute the kinematic factor
             kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
@@ -1159,10 +1165,10 @@ class moments_toolkit(bulding_block):
         return fit_state
 
 
-    #function used to obtain the groundenergy from the fit to the two point function
-    def get_E_from_p2corr(self, force_fit:bool=False) -> gv._gvarcore.GVar:
+    #function used to obtain the ground state energy from the fit to the two point function
+    def get_E(self, force_fit:bool=False) -> gv._gvarcore.GVar:
         """
-        Function returning the gvar variable with the ground state energy obtained from the fit to the two point corerlator
+        Function returning the gvar variable with the ground state energy obtained from the fit to the two point correlator
         
         Input:
             - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
@@ -1173,6 +1179,7 @@ class moments_toolkit(bulding_block):
 
         #we check whether we can avoid doing the fit
         if self.E0 is None or force_fit==True:
+
             #first we perform the fit with the main method
             fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples
 
@@ -1184,6 +1191,27 @@ class moments_toolkit(bulding_block):
 
         #then we return a gv variable containing mean and std of the best estimate of the ground state energy
         return self.E0
+    
+    #function used to obtain the mass from the ground state energy obtained from the fit to the two point function
+    def get_m(self, force_fit:bool=False) -> gv._gvarcore.GVar:
+        """
+        Function returning the gvar variable with the mass, obtained from the ground state energy, obtained from the fit to the two point correlator
+        
+        Input:
+            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            
+        Output:
+            - m: gv.gvar, mean value and std of the mass extracted from the fit
+        """
+
+        #we check whether we can aavoid doing the computation again
+        if self.m is None or force_fit==True:
+            
+            #we update the value of the mass
+            self.m = np.sqrt( self.get_E(force_fit=force_fit)**2 - self.P_vec @ self.P_vec ) # m = sqrt( E^2 - p^2 )
+
+        #then we return a gv variable containing mean and std of the best estimate for the mass
+        return self.m
 
 
 
