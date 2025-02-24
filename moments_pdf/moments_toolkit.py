@@ -78,12 +78,12 @@ class moments_toolkit(bulding_block):
 
     #useful mass values
     #from PDG
-    m_p = gv.gvar(938.27208816, 0.00000029)
-    m_pi = gv.gvar(139.5701, 0.0003) #pi+-
-    m_pi0 = gv.gvar(134.9770, 0.0005) #pi0
+    m_p   : gv._gvarcore.GVar  = gv.gvar(938.27208816, 0.00000029)
+    m_pi  : gv._gvarcore.GVar  = gv.gvar(139.5701, 0.0003) #pi+-
+    m_pi0 : gv._gvarcore.GVar  = gv.gvar(134.9770, 0.0005) #pi0
     #from reference paper
-    m_pi_coarse = gv.gvar(136, 2)
-    m_pi_fine = gv.gvar(133, 1)
+    m_pi_coarse : gv._gvarcore.GVar  = gv.gvar(136, 2)
+    m_pi_fine   : gv._gvarcore.GVar  = gv.gvar(133, 1)
 
     #values of the lattice spacing for the two lattices of interest
     a_coarse = gv.gvar(0.1163, 0.0004) 

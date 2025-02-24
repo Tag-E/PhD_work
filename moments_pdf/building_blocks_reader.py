@@ -417,6 +417,18 @@ class bulding_block:
             for T, corr in self.bb_array_dict.items():
                 np.save(f"{fast_data_folder}/{self.p3corr_file_prefix}_T{T}.npy", corr)
 
+            
+            ## We construct the 3-vector of the momentum and of the insertion momentum and we store them to class variables
+
+            #we initialize the two vectors as empty lists
+            self.P_vec = np.zeros(shape=(3,), dtype =int)
+            self.q_vec = np.zeros(shape=(3,), dtype =int)
+
+            #we construct the P vector and the q vector from the value of the momentum string (something like 'PX-2_PY0_PZ0' and 'qx-1_qy-1_qz-1')
+            for i, (Pi,qi) in enumerate(zip(self.momentum.split('_'), self.insmomentum.split('_'))):
+                self.P_vec[i] = int( Pi[2:] )
+                self.q_vec[i] = int( qi[2:] )
+
 
 
 
