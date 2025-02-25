@@ -85,6 +85,10 @@ class moments_toolkit(bulding_block):
     #values of the lattice spacing for the two lattices of interest
     a_coarse : gv._gvarcore.GVar = gv.gvar(0.1163, 0.0004) 
     a_fine   : gv._gvarcore.GVar = gv.gvar(0.0926, 0.0006)
+
+    #list with the available energy units that can be used
+    energy_units = ["lattice", "mev"]
+
                         
 
 
@@ -583,16 +587,21 @@ class moments_toolkit(bulding_block):
     ## Advanced Getter Methods (methods that return parameters stored in the class, but that require a computation being made each time the method is called)
 
     #function used to obtain the ground state energy from the fit to the two point function
-    def get_E(self, force_fit:bool=False) -> gv._gvarcore.GVar:
+    def get_E(self, force_fit:bool=False,  units:str="lattice") -> gv._gvarcore.GVar:
         """
         Function returning the gvar variable with the ground state energy obtained from the fit to the two point correlator
         
         Input:
             - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returneds
             
         Output:
             - E0: gv.gvar, mean value and std of the ground state energy
         """
+
+        #input control on the chosen units
+        if units not in self.energy_units:
+            raise ValueError(f"Error: the value of units must be one in the list {self.energy_units}, but instead units={units} was chosen.")
 
         #we check whether we can avoid doing the fit
         if self.E0 is None or force_fit==True:
@@ -606,20 +615,28 @@ class moments_toolkit(bulding_block):
             #we update the value of the ground state energy stored in the class
             self.E0 = gv.gvar( results["est"]["E0"], results["err"]["E0"] )
 
+        #we select a value of the energy according to the units specified by the user
+        E0 = self.E0 if units == "lattice" else self.lattice_to_MeV(self.E0)
+
         #then we return a gv variable containing mean and std of the best estimate of the ground state energy
-        return self.E0
+        return E0
     
     #function used to obtain the mass from the ground state energy obtained from the fit to the two point function
-    def get_m(self, force_fit:bool=False) -> gv._gvarcore.GVar:
+    def get_m(self, force_fit:bool=False, units:str="lattice") -> gv._gvarcore.GVar:
         """
         Function returning the gvar variable with the mass, obtained from the ground state energy, obtained from the fit to the two point correlator
         
         Input:
             - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returned
             
         Output:
             - m: gv.gvar, mean value and std of the mass extracted from the fit
         """
+
+        #input control on the chosen units
+        if units not in self.energy_units:
+            raise ValueError(f"Error: the value of units must be one in the list {self.energy_units}, but instead units={units} was chosen.")
 
         #we check whether we can aavoid doing the computation again
         if self.m is None or force_fit==True:
@@ -627,8 +644,11 @@ class moments_toolkit(bulding_block):
             #we update the value of the mass
             self.m = np.sqrt( self.get_E(force_fit=force_fit)**2 - self.P_vec @ self.P_vec ) # m = sqrt( E^2 - p^2 )
 
+        #we select a value of the mass according to the units specified by the user
+        m = self.m if units == "lattice" else self.lattice_to_MeV(self.m)
+
         #then we return a gv variable containing mean and std of the best estimate for the mass
-        return self.m
+        return m
 
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
@@ -919,6 +939,53 @@ class moments_toolkit(bulding_block):
 
         #we return the building block of the operator identified by the cgmat passed as input
         return opBB    
+
+
+
+    ## Auxiliary Methods (useful methods implementing computations that are not at the core of the data analysis)
+
+    #function used to convert an energy value from lattice units to MeV
+    def lattice_to_MeV(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
+        """
+        Function used to convert an energy value from lattice units to MeV
+        
+        Input:
+            - input_value: the value (float, array, gvar variable) that represents energy(ies) in lattice units
+        
+        Output:
+            - output_value: the input converted in MeV
+        """
+
+        #we multiply the input by hbar c
+        output_value = input_value * self.hbarc
+
+        #then we divide by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
+        output_value /= self.a_coarse if self.latticeT==48 else self.a_fine
+
+        #we return the value in MeV
+        return output_value
+    
+    #function used to convert an energy value from lattice units to MeV
+    def MeV_to_lattice(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
+        """
+        Function used to convert an energy value from MeV to lattice units
+        
+        Input:
+            - input_value: the value (float, array, gvar variable) that represents energy(ies) in MeV
+        
+        Output:
+            - output_value: the input converted in lattice units
+        """
+
+        #we divide the input by hbar c
+        output_value = input_value / self.hbarc
+
+        #then we multiply by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
+        output_value *= self.a_coarse if self.latticeT==48 else self.a_fine
+
+        #we return the value in lattice units
+        return output_value
+
 
 
 
@@ -1228,7 +1295,7 @@ class moments_toolkit(bulding_block):
                 if nstates==2:
 
                     #for the energy we don't know, so we just give a wide prior assuming the energy doubles from ground to first excited state
-                    prior[f"dE1"]= self.m_pi / self.hbarc * self.a_coarse
+                    prior[f"dE1"]= self.MeV_to_lattice( self.m_pi )
 
                     #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
                     t_probe = t_start
