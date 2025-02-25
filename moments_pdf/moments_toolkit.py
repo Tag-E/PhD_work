@@ -582,6 +582,35 @@ class moments_toolkit(bulding_block):
         #we return the 3 point correlators
         return p3_corr
 
+    #function used to get the momentum P at the sink
+    def get_P(self, units:str="lattice") -> tuple[gv._gvarcore.GVar,gv._gvarcore.GVar,gv._gvarcore.GVar]:
+        """
+        Function returning the3 gvar variables with corresponding to Px, Py and Pz, the 3 components of the momentum P at the sink
+        
+        Input:
+            - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returned
+            
+        Output:
+            - Px, Py Pz: gv.gvar, variables with mean value and std of the 3 components of the momentum 3-vector P
+        """
+
+        #input control on the chosen units
+        if units not in self.energy_units:
+            raise ValueError(f"Error: the value of units must be one in the list {self.energy_units}, but instead units={units} was chosen.")
+        
+        #we read the components of P from the values stored (and read by) the building block class
+        Px = gv.gvar(self.P_vec[0], 0) #(the values have no uncertainty) #-> TO DO: check that statement
+        Py = gv.gvar(self.P_vec[1], 0)
+        Pz = gv.gvar(self.P_vec[2], 0)
+
+        #we convert the values to MeV if the user asks for it
+        if units=="mev":
+            Px = self.lattice_to_MeV(Px)
+            Py = self.lattice_to_MeV(Py)
+            Pz = self.lattice_to_MeV(Pz)
+
+        #we return the three components of the momentum
+        return Px, Py, Pz
 
 
     ## Advanced Getter Methods (methods that return parameters stored in the class, but that require a computation being made each time the method is called)
@@ -829,8 +858,7 @@ class moments_toolkit(bulding_block):
     
     #function used to plot S
     def plot_S(self, tskip:int, isospin:str|None=None, show:bool=True, save:bool=True, figname:str='plotS',
-               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               abs=False, rescale=False) -> tuple[Figure, Any]:
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,) -> tuple[Figure, Any]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
@@ -862,12 +890,9 @@ class moments_toolkit(bulding_block):
             #we take mass and energy of g.s.
             E0 = self.get_E()
             mass = self.get_m()
-            
 
             #we set the momentum to its value
-            p1 = gv.gvar(self.P_vec[0], 0)
-            p2 = gv.gvar(self.P_vec[1] ,0)
-            p3 = gv.gvar(self.P_vec[2] ,0)
+            p1,p2,p3 = self.get_P()
 
             #we compute the kinematic factor
             kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
@@ -911,7 +936,7 @@ class moments_toolkit(bulding_block):
 
 
 
-    ## Backbone Methods (methods implementing the underlying logic of the computation carried out during the data analysis) 
+    ## Backbone Methods (core methods implementing the underlying logic of the computations carried out during the data analysis) 
 
     #function returning the building block of the specified operator
     def operatorBB(self, T:int, isospin: str, operator: Operator) -> np.ndarray:
@@ -940,204 +965,23 @@ class moments_toolkit(bulding_block):
         #we return the building block of the operator identified by the cgmat passed as input
         return opBB    
 
-
-
-    ## Auxiliary Methods (useful methods implementing computations that are not at the core of the data analysis)
-
-    #function used to convert an energy value from lattice units to MeV
-    def lattice_to_MeV(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
-        """
-        Function used to convert an energy value from lattice units to MeV
-        
-        Input:
-            - input_value: the value (float, array, gvar variable) that represents energy(ies) in lattice units
-        
-        Output:
-            - output_value: the input converted in MeV
-        """
-
-        #we multiply the input by hbar c
-        output_value = input_value * self.hbarc
-
-        #then we divide by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
-        output_value /= self.a_coarse if self.latticeT==48 else self.a_fine
-
-        #we return the value in MeV
-        return output_value
-    
-    #function used to convert an energy value from lattice units to MeV
-    def MeV_to_lattice(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
-        """
-        Function used to convert an energy value from MeV to lattice units
-        
-        Input:
-            - input_value: the value (float, array, gvar variable) that represents energy(ies) in MeV
-        
-        Output:
-            - output_value: the input converted in lattice units
-        """
-
-        #we divide the input by hbar c
-        output_value = input_value / self.hbarc
-
-        #then we multiply by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
-        output_value *= self.a_coarse if self.latticeT==48 else self.a_fine
-
-        #we return the value in lattice units
-        return output_value
-
-
-
-
-    ## Work in Progress Methods (stuff still in development)
-
-    #method to extract the matrix element from the summed ratios
-    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str|None=None) -> np.ndarray:
-        """
-        Function returning a value of the (unrenormalized) matrix element for each operator, extracting them from the summed ratios S
-        
-        Input:
-            - tskip_list: list of tau skip we want to use in the analysis
-            - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
-        
-        Output:
-            - mat_ele: np array with shape (Nop, nT-1), with one value of the matrix element for each operator and for each allowed time value
-        """
-
-        #we first take the correlators we need to compute everything
-        p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
-        p3corr = self.get_p3corr(isospin=isospin) #shape = (Nop, Nconf, NT, maxT+1)
-
-        #we instantiate the output array
-        mat_ele_array = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
-
-        #we fill the output array using the formula for the matrix element from S
-        for iop in range(self.Nop):
-
-            #we compute mean and std of the matrix element using the jackknife
-            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
-
-            #we put them into a gvar variable and store it into the array
-            mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
-
-        #if delta=0 is not one of the values considered then the last value of T is removed (since it has no allowed value of T+delta)
-        if 0 not in delta_list:
-            mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
-        
-        #we return the matrix element array
-        return mat_ele_array
-
-
-
-    #function to get a value of the mass from the two point function
-    def get_meff(self, show:bool=False, save:bool=False, chi2_treshold:float=1.0, zoom:int=0, figname:str='mass_plateau') -> tuple[float, float]:
-        """
-        Input:
-            - show: bool, if True the effective mass vs time plot is shown to screen
-            - save: bool, if True the effective mass vs time plot is saved to file
-            - chi2_treshold:  treshold for the plateau determination using a chi2 analysis
-            - zoom: int, number of extra points plotted on the sides of the plateau
-            - figname: name of the .png file containing the plot
-        
-        Output:
-            - meff_plat, meff_plat_std: value of the mass extracted from the plateau of the effective mass, with related std
-        """
-
-        #first we recall the two point correlators
-        corr_2p = self. get_p2corr() #the cast to real is done here
-
-        #we use the jackknife to compute the effective mass (mean and std)
-        meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis_list=0, time_axis=-1)
-
-        #to remove this problematic part we look for the first time the std is 0
-        cut=np.where(meff_std<=0)[0][0]
-
-        #and we cut the meff arrays there
-        meff = meff[:cut]
-        meff_std = meff_std[:cut]
-        meff_covmat = meff_covmat[:cut,:cut]
-
-
-        #we compute a mean value and a std from the plateau
-
-        #first we identify the boundaries of the plateau region
-        start_plateau, end_plateau = plateau_search(meff, meff_covmat, chi2_treshold=chi2_treshold)
-
-        #then we get the mass from the plateau value
-        meff_plat = np.mean(meff[start_plateau:end_plateau])
-        #its std is given by sqrt of sum variance/ N
-        meff_plat_std = np.sqrt( np.mean( meff_std[start_plateau:end_plateau]**2 ) )
-
-        #we make a plot 
-
-        #the plot is made if the user ask either to see it or to save it to file
-        if show or save:
-            
-            #we instantiate the figure
-            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
-
-            #we determine the time values to be displayed on the plot (x axis)
-            m_times = np.arange(np.shape(meff)[0]) + 0.5
-
-            #we plot the plateau and the neighbouring effective mass values
-            plt.errorbar(m_times[start_plateau-zoom:end_plateau+zoom], meff[start_plateau-zoom:end_plateau+zoom], yerr=meff_std[start_plateau-zoom:end_plateau+zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
-            plt.hlines(meff_plat ,start_plateau+0.5, end_plateau+0.5, color='red')
-            plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-            plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-
-            #plot styling
-            plt.title("Effective Mass Plateau")
-            plt.ylabel(r"$m_{eff}(t)$")
-            plt.xlabel(r"$t$")
-
-
-            #we save the figure if asked
-            if save:
-                plt.savefig(f"{self.plots_folder}/{figname}.png")
-
-            #we show the figure if asked
-            if show:
-                plt.show()
-
-
-        #we return the plateau values
-        return meff_plat, meff_plat_std
-    
-
-    #function used to extract a value of the fit mass from the two point correlators
-    def get_mfit(self) -> tuple[float,float]:
-        """
-        Input:
-            - None
-
-        Output:
-            - mfit, mfit_std: mean value and std of the mass extracted from the fit, using the jackknife analysis
-        """
-
-        #first we recall the two point correlators
-        #corr_2p = self.bb_list[0].p2_corr.real
-        corr_2p = self.get_p2corr()
-
-        #then we use the jackknife to compute the fit mass and its std
-        m_A_fit, m_A_fit_std , _= jackknife(corr_2p, fit_mass, jack_axis_list=0, time_axis=None)
-        mfit = m_A_fit[0]
-        mfit_std = m_A_fit_std[0]
-
-        #we return the fit mass and its std
-        return mfit, mfit_std
-
-
+    #function used to perform the fit of the two point correlator and to extract from it the ground state energy
     def fit_2pcorr(self, 
-                   chi2_treshold:float=1.0, zoom:int=0, fit_doubt_factor:float=3,                            #statistical analysis params
-                   show=True, save=True, verbose=False,                                                      #output printing params
-                   central_value_fit:bool            = True, central_value_fit_correlated:bool  = True,      #correlator analyser params
-                   resample_fit:bool                  = False, resample_fit_correlated:bool       = False,
-                   resample_fit_resample_prior:bool   = False) -> CA.FitState:
+                   chi2_treshold:float=1.0, fit_doubt_factor:float=3,                        #statistical analysis params
+                   zoom:int=0, show=True, save=True, verbose=False,                          #output printing params
+                   central_value_fit:bool=True, central_value_fit_correlated:bool=True,      #correlator analyser params
+                   resample_fit:bool=False, resample_fit_correlated:bool=False,
+                   resample_fit_resample_prior:bool=False) -> CA.FitState:
         """
         Input:
             - chi2_treshold: float, treshold value of the chi2 used for the plateau determination
+            - fit_doubt_factor: enhancement to the std used as prior that is obtained from a simple scipy fit
             - zoom: int, number of points around the plateau to be shown in the plot (i.e. how much "zoom out" should be used in the plot)
+            - central_value_fit: bool, as in correlator analyser (see  https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
+            - central_value_fit_correlated: bool, as in correlator analyser
+            - resample_fit: bool, as in correlator analyser
+            - resample_fit_correlated: bool, as in correlator analyser
+            - resample_fit_resample_prior: bool, as in correlator analyser
 
         Output:
             - fit_state: instance of the FitState class containing all the information regarding the fits performed
@@ -1356,6 +1200,193 @@ class moments_toolkit(bulding_block):
 
         #we return the fit state
         return fit_state
+
+
+
+    ## Auxiliary Methods (useful methods implementing computations that are not at the core of the data analysis)
+
+    #function used to convert an energy value from lattice units to MeV
+    def lattice_to_MeV(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
+        """
+        Function used to convert an energy value from lattice units to MeV
+        
+        Input:
+            - input_value: the value (float, array, gvar variable) that represents energy(ies) in lattice units
+        
+        Output:
+            - output_value: the input converted in MeV
+        """
+
+        #we multiply the input by hbar c
+        output_value = input_value * self.hbarc
+
+        #then we divide by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
+        output_value /= self.a_coarse if self.latticeT==48 else self.a_fine
+
+        #we return the value in MeV
+        return output_value
+    
+    #function used to convert an energy value from lattice units to MeV
+    def MeV_to_lattice(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
+        """
+        Function used to convert an energy value from MeV to lattice units
+        
+        Input:
+            - input_value: the value (float, array, gvar variable) that represents energy(ies) in MeV
+        
+        Output:
+            - output_value: the input converted in lattice units
+        """
+
+        #we divide the input by hbar c
+        output_value = input_value / self.hbarc
+
+        #then we multiply by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
+        output_value *= self.a_coarse if self.latticeT==48 else self.a_fine
+
+        #we return the value in lattice units
+        return output_value
+
+
+
+
+    ## Work in Progress Methods (stuff still in development)
+
+    #method to extract the matrix element from the summed ratios
+    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str|None=None) -> np.ndarray:
+        """
+        Function returning a value of the (unrenormalized) matrix element for each operator, extracting them from the summed ratios S
+        
+        Input:
+            - tskip_list: list of tau skip we want to use in the analysis
+            - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
+        
+        Output:
+            - mat_ele: np array with shape (Nop, nT-1), with one value of the matrix element for each operator and for each allowed time value
+        """
+
+        #we first take the correlators we need to compute everything
+        p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
+        p3corr = self.get_p3corr(isospin=isospin) #shape = (Nop, Nconf, NT, maxT+1)
+
+        #we instantiate the output array
+        mat_ele_array = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
+
+        #we fill the output array using the formula for the matrix element from S
+        for iop in range(self.Nop):
+
+            #we compute mean and std of the matrix element using the jackknife
+            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
+
+            #we put them into a gvar variable and store it into the array
+            mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
+
+        #if delta=0 is not one of the values considered then the last value of T is removed (since it has no allowed value of T+delta)
+        if 0 not in delta_list:
+            mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
+        
+        #we return the matrix element array
+        return mat_ele_array
+
+
+
+    #function to get a value of the mass from the two point function
+    def get_meff(self, show:bool=False, save:bool=False, chi2_treshold:float=1.0, zoom:int=0, figname:str='mass_plateau') -> tuple[float, float]:
+        """
+        Input:
+            - show: bool, if True the effective mass vs time plot is shown to screen
+            - save: bool, if True the effective mass vs time plot is saved to file
+            - chi2_treshold:  treshold for the plateau determination using a chi2 analysis
+            - zoom: int, number of extra points plotted on the sides of the plateau
+            - figname: name of the .png file containing the plot
+        
+        Output:
+            - meff_plat, meff_plat_std: value of the mass extracted from the plateau of the effective mass, with related std
+        """
+
+        #first we recall the two point correlators
+        corr_2p = self. get_p2corr() #the cast to real is done here
+
+        #we use the jackknife to compute the effective mass (mean and std)
+        meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis_list=0, time_axis=-1)
+
+        #to remove this problematic part we look for the first time the std is 0
+        cut=np.where(meff_std<=0)[0][0]
+
+        #and we cut the meff arrays there
+        meff = meff[:cut]
+        meff_std = meff_std[:cut]
+        meff_covmat = meff_covmat[:cut,:cut]
+
+
+        #we compute a mean value and a std from the plateau
+
+        #first we identify the boundaries of the plateau region
+        start_plateau, end_plateau = plateau_search(meff, meff_covmat, chi2_treshold=chi2_treshold)
+
+        #then we get the mass from the plateau value
+        meff_plat = np.mean(meff[start_plateau:end_plateau])
+        #its std is given by sqrt of sum variance/ N
+        meff_plat_std = np.sqrt( np.mean( meff_std[start_plateau:end_plateau]**2 ) )
+
+        #we make a plot 
+
+        #the plot is made if the user ask either to see it or to save it to file
+        if show or save:
+            
+            #we instantiate the figure
+            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
+
+            #we determine the time values to be displayed on the plot (x axis)
+            m_times = np.arange(np.shape(meff)[0]) + 0.5
+
+            #we plot the plateau and the neighbouring effective mass values
+            plt.errorbar(m_times[start_plateau-zoom:end_plateau+zoom], meff[start_plateau-zoom:end_plateau+zoom], yerr=meff_std[start_plateau-zoom:end_plateau+zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
+            plt.hlines(meff_plat ,start_plateau+0.5, end_plateau+0.5, color='red')
+            plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
+            plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
+
+            #plot styling
+            plt.title("Effective Mass Plateau")
+            plt.ylabel(r"$m_{eff}(t)$")
+            plt.xlabel(r"$t$")
+
+
+            #we save the figure if asked
+            if save:
+                plt.savefig(f"{self.plots_folder}/{figname}.png")
+
+            #we show the figure if asked
+            if show:
+                plt.show()
+
+
+        #we return the plateau values
+        return meff_plat, meff_plat_std
+    
+
+    #function used to extract a value of the fit mass from the two point correlators
+    def get_mfit(self) -> tuple[float,float]:
+        """
+        Input:
+            - None
+
+        Output:
+            - mfit, mfit_std: mean value and std of the mass extracted from the fit, using the jackknife analysis
+        """
+
+        #first we recall the two point correlators
+        #corr_2p = self.bb_list[0].p2_corr.real
+        corr_2p = self.get_p2corr()
+
+        #then we use the jackknife to compute the fit mass and its std
+        m_A_fit, m_A_fit_std , _= jackknife(corr_2p, fit_mass, jack_axis_list=0, time_axis=None)
+        mfit = m_A_fit[0]
+        mfit_std = m_A_fit_std[0]
+
+        #we return the fit mass and its std
+        return mfit, mfit_std
 
 
 
