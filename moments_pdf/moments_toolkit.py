@@ -229,62 +229,7 @@ class moments_toolkit(bulding_block):
 
 
 
-    ##  Setter Methods (methods used to set the values of important parameters used in the analysis)
-
-    #method used to select the default value of the isospin used by default by the other methods
-    def select_isospin(self, isospin:str) -> None:
-        """
-        Function used to change the default value of the isospin (by default it is set to "U-D" by the init method)
-        
-        Input:
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D', the default value of isospin that will be used by all the method calls if no other isospin value is specified
-        
-        Output:
-            - None (the default value of the isospin stored in the class gets updated)
-        """
-        
-        #input control
-        if isospin not in self.isospin_list:
-            raise ValueError(f"The isospin value must be one in the list {self.isospin_list}, but instead {isospin} was chosen.")
-        
-        #if the input is ok we change the default value of the isospin (the one that will be used by the other methods if the isospin parameter is not specified when calling them)
-        else:
-            self.default_isospin = isospin
-
-
-    #function used to deselect some source-sink separation values T from the analysis
-    def remove_T(self, *args: int, verbose:bool=True) -> None:
-        """
-        Function used to deselect some source-sink separation values T from the analyses performed by the class
-        
-        Input:
-            - args: list[int], list containing the values T of the source-sink separation that won't be used by the analysy (if this is empty then all the available T will be used)
-            - verbose: bool, if True an info print will be given along the function call
-            
-        Output:
-            - None: the list with the chosen T value for the analysis gets updated
-        """
-
-        #we read the list with the values of T to remove from the analysis from the input
-        T_to_remove_list = args
-
-        #we reset the chosen T to be all the availables ones
-        self.chosen_T_list = self.T_list[:]
-
-        #for each T specified by the user we remove it from the analysis
-        for T_to_remove in T_to_remove_list:
-            if T_to_remove in self.chosen_T_list:
-                self.chosen_T_list.remove(T_to_remove)
-
-        #we also update the total number of T in the analysis
-        self.nT = len(self.chosen_T_list)
-
-        #info print
-        if verbose:
-                print(f"\nAvailable source-skink separation values: {self.T_list}\nChosen source-sink separation values: {self.chosen_T_list}")
-
-
-
+    ## Info Printing Methods (methods used to show informative output to the user)
 
     #Function used to print to pdf and show to the user all the available operators that can be chosen
     def operator_show(self, title:str|None=None, author:str="E.T.", doc_name:str|None=None, verbose:bool=False, show:bool=True, remove_pdf:bool=False, clean_tex:bool=True) -> None:
@@ -414,7 +359,60 @@ class moments_toolkit(bulding_block):
             print(f"\nOperators catalogue available in {file_name}\n")
 
 
-    
+
+    ##  Setter Methods (methods used to set the values of important parameters used in the analysis)
+
+    #method used to select the default value of the isospin used by default by the other methods
+    def select_isospin(self, isospin:str) -> None:
+        """
+        Function used to change the default value of the isospin (by default it is set to "U-D" by the init method)
+        
+        Input:
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D', the default value of isospin that will be used by all the method calls if no other isospin value is specified
+        
+        Output:
+            - None (the default value of the isospin stored in the class gets updated)
+        """
+        
+        #input control
+        if isospin not in self.isospin_list:
+            raise ValueError(f"The isospin value must be one in the list {self.isospin_list}, but instead {isospin} was chosen.")
+        
+        #if the input is ok we change the default value of the isospin (the one that will be used by the other methods if the isospin parameter is not specified when calling them)
+        else:
+            self.default_isospin = isospin
+
+    #function used to deselect some source-sink separation values T from the analysis
+    def remove_T(self, *args: int, verbose:bool=True) -> None:
+        """
+        Function used to deselect some source-sink separation values T from the analyses performed by the class
+        
+        Input:
+            - args: list[int], list containing the values T of the source-sink separation that won't be used by the analysy (if this is empty then all the available T will be used)
+            - verbose: bool, if True an info print will be given along the function call
+            
+        Output:
+            - None: the list with the chosen T value for the analysis gets updated
+        """
+
+        #we read the list with the values of T to remove from the analysis from the input
+        T_to_remove_list = args
+
+        #we reset the chosen T to be all the availables ones
+        self.chosen_T_list = self.T_list[:]
+
+        #for each T specified by the user we remove it from the analysis
+        for T_to_remove in T_to_remove_list:
+            if T_to_remove in self.chosen_T_list:
+                self.chosen_T_list.remove(T_to_remove)
+
+        #we also update the total number of T in the analysis
+        self.nT = len(self.chosen_T_list)
+
+        #info print
+        if verbose:
+                print(f"\nAvailable source-skink separation values: {self.T_list}\nChosen source-sink separation values: {self.chosen_T_list}")
+
     #function used to select which operators we want to study
     def select_operator(self, *kwarg: int) -> None:
         """
@@ -446,35 +444,96 @@ class moments_toolkit(bulding_block):
         #we update the number of selected operators
         self.Nop = len(self.selected_op)
 
-    
-
-    #function returning the building block of the specified operator
-    def operatorBB(self, T:int, isospin: str, operator: Operator) -> np.ndarray:
+    #function used to append an operator (not necessarily one in the catalogue) to the list of selected operators
+    def append_operator(self, new_operator: Operator) -> None:
         """
         Input:
-            - T: int, the time separation of the 3-point correlator
-            - operator: the instance of the Operator class representing the operator under study
-            - normalize: if True then the output is the ratio to the two point function
-
+            - new_operator: an instance of the Operator class
+            
         Output:
-            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T+1))
+            - None, but as a result of the function call the input operator is added to the list of selected operators
         """
 
-        #first thing first we fetch the building block of the basic operators
-        bb = self.get_bb(T, operator.X, isospin, operator.nder) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+        #input check
+        if type(new_operator) is not Operator:
+            raise ValueError("\nAchtung: the input must be an instance of the Operator class!\n")
+        
+        #if the input is ok we append the input operator to the list of selected operators
+        self.selected_op.append(new_operator)
 
-        #we can then instantiate the ouput array with the right dimensionality
-        opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
+        #we update the number of selected operators
+        self.Nop +=1
+        
+        #we return None
+        return None
 
-        #we now loop over all the possible indices combinations (n is the number of indices of the operartor)
-        for indices in it.product(range(4),repeat=operator.n):
+    #function used to remove operators from the list of selected operators
+    def deselect_operator(self, old_operator: Operator|None=None) -> None:
+        """
+        Function used to remove an Operator from the list of selected operator (if no argument is passed the list is emptied)
+        
+        Input:
+            - old_operator: the operator already in the list of selected operators that want to be removed (if None all the operators are removed from the list)
+            
+        Output:
+            - None (the list of selected operators gets updated)
+        """
 
-            #using the matrix with the cg coefficients related to the operator we construct its building block
-            opBB[:,:] += operator.cgmat[indices] * bb[:,:,*indices]
+        #we empty the list no input is specified
+        if old_operator is None:
+            self.selected_op = []
+            self.Nop = 0
+            return None
 
-        #we return the building block of the operator identified by the cgmat passed as input
-        return opBB    
+        #raise an error if the input is specified but it's not of the correct type
+        if type(old_operator) is not Operator:
+            raise ValueError("\nAchtung: the input must be an instance of the Operator class!\n")
+        
+        #if the operator is not in the list we raise an error
+        elif old_operator not in self.selected_op:
+            raise ValueError("\nThe specified operator is not in the list of selected operators, hence it cannot be removed\n")
+        
+        #if an operator is correctly specified we just remove it from the list
+        else:
+            self.selected_op.remove(old_operator)
+            self.Nop -= 1
+            return None
 
+
+
+    ## Getter Methods (methods used to access properly the data stored in the attributes of the class)
+
+    #function that returns the operator according to the label given in the catalogue
+    def get_operator(self, op_number: int) -> Operator:
+        """
+        Input:
+            - op_number: the number of the operator one wants to get as given in the operator catalogue
+
+        Output:
+            - an instance of the Operator class with all the specifics of the selected operator
+        """
+        
+        #we perform an input check
+        if type(op_number) is not int or op_number>len(self.operator_list) or op_number<1:
+            raise ValueError(f"\nAchtung: the operator id {op_number} is not valid, please select an id between 1 and {len(self.operator_list)}\n")
+
+        #we just select the right operator and send it back
+        return self.operator_list[op_number-1] #-1 because the numbering starts from 1 in the catalogue, not from 0
+
+    #function used to get the 2 point correlators (with the correct cast)
+    def get_p2corr(self) -> np.ndarray:
+        """
+        Function used to get the 2 point correlators (one for each configuration)
+        
+        Input:
+            - None: all the information is already stored inside the class
+        
+        Output:
+            - p2_corr: two point correlator, shape = (nconf, latticeT), dtype=float (i.e. they are casted to real numbers)
+        """
+
+        #we just return what we have already stored, just casting it to real
+        return self.p2_corr.real
 
     #function used to get the 3 point correlation functions related to the selected operators
     def get_p3corr(self, isospin:str|None=None) -> np.ndarray:
@@ -518,23 +577,58 @@ class moments_toolkit(bulding_block):
 
         #we return the 3 point correlators
         return p3_corr
-    
 
-    #function used to get the 2 point correlators (with the correct cast)
-    def get_p2corr(self) -> np.ndarray:
+
+
+    ## Advanced Getter Methods (methods that return parameters stored in the class, but that require a computation being made each time the method is called)
+
+    #function used to obtain the ground state energy from the fit to the two point function
+    def get_E(self, force_fit:bool=False) -> gv._gvarcore.GVar:
         """
-        Function used to get the 2 point correlators (one for each configuration)
+        Function returning the gvar variable with the ground state energy obtained from the fit to the two point correlator
         
         Input:
-            - None: every information is stored inside the class
-        
+            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            
         Output:
-            - p2_corr: two point correlator, shape = (nconf, latticeT), dtype=float (i.e. they are casted to real numbers)
+            - E0: gv.gvar, mean value and std of the ground state energy
         """
 
-        #we just return what we have already stored, just casting it to real
-        return self.p2_corr.real
+        #we check whether we can avoid doing the fit
+        if self.E0 is None or force_fit==True:
 
+            #first we perform the fit with the main method
+            fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples
+
+            #then we grep the parameters from the models average
+            results = fit2p.model_average()
+
+            #we update the value of the ground state energy stored in the class
+            self.E0 = gv.gvar( results["est"]["E0"], results["err"]["E0"] )
+
+        #then we return a gv variable containing mean and std of the best estimate of the ground state energy
+        return self.E0
+    
+    #function used to obtain the mass from the ground state energy obtained from the fit to the two point function
+    def get_m(self, force_fit:bool=False) -> gv._gvarcore.GVar:
+        """
+        Function returning the gvar variable with the mass, obtained from the ground state energy, obtained from the fit to the two point correlator
+        
+        Input:
+            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            
+        Output:
+            - m: gv.gvar, mean value and std of the mass extracted from the fit
+        """
+
+        #we check whether we can aavoid doing the computation again
+        if self.m is None or force_fit==True:
+            
+            #we update the value of the mass
+            self.m = np.sqrt( self.get_E(force_fit=force_fit)**2 - self.P_vec @ self.P_vec ) # m = sqrt( E^2 - p^2 )
+
+        #then we return a gv variable containing mean and std of the best estimate for the mass
+        return self.m
 
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
@@ -568,7 +662,44 @@ class moments_toolkit(bulding_block):
 
         #we return the ratios just computed and the results of the jackknife analysis
         return Rmean, Rstd, Rcovmat
-    
+
+    #function used to to compute the sum of ratios S
+    def get_S(self, tskip: int, isospin:str|None=None) -> tuple[np.ndarray, float, float]:
+        """
+        Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
+
+        Input:
+            - tskip = tau_skip = gap in time when performing the sum of ratios
+            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+
+        Output:
+            - Smean: the mean resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
+            - Sstd: the std resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
+        """
+
+        #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
+        p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+        p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+
+        #the shape of the ratio is given by (nop, nT), i.e.
+        S_shape =  (self.Nop, self.nT)
+
+        #we instantiate the output ratio
+        Smean = np.zeros(shape=S_shape, dtype=float) 
+        Sstd = np.zeros(shape=S_shape, dtype=float)
+
+        #we loop over all the T values we have
+        for iT,T in enumerate(self.chosen_T_list):
+            
+            #we compute S using the jackknife algorithm
+            Smean[:,iT], Sstd[:,iT], _ = jackknife( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), jack_axis_list=[1,0], time_axis=None )
+
+        #we return S
+        return Smean, Sstd
+
+
+
+    ## Plotter Methods (methods used to make the relevant plots of the data stored in the class)
 
     #function used to plot the ratio R for all the selected operators
     def plot_R(self, isospin:str|None=None, show:bool=True, save:bool=False, figname:str='plotR',
@@ -675,42 +806,7 @@ class moments_toolkit(bulding_block):
 
         #we return fig and ax
         return fig_ax_list
-
-    #function used to to compute the sum of ratios S
-    def get_S(self, tskip: int, isospin:str|None=None) -> tuple[np.ndarray, float, float]:
-        """
-        Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
-
-        Input:
-            - tskip = tau_skip = gap in time when performing the sum of ratios
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
-
-        Output:
-            - Smean: the mean resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
-            - Sstd: the std resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
-        """
-
-        #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
-        p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
-        p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
-
-        #the shape of the ratio is given by (nop, nT), i.e.
-        S_shape =  (self.Nop, self.nT)
-
-        #we instantiate the output ratio
-        Smean = np.zeros(shape=S_shape, dtype=float) 
-        Sstd = np.zeros(shape=S_shape, dtype=float)
-
-        #we loop over all the T values we have
-        for iT,T in enumerate(self.chosen_T_list):
-            
-            #we compute S using the jackknife algorithm
-            Smean[:,iT], Sstd[:,iT], _ = jackknife( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), jack_axis_list=[1,0], time_axis=None )
-
-        #we return S
-        return Smean, Sstd
-
-
+    
     #function used to plot S
     def plot_S(self, tskip:int, isospin:str|None=None, show:bool=True, save:bool=True, figname:str='plotS',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
@@ -793,6 +889,40 @@ class moments_toolkit(bulding_block):
         #we return fig and ax
         return fig, ax
 
+
+
+    ## Backbone Methods (methods implementing the underlying logic of the computation carried out during the data analysis) 
+
+    #function returning the building block of the specified operator
+    def operatorBB(self, T:int, isospin: str, operator: Operator) -> np.ndarray:
+        """
+        Input:
+            - T: int, the time separation of the 3-point correlator
+            - operator: the instance of the Operator class representing the operator under study
+            - normalize: if True then the output is the ratio to the two point function
+
+        Output:
+            - the building block (a np array) of the one operator specified by cgmat (and with the other features specified by the other inputs) (shape= (nconf,T+1))
+        """
+
+        #first thing first we fetch the building block of the basic operators
+        bb = self.get_bb(T, operator.X, isospin, operator.nder) #shape = (nconf, T, 4,4) (an extra 4 if X==T)
+
+        #we can then instantiate the ouput array with the right dimensionality
+        opBB = np.zeros(shape=(self.nconf,T+1), dtype=complex)
+
+        #we now loop over all the possible indices combinations (n is the number of indices of the operartor)
+        for indices in it.product(range(4),repeat=operator.n):
+
+            #using the matrix with the cg coefficients related to the operator we construct its building block
+            opBB[:,:] += operator.cgmat[indices] * bb[:,:,*indices]
+
+        #we return the building block of the operator identified by the cgmat passed as input
+        return opBB    
+
+
+
+    ## Work in Progress Methods (stuff still in development)
 
     #method to extract the matrix element from the summed ratios
     def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str|None=None) -> np.ndarray:
@@ -1170,55 +1300,6 @@ class moments_toolkit(bulding_block):
         return fit_state
 
 
-    #function used to obtain the ground state energy from the fit to the two point function
-    def get_E(self, force_fit:bool=False) -> gv._gvarcore.GVar:
-        """
-        Function returning the gvar variable with the ground state energy obtained from the fit to the two point correlator
-        
-        Input:
-            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
-            
-        Output:
-            - E0: gv.gvar, mean value and std of the ground state energy
-        """
-
-        #we check whether we can avoid doing the fit
-        if self.E0 is None or force_fit==True:
-
-            #first we perform the fit with the main method
-            fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples
-
-            #then we grep the parameters from the models average
-            results = fit2p.model_average()
-
-            #we update the value of the ground state energy stored in the class
-            self.E0 = gv.gvar( results["est"]["E0"], results["err"]["E0"] )
-
-        #then we return a gv variable containing mean and std of the best estimate of the ground state energy
-        return self.E0
-    
-    #function used to obtain the mass from the ground state energy obtained from the fit to the two point function
-    def get_m(self, force_fit:bool=False) -> gv._gvarcore.GVar:
-        """
-        Function returning the gvar variable with the mass, obtained from the ground state energy, obtained from the fit to the two point correlator
-        
-        Input:
-            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
-            
-        Output:
-            - m: gv.gvar, mean value and std of the mass extracted from the fit
-        """
-
-        #we check whether we can aavoid doing the computation again
-        if self.m is None or force_fit==True:
-            
-            #we update the value of the mass
-            self.m = np.sqrt( self.get_E(force_fit=force_fit)**2 - self.P_vec @ self.P_vec ) # m = sqrt( E^2 - p^2 )
-
-        #then we return a gv variable containing mean and std of the best estimate for the mass
-        return self.m
-
-
 
     def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=3, tskip_list=[1,2], show=True, save=True, verbose=False, rescale=True,
                         figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
@@ -1470,78 +1551,12 @@ class moments_toolkit(bulding_block):
 
 
 
-    #function that returns the operator according to the label given in the catalogue #TO DO: add input control
-    def get_operator(self, op_number: int) -> Operator:
-        """
-        Input:
-            - op_number: the number of the operator one wants to get as given in the operator catalogue
-
-        Output:
-            - an instance of the Operator class with all the specifics of the selected operator
-        """
-        
-        #we perform an input check
-        if type(op_number) is not int or op_number>len(self.operator_list) or op_number<1:
-            raise ValueError(f"\nAchtung: the operator id {op_number} is not valid, please select an id between 1 and {len(self.operator_list)}\n")
-
-        #we just select the right operator and send it back
-        return self.operator_list[op_number-1] #-1 because the numbering starts from 1 in the catalogue, not from 0
 
 
-    #function used to append an operator (not necessarily one in the catalogue) to the list of selected operators
-    def append_operator(self, new_operator: Operator) -> None:
-        """
-        Input:
-            - new_operator: an instance of the Operator class
-            
-        Output:
-            - None, but as a result of the function call the input operator is added to the list of selected operators
-        """
 
-        #input check
-        if type(new_operator) is not Operator:
-            raise ValueError("\nAchtung: the input must be an instance of the Operator class!\n")
-        
-        #if the input is ok we append the input operator to the list of selected operators
-        self.selected_op.append(new_operator)
 
-        #we update the number of selected operators
-        self.Nop +=1
-        
-        #we return None
-        return None
     
-    #function used to remove operators from the list of selected operators
-    def deselect_operator(self, old_operator: Operator|None=None) -> None:
-        """
-        Function used to remove an Operator from the list of selected operator (if no argument is passed the list is emptied)
-        
-        Input:
-            - old_operator: the operator already in the list of selected operators that want to be removed (if None all the operators are removed from the list)
-            
-        Output:
-            - None (the list of selected operators gets updated)
-        """
 
-        #we empty the list no input is specified
-        if old_operator is None:
-            self.selected_op = []
-            self.Nop = 0
-            return None
-
-        #raise an error if the input is specified but it's not of the correct type
-        if type(old_operator) is not Operator:
-            raise ValueError("\nAchtung: the input must be an instance of the Operator class!\n")
-        
-        #if the operator is not in the list we raise an error
-        elif old_operator not in self.selected_op:
-            raise ValueError("\nThe specified operator is not in the list of selected operators, hence it cannot be removed\n")
-        
-        #if an operator is correctly specified we just remove it from the list
-        else:
-            self.selected_op.remove(old_operator)
-            self.Nop -= 1
-            return None
             
 
 
