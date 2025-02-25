@@ -68,10 +68,7 @@ class moments_toolkit(bulding_block):
     Create an instance of the class to setup the analysis framework associated to the given dataset
     """
 
-    ## Global variable shared by all class instances
-
-    #list of available structures = vector,axial,tensor
-    X_list = ['V', 'A', 'T']
+    ### Global variable shared by all class instances
 
     #values of hbar times c
     hbarc = gv.gvar(197.3269631, 0.0000049)
@@ -86,14 +83,16 @@ class moments_toolkit(bulding_block):
     m_pi_fine   : gv._gvarcore.GVar  = gv.gvar(133, 1)
 
     #values of the lattice spacing for the two lattices of interest
-    a_coarse = gv.gvar(0.1163, 0.0004) 
-    a_fine = gv.gvar(0.0926, 0.0006)
+    a_coarse : gv._gvarcore.GVar = gv.gvar(0.1163, 0.0004) 
+    a_fine   : gv._gvarcore.GVar = gv.gvar(0.0926, 0.0006)
                         
 
 
 
 
-    ## Methods of the class
+    ### Methods of the class
+
+    ## Initialization Method
 
     #Initialization function #TO DO; add properly the skip3p option and skipop option
     def __init__(self, p3_folder:str, p2_folder:str,
@@ -157,6 +156,9 @@ class moments_toolkit(bulding_block):
         #we initialize the values of the times chosen in the analysis
         self.chosen_T_list = self.T_list[:]
         self.nT = len(self.chosen_T_list)
+
+        #we initialize the default value of the isospin
+        self.default_isospin = 'U-D'
 
 
         ## We build the list of all the available operators
@@ -225,6 +227,29 @@ class moments_toolkit(bulding_block):
         if verbose:
             print("\nClass Initialization Complete!\n")
 
+
+
+    ##  Setter Methods (methods used to set the values of important parameters used in the analysis)
+
+    #method used to select the default value of the isospin used by default by the other methods
+    def select_isospin(self, isospin:str) -> None:
+        """
+        Function used to change the default value of the isospin (by default it is set to "U-D" by the init method)
+        
+        Input:
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D', the default value of isospin that will be used by all the method calls if no other isospin value is specified
+        
+        Output:
+            - None (the default value of the isospin stored in the class gets updated)
+        """
+        
+        #input control
+        if isospin not in self.isospin_list:
+            raise ValueError(f"The isospin value must be one in the list {self.isospin_list}, but instead {isospin} was chosen.")
+        
+        #if the input is ok we change the default value of the isospin (the one that will be used by the other methods if the isospin parameter is not specified when calling them)
+        else:
+            self.default_isospin = isospin
 
 
     #function used to deselect some source-sink separation values T from the analysis
@@ -452,21 +477,21 @@ class moments_toolkit(bulding_block):
 
 
     #function used to get the 3 point correlation functions related to the selected operators
-    def get_p3corr(self, isospin:str='U-D') -> np.ndarray:
+    def get_p3corr(self, isospin:str|None=None) -> np.ndarray:
         """
         Function used to get the 3 point correlators (the building block, one for each configuration) of the selected operators
 
         Input:
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
 
         Output:
             - p3_corr: array with the 3 point correlators of the selected operators, shape = (nop, nconf, nT, maxT+1), dtype=float
         """
 
-        #input control
-        if isospin not in ['U', 'D', 'U-D', 'U+D']:
-            print("Selected isospin not valid, defaulting to 'U-D'")
-            isospin='U-D'
+        #if the isospin parameter is not specified we use the default value (the input control is performed in the last method being called in the tree)
+        if isospin is None:
+                isospin = self.default_isospin
+ 
 
         #we compute the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
         maxT = np.max(self.chosen_T_list)
@@ -512,21 +537,16 @@ class moments_toolkit(bulding_block):
 
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin:str='U-D') -> tuple[np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
 
         Output:
             - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
             - Rstd(iop,T,tau): the std reasulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
             - Rcovmat(iop,T,tau1, tau2): the whole covariance matrix reasulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
         """
-        
-        #input control
-        if isospin not in ['U', 'D', 'U-D', 'U+D']:
-            print("Selected isospin not valid, defaulting to 'U-D'")
-            isospin='U-D'
 
         #We first take the 3 point and 2 point correlators needed to compute the ratio
         p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
@@ -551,7 +571,7 @@ class moments_toolkit(bulding_block):
     
 
     #function used to plot the ratio R for all the selected operators
-    def plot_R(self, isospin:str='U-D', show:bool=True, save:bool=False, figname:str='plotR',
+    def plot_R(self, isospin:str|None=None, show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
                rescale=False) -> list[tuple[Figure, Any]]:
         """
@@ -569,11 +589,6 @@ class moments_toolkit(bulding_block):
         Output:
             - fig_ax_list: list with each element being a tuple of the kind (fig, ax), which are the output of the plt.subplots() call, so that the user can modify the figures if he wants to
         """
-        
-        #input control
-        if isospin not in ['U', 'D', 'U-D', 'U+D']:
-            print("Selected isospin not valid, defaulting to 'U-D'")
-            isospin='U-D'
 
         #check on the number of selected operators
         if self.Nop==0:
@@ -662,7 +677,7 @@ class moments_toolkit(bulding_block):
         return fig_ax_list
 
     #function used to to compute the sum of ratios S
-    def get_S(self, tskip: int, isospin:str='U-D') -> tuple[np.ndarray, float, float]:
+    def get_S(self, tskip: int, isospin:str|None=None) -> tuple[np.ndarray, float, float]:
         """
         Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
 
@@ -674,11 +689,6 @@ class moments_toolkit(bulding_block):
             - Smean: the mean resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
             - Sstd: the std resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
         """
-        
-        #input control
-        if isospin not in ['U', 'D', 'U-D', 'U+D']:
-            print("Selected isospin not valid, defaulting to 'U-D'")
-            isospin='U-D'
 
         #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
         p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
@@ -702,13 +712,13 @@ class moments_toolkit(bulding_block):
 
 
     #function used to plot S
-    def plot_S(self, tskip:int, isospin:str='U-D', show:bool=True, save:bool=True, figname:str='plotS',
+    def plot_S(self, tskip:int, isospin:str|None=None, show:bool=True, save:bool=True, figname:str='plotS',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
                abs=False, rescale=False) -> tuple[Figure, Any]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - show: bool, if True plots are shown to screen
             - save: bool, if True plots are saved to .png files
 
@@ -718,7 +728,7 @@ class moments_toolkit(bulding_block):
 
         #first thing first we compute S with the fiven t skip 
         #S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
-        Smean, Sstd = self.get_S(tskip=tskip)  #shapes =  (Nop, NT), (Nop, NT)
+        Smean, Sstd = self.get_S(tskip=tskip, isospin=isospin)  #shapes =  (Nop, NT), (Nop, NT)
 
         #we instantiate the figure
         fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
@@ -785,23 +795,18 @@ class moments_toolkit(bulding_block):
 
 
     #method to extract the matrix element from the summed ratios
-    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str='U-D') -> np.ndarray:
+    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str|None=None) -> np.ndarray:
         """
         Function returning a value of the (unrenormalized) matrix element for each operator, extracting them from the summed ratios S
         
         Input:
             - tskip_list: list of tau skip we want to use in the analysis
             - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
         
         Output:
             - mat_ele: np array with shape (Nop, nT-1), with one value of the matrix element for each operator and for each allowed time value
         """
-
-        #input control
-        if isospin not in ['U', 'D', 'U-D', 'U+D']:
-            print("Selected isospin not valid, defaulting to 'U-D'")
-            isospin='U-D'
 
         #we first take the correlators we need to compute everything
         p2corr = self.get_p2corr() #shape = (Nconf, latticeT)

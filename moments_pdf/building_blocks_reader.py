@@ -94,6 +94,15 @@ class bulding_block:
 
     ## Global variable shared by all class instances
 
+    #list of available structures = vector,axial,tensor
+    X_list = ['V', 'A', 'T']
+
+    #list of the available isospin structures
+    isospin_list = ['U', 'D', 'U-D', 'U+D']
+
+    #list with the available number of derivatives
+    n_mu_list = [1,2]
+
 
 
     ## Methods of the class
@@ -939,16 +948,16 @@ class bulding_block:
         #Input check
 
         #input check on X
-        if X not in ['V','A','T']:
-            raise ValueError("Error: X must be either 'V', 'A' or 'T'")
+        if X not in self.X_list:
+            raise ValueError(f"Error: the value of X must be one in the list {self.X_list}, but instead X={X} was chosen.")
         
         #input check on isospin
-        if isospin not in ['U','D', 'U+D', 'U-D']:
-            raise ValueError("Error: isospin must be either 'U', 'D', 'U+D' or 'U-D'")
-        
+        if isospin not in self.isospin_list:
+            raise ValueError(f"The isospin value must be one in the list {self.isospin_list}, but instead isospin={isospin} was chosen.")
+ 
         #input check on n_mu
-        if n_mu not in [1,2]:
-            raise ValueError("Error: n_mu must be either 1 or 2")
+        if n_mu not in self.n_mu_list:
+            raise ValueError(f"Error: the value of n_mu must be one of the values in the list {self.n_mu_list}, but instead n_mu={n_mu} was chosen.")
         
 
         #we fetch the 3p correlator corresponding to the given T
