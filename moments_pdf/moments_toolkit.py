@@ -1307,9 +1307,18 @@ class moments_toolkit(bulding_block):
             #we put them into a gvar variable and store it into the array
             mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
 
-        #if delta=0 is not one of the values considered then the last value of T is removed (since it has no allowed value of T+delta)
-        if 0 not in delta_list:
-            mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
+        #the last value of T is removed, since it has no allowed value of T+delta (delta=0 an option)
+        mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
+
+        #we then remove the values of T that are too small for the given tskip
+        T_treshold = 1 + 2*min(tskip_list)
+
+        #we loop over all the values of T smaller than the treshold one
+        for T in range(T_treshold, self.chosen_T_list[0]-1, -1):
+
+            #we remove such values
+            mat_ele_array = np.delete(mat_ele_array, self.chosen_T_list.index(T), axis=1) #we remove from biggest to lowest value, so the index is the correct one
+
         
         #we return the matrix element array
         return mat_ele_array
@@ -1922,26 +1931,47 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
     #we instantiate the list with the allowed matrix elements as empty
     mat_ele_array = np.zeros(shape=(len(T_list),), dtype=float) #shape = (nT,)
 
-    #we loop over the source-sink separations T
-    for iT, T in enumerate(T_list):
+    #we loop over the values of tau skip
+    for itskip,tskip in enumerate(tskip_list):
 
-        #we instantiate a tmp list where we store all the matrix elements related to the given T
-        tmp_mat_ele_list = []
+        #for the given value of tau skip we compute the treshold value of T 
+        T_treshold = 1 + 2*tskip #because we want to have (T+1) -2 -2tau_skip > 0
 
-        #we loopv over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
-        for delta in delta_list:
-            
-            #a combination T,delta is allowed only if their sum is in the available Ts
-            if T + delta in T_list:
+        #we initialize the value of the cut to 0
+        iT_cut = 0
 
-                #we check what is the index of the T we have to consider
-                iT_plus_delta = T_list.index(T + delta)
+        #we loop over all the smaller values of T to find the one from which we should start cutting the data
+        for T in range(T_treshold, T_list[0]-1,-1):
 
-                #we compute the matrix element as the slope of the summed ratio function
-                tmp_mat_ele_list.append( (S_list[iT_plus_delta,:] - S_list[iT,:])/delta )
+            #when (and if) we find the biggest value that can be removed, we remove from it onward and stop the loop
+            if T in T_list:
 
-        #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
-        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done than the plain unweighted average
+                #the index from where we will cut is
+                iT_cut = T_list.index(T) + 1
+
+                #we break the loop
+                break
+
+        #we loop over the source-sink separations T, from the cut on
+        for iT, T in enumerate(T_list[iT_cut:]):
+
+            #we instantiate a tmp list where we store all the matrix elements related to the given T
+            tmp_mat_ele_list = []
+
+            #we loopv over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
+            for delta in delta_list:
+                
+                #a combination T,delta is allowed only if their sum is in the available Ts
+                if T + delta in T_list:
+
+                    #we check what is the index of the T we have to consider
+                    iT_plus_delta = T_list.index(T + delta)
+
+                    #we compute the matrix element as the slope of the summed ratio function
+                    tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT+iT_cut,itskip])/delta )
+
+            #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
+            mat_ele_array[iT+iT_cut] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done than the plain unweighted average
 
     #we return the array with the matrix element just computed
     return mat_ele_array
