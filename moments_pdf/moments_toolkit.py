@@ -607,7 +607,7 @@ class moments_toolkit(bulding_block):
         if self.E0 is None or force_fit==True:
 
             #first we perform the fit with the main method
-            fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples
+            fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples, i.e. check whether resample fit can be True
 
             #then we grep the parameters from the models average
             results = fit2p.model_average()
@@ -1128,16 +1128,19 @@ class moments_toolkit(bulding_block):
         return mfit, mfit_std
 
 
-    def fit_2pcorr(self, chi2_treshold=1.0, zoom=0, fit_doubt_factor=3, show=True, save=True, verbose=False,
-                   central_value_fit            = True, central_value_fit_correlated = True,
-                   resample_fit                 = False, resample_fit_correlated      = False,
-                   resample_fit_resample_prior  = False,):
+    def fit_2pcorr(self, 
+                   chi2_treshold:float=1.0, zoom:int=0, fit_doubt_factor:float=3,                            #statistical analysis params
+                   show=True, save=True, verbose=False,                                                      #output printing params
+                   central_value_fit:bool            = True, central_value_fit_correlated:bool  = True,      #correlator analyser params
+                   resample_fit:bool                  = False, resample_fit_correlated:bool       = False,
+                   resample_fit_resample_prior:bool   = False) -> CA.FitState:
         """
         Input:
-            - 
+            - chi2_treshold: float, treshold value of the chi2 used for the plateau determination
+            - zoom: int, number of points around the plateau to be shown in the plot (i.e. how much "zoom out" should be used in the plot)
 
         Output:
-            - 
+            - fit_state: instance of the FitState class containing all the information regarding the fits performed
         """
 
         #info print
@@ -1145,17 +1148,15 @@ class moments_toolkit(bulding_block):
             print("\nPreparing the fit for the two point correlator...\n")
 
         #we first take the 2point corr
-        p2corr = self.get_p2corr()
+        p2corr = self.get_p2corr() #shape = (nconf, latticeT)
 
         #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(p2corr, lambda x: np.mean( x, axis=0), jack_axis_list=0, time_axis=-1)
+        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(p2corr, lambda x: np.mean(x, axis=0), jack_axis_list=0, time_axis=-1)
 
-        #then we se the jackknife to compute a value of the effective mass (mean, std and cov)
-        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(p2corr, effective_mass, jack_axis_list=0, time_axis=-1) #raw becaus there still are values of the mass that are 0
+        #then we use the jackknife to compute a value of the effective mass (mean, std and cov)
+        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(p2corr, effective_mass, jack_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
-        #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
-
-        #we look at the point where the mass starts to be negative
+        #we look at the point where the mass starts to be negative (i.e. the first point that is always set to 0, and hence as a std equal to 0)
         cut=np.where(meff_std_raw<=0)[0][0]
 
         #and we cut the meff arrays there
@@ -1164,7 +1165,7 @@ class moments_toolkit(bulding_block):
         meff_covmat = meff_covmat_raw[:cut,:cut]
 
         #we can now identify the boundaries of the plateau region
-        start_plateau, end_plateau = plateau_search(meff, meff_covmat, only_sig=True, chi2_treshold=1.0) #we search the plateau not using the whole correlation matrix
+        start_plateau, end_plateau = plateau_search(meff, meff_covmat, only_sig=True, chi2_treshold=chi2_treshold) #we search the plateau not using the whole correlation matrix (the covariance determination is not reliable -> too many params to determine with too little input)
 
         #we define the gaussian variables corresponding to the valeus of the effective mass in the plateau region
         gv_meff = gv.gvar(meff[start_plateau:end_plateau], meff_std[start_plateau:end_plateau])
@@ -1173,58 +1174,57 @@ class moments_toolkit(bulding_block):
         gv_meff_plateau = np.average(gv_meff,weights=[1/e.sdev**2 for e in gv_meff])
 
 
-        #we make a plot if the user asks either to see it or to save it to file
+        #we make an intermediate plot regarding the effective mass and the plateau determination if the user asks either to see it or to save it to file
         if show or save:
 
             #we instantiate the figure
             fig, axlist = plt.subplots(nrows=2,ncols=1,figsize=(32, 14))
 
-            ax1 = axlist[0]
-
-
-            #we determine the time values to be displayed on the plot (x axis)
-            m_times = np.arange(np.shape(meff_raw)[0]) #+ 0.5
-
-            #we adjust the beginning of the plot according to the zoom out parameter given by the user
+            #we adjust the beginning of the plost according to the zoom out parameter given by the user
             start_plot = start_plateau-zoom if start_plateau-zoom > 0 else 0
 
-            #we plot the plateau and the neighbouring effective mass values
+            ## plot m_eff vs t
+
+            #we use the first axis for this plot
+            ax1 = axlist[0]
+
+            #we determine the time values to be displayed on the plot (x axis) #TO DO: check if a centered effective mass can be used, and then adjust the m_times accordingly --> and check how the start plateau change in that case
+            m_times = np.arange(np.shape(meff_raw)[0]) #+ 0.5
+
+            #we plot all the value of the effective mass in the chosen plot range
             _ = ax1.errorbar(m_times[start_plot:end_plateau+zoom], meff_raw[start_plot:end_plateau+zoom], yerr=meff_std_raw[start_plot:end_plateau+zoom], linewidth=0.7, marker='o', markersize=6, elinewidth=1.0, label="Effective Mass")
+
+            #we plot again in a different color the value of the effective mass actually used to determine the plateau, still in the chosen plot range
             _ = ax1.errorbar( np.arange(np.shape(meff)[0])[start_plot:end_plateau+zoom], meff[start_plot:end_plateau+zoom], yerr=meff_std[start_plot:end_plateau+zoom], linewidth=0.7, marker='o', markersize=6, elinewidth=1.0, label="Effective Mass (used for plateau search)")
+
+            #we plot an orizontal line denoting the plateau value
             _ = ax1.hlines(gv_meff_plateau.mean, start_plateau, end_plateau-1, color='red', label="Plateau Region")
-            #plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-            #plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
+            
+            #we plot the +- 1 sigma region around the plateau
             _ = ax1.fill_between(m_times[start_plateau:end_plateau], gv_meff_plateau.mean - gv_meff_plateau.sdev, gv_meff_plateau.mean + gv_meff_plateau.sdev, alpha=0.2, color="red")
 
-            #plot styling
+            #we adjust the plot styling
             _ = ax1.set_title("Effective Mass Plateau")
             _ = ax1.set_ylabel(r"$m_{eff}(t)$")
             _ = ax1.set_xlabel(r"$t$")
             _ = ax1.grid()
             _ = ax1.legend()
 
+            ## plot  C_2pt vs t
 
-
-
-
+            #we use the second axis for this plot  
             ax2 = axlist[1]
-
 
             #we determine the time values to be displayed on the plot (x axis)
             times = np.arange(np.shape(p2corr_jack)[0]) #+ 0.5
 
-            #we decide how much we want to zoom out of the plateau
-            #zoom = 7
-
-            #we plot the plateau and the neighbouring effective mass values
+            #we plot the two point correlator around the plateau region
             _ = ax2.errorbar(times[start_plot:end_plateau+zoom], p2corr_jack[start_plot:end_plateau+zoom], yerr=p2corr_jack_std[start_plot:end_plateau+zoom], linewidth=0.7, marker='o', markersize=6, elinewidth=1.0, label="Two Point Correlator")
-            #ax1.errorbar( np.arange(np.shape(meff)[0]), meff, yerr=meff_std, linewidth=0.7, marker='o', markersize=6, elinewidth=1.0, label="Effective Mass (used for plateau search)")
-            #ax1.hlines(gv_meff_mean.mean, start_plateau, end_plateau-1, color='red', label="Plateau Region")
-            #plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-            #plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
+            
+            #we highlight the plateau region by means of a transparent layer 
             _ = ax2.fill_between(times[start_plateau:end_plateau], np.min(p2corr_jack[start_plot:end_plateau+zoom]), np.max(p2corr_jack[start_plot:end_plateau+zoom]), alpha=0.2, color="red", label="Plateau Region")
 
-            #plot styling
+            #we adjust the plot styling
             _ = ax2.set_title("Two Point Correlator")
             _ = ax2.set_ylabel(r"$C_{2pt}(t)$")
             _ = ax2.set_xlabel(r"$t$")
@@ -1244,20 +1244,12 @@ class moments_toolkit(bulding_block):
 
         ## we now proceed with the proper fit of the two point correlator
 
-        #we construct the resamples for the 2 point correlator
-        p2corr_resamples = jackknife_resamples(p2corr, lambda x: np.mean( x, axis=0), jack_axis_list=0)
-        nres = p2corr_resamples.shape[0]
+        #we declare that we are going to perform only one state and two state fits
+        nstates_list = [1,2]
 
-        #we define the parameters of interest
-        nstates_list = [1,2] #only 1 or two state fits
+        #we also declare that we are going to perform fits only with a minimum time up to half of the plateau left boundary value
         t_start_list = np.arange(start_plateau, int(start_plateau/2), -1)
         t_end = end_plateau
-
-        
-
-        #we instanatiate the states of the fits we want to do
-        fit_state = CA.FitState()
-
 
         #if the user asks for a plot we instantiate the figure we're going to use
         if show or save:
@@ -1268,27 +1260,31 @@ class moments_toolkit(bulding_block):
             fig.tight_layout()
             plt.subplots_adjust(left=0.085,bottom=0.1)
 
+
+        #we instanatiate the states of the fits we want to do
+        fit_state = CA.FitState()
+
+
         #we now loop over the free parameters of the fit (the number of states and the starting time of the fit)
         for i_state, nstates in enumerate(nstates_list):
-
-            #we handle the prior determination of the parameters
-
-            #we instantiate a prior dict
-            prior = gv.BufferDict()
 
             #we then loop over the starting times
             for i_tstart, t_start in enumerate(t_start_list):
 
                 #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = jackknife(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), jack_axis_list=0, time_axis=-1)
+                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = jackknife(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), jack_axis_list=0, time_axis=-1)
                 p2corr_resamples_plat = jackknife_resamples(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), jack_axis_list=0)
 
-                #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
-                m_A_fit, m_A_fit_std , _= jackknife(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), jack_axis_list=0, time_axis=None) #TO DO: have a look at this fit to be sure that it is ok to use it as prior
-                #Afit, Afit_std , _= jackknife(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), jack_axis_list=0, time_axis=None)
+                #we handle the prior determination of the parameters
 
-                #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't trust the simple scipy fit
-                prior["A0"] = gv.gvar(m_A_fit[1],m_A_fit_std[1] * fit_doubt_factor)
+                #we instantiate a prior dict
+                prior = gv.BufferDict()
+
+                #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
+                m_A_fit, m_A_fit_std , _= jackknife(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), jack_axis_list=0, time_axis=None) #first entry of m_A_fit is the amplitude, the second is the mass
+
+                #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't fully trust the simple scipy fit
+                prior["A0"] = gv.gvar(m_A_fit[1], m_A_fit_std[1] * fit_doubt_factor) 
                 prior["E0"] = gv.gvar(m_A_fit[0], m_A_fit_std[0] * fit_doubt_factor)
 
                 #we then model a prior for the exponential corresponding to the efirst excited state, if needed
@@ -1304,19 +1300,20 @@ class moments_toolkit(bulding_block):
                         gv.mean(tmp),gv.mean(tmp)
                     )
 
+                #we actually do the fit using the correlator analyser library
 
                 #we do the fit
                 fit_result = CA.fit(
 
                     abscissa                = np.arange(t_start,t_end),
                     
-                    ordinate_est            = p2corr_jack_plat, #p2corr_jack[t_start:t_end], #np.mean(p2corr[:,t_start:t_end], axis = 0), #np.mean(p2corr[:,t_start:t_end], axis = 0),
-                    ordinate_std            =  p2corr_jack_plat_std, #p2corr_jack_std[t_start:t_end], #np.std(p2corr[:,t_start:t_end], axis = 0), #np.std (p2corr[:,t_start:t_end], axis = 0),
-                    ordinate_cov            =   p2corr_jack_plat_cov, #np.cov(p2corr[:,t_start:t_end], rowvar=False), #np.cov (p2corr[:,t_start:t_end], rowvar=False),
+                    ordinate_est            = p2corr_jack_plat, 
+                    ordinate_std            =  p2corr_jack_plat_std, 
+                    ordinate_cov            =   p2corr_jack_plat_cov, 
                     
                     resample_ordinate_est   = p2corr_resamples_plat,
-                    resample_ordinate_std   = p2corr_jack_plat_std, #np.sqrt((nres-1)/nres) * np.std (p2corr_resamples[:,t_start:t_end], axis = 0),
-                    resample_ordinate_cov   = p2corr_jack_plat_cov, #(nres-1)/nres * np.cov (p2corr_resamples[:,t_start:t_end], rowvar=False),
+                    resample_ordinate_std   = p2corr_jack_plat_std, 
+                    resample_ordinate_cov   = p2corr_jack_plat_cov,
 
                     # fit strategy, default: only uncorrelated central value fit:
                     central_value_fit            = central_value_fit,
@@ -1326,7 +1323,7 @@ class moments_toolkit(bulding_block):
                     resample_fit_correlated      = resample_fit_correlated,
                     
                     resample_fit_resample_prior  = resample_fit_resample_prior,
-                    resample_type               = "bst", #"jkn",
+                    resample_type               = "bst", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
 
                     # args for lsqfit:
                     model   = SumOrderedExponentials(nstates),
@@ -1344,14 +1341,10 @@ class moments_toolkit(bulding_block):
                 if show or save:
 
                     #first we compute the 2p correlator in the region of interest
-                    #Corr = gv.gvar( np.mean(p2corr[:,fit_result.ts:fit_result.te], axis = 0), np.std(p2corr[:,fit_result.ts:fit_result.te], axis = 0))
-                    #Corr = gv.gvar(p2corr_jack[fit_result.ts:fit_result.te+1],p2corr_jack_std[fit_result.ts:fit_result.te+1] )
                     Corr = gv.gvar(p2corr_jack_plat, p2corr_jack_plat_std )
 
                     #we plot the fit
-                    plot_fit_2pcorr(fit_result=fit_result,correlator=Corr, axs=axs[i_tstart,i_state], nstates=nstates, Ngrad=15)
-
-
+                    make_fitplot_2pcorr(fit_result=fit_result,correlator=Corr, ax=axs[i_tstart,i_state], nstates=nstates, Ngrad=15)
 
         #we save the figure if the user asks for it
         if save:
@@ -1360,8 +1353,6 @@ class moments_toolkit(bulding_block):
         #we sho the figure in the user asks for it
         if show:
             plt.show()
-
-        
 
         #we return the fit state
         return fit_state
@@ -2146,70 +2137,55 @@ def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None
     return np.asarray([fit_mass,fit_amp])
 
 #auxiliary function used to plot the fit of the two point correlators
-def plot_fit_2pcorr(fit_result,correlator,axs,nstates=2, Ngrad = 30, Nsigma = 2):
+def make_fitplot_2pcorr(fit_result:CA.FitResult, correlator:gv._gvarcore.GVar ,ax:Any, nstates:int=2, Nsigma:float=2, Ngrad:int=30) -> None:
+    """
+    Function that given a fit result can be used to make the plot of the linear fit of the two point correlator, and append it to the given axis
+    
+    Input:
+        - fit_result: instance of the FitResult class containing the result of the performed fit to the two point function
+        - corrrelator: gvar variable with the array of values of the 2 point function to be shown on the plot
+        - ax: matplotlib axis where the fit result will be plotted on
+        - nstates: int, the number of states used in the given fit
+        - Nsigma: float, the number of standard deviations that will be shown around the mean value
+        - Ngrad: int, the number of lines that will be plotted (with an inversionally proportional alpha) to highlight the Nsigma region
+    
+    Output:
+        - None (the plot gets appended to the axis passed as input)
+    """
 
+    #we take the x and y of the fit result function
     abscissa = np.arange(fit_result.ts, fit_result.te+1)
     ordinate = fit_result.eval(abscissa)
-    #nstates = fit_result.fcn.Nstates
 
-    axs.errorbar(
-            x=abscissa, y=gv.mean(correlator), yerr=gv.sdev(correlator), marker='.', linewidth=0, elinewidth=1, label="Correlator data", color="red"
-        )
+    #we plot the fit input data (the correlator) with its std
+    _ = ax.errorbar(x=abscissa, y=gv.mean(correlator), yerr=gv.sdev(correlator), marker='.', linewidth=0, elinewidth=1, label="Correlator data", color="red")
 
+    #we plot the fit result function
+    (line,) = ax.plot( abscissa, ordinate["est"],
+                      label=rf"$N_\text{{states}}={nstates}, ({abscissa[0]},{abscissa[-1]}) "
+                      rf"\chi^2/_\mathrm{{dof}}~[\mathrm{{dof}}] = {fit_result.chi2/fit_result.dof:g}~[{fit_result.dof:g}], "
+                      rf"\text{{AIC}} = {fit_result.AIC:g} $",
+                      linestyle="-",)
 
-    (line,) = axs.plot(
-        abscissa,
-        ordinate["est"],
-        #"-",
-        label=rf"$N_\text{{states}}={nstates}, ({abscissa[0]},{abscissa[-1]}) "
-        rf"\chi^2/_\mathrm{{dof}}~[\mathrm{{dof}}] = {fit_result.chi2/fit_result.dof:g}~[{fit_result.dof:g}], "
-        rf"\text{{AIC}} = {fit_result.AIC:g} $",
-        linestyle="-",
-    )
-
-
-
-
-    
+    #we plot the Nsigma region using a fill_between Ngrad times (we plot a "gradient" of color)
     for igrad in range(Ngrad):
-        _ = axs.fill_between(
-                abscissa,
-                ordinate["est"] + Nsigma*ordinate["err"] * igrad/Ngrad,
-                ordinate["est"] - Nsigma*ordinate["err"] * igrad/Ngrad,
-                color=line.get_color(),
-                alpha= 1.0/(Nsigma*np.sqrt(Ngrad)) * (1.0-igrad/Ngrad),
-            )
+        _ = ax.fill_between(abscissa, ordinate["est"] + Nsigma*ordinate["err"] * igrad/Ngrad, ordinate["est"] - Nsigma*ordinate["err"] * igrad/Ngrad,
+                            color=line.get_color(), alpha= 1.0/(Nsigma*np.sqrt(Ngrad)) * (1.0-igrad/Ngrad),)
 
-
-
-    axs.legend()
-
-
-
-
-
+    #we prepare the text with all the parameters' information to be shown inside the plot
     str_list = ['Estimated parameters:']
     for key in fit_result.result_params()["est"].keys():
         str_list.append( f"{key} =" + str( gv.gvar(fit_result.result_params()["est"][key], fit_result.result_params()["err"][key]) ) )
-
-
-    #Display text box with frelevant parameters outside the plot
-
-    textstr = '\n'.join(str_list)
-
+    textstr = '\n'.join(str_list)    
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    # place the text box in upper left in axes coords
-    _ = axs.text(0.11, 0.55, textstr, transform=axs.transAxes, fontsize=14,
-            verticalalignment='top', bbox=props)
 
-    #_ = axs.set_title("Two Point Correlator")
-    #_ = axs.set_ylabel(r"$C_{2pt}(t)$")
-    #_ = axs.set_ylabel("")
-    #_ = axs.set_xlabel("")
-    #_ = axs.set_xlabel(r"$t$")
-    _ = axs.set_yscale("log")
-    _ = axs.grid()
-    _ = axs.legend()
+    #we display the text box with the relevant parameters inside the plot (in a region where we know by inspection that there will not be overlap with the correlator's plot)
+    _ = ax.text(0.11, 0.55, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+
+    #we adjust the plot styling
+    _ = ax.set_yscale("log")
+    _ = ax.grid()
+    _ = ax.legend()
 
 
 #auxiliary function used to check if all elements in an iterable are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
