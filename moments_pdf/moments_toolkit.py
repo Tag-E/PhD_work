@@ -874,6 +874,31 @@ class moments_toolkit(bulding_block):
         #S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
         Smean, Sstd = self.get_S(tskip=tskip, isospin=isospin)  #shapes =  (Nop, NT), (Nop, NT)
 
+        ## we then remove from the plot all the value of S that are 0 (because the given T is too small compared ti tau skip)
+
+        #the treshold value that should be removed is
+        T_treshold = 1 + 2*tskip #because we want to have (T+1) -2 -2tau_skip > 0
+
+        #we instantiate the times T to plot to the full list
+        T_plot = self.chosen_T_list[:]
+
+        #we loop over all the smaller values of T to find the one from which we should start cutting the data
+        for T in range(T_treshold, self.chosen_T_list[0]-1,-1):
+
+            #when (and if) we find the biggest value that can be removed, we remove from it onward and stop the loop
+            if T in self.chosen_T_list:
+
+                #the index from where we will cut is
+                iT_cut = self.chosen_T_list.index(T) + 1
+
+                #we cut the relevant arrays (the x and y of the plots)
+                T_plot = self.chosen_T_list[iT_cut:]
+                Smean = Smean[:,iT_cut:]
+                Sstd = Sstd[:,iT_cut:]
+
+                #we stop the loop if we find one of such values
+                break
+
         #we instantiate the figure
         fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
 
@@ -911,7 +936,7 @@ class moments_toolkit(bulding_block):
                 Sstd[iop] = np.asarray( [c.sdev for c in S_gvar] )
 
                 #then we plot it
-                ax[plot_index].errorbar(self.chosen_T_list, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
+                ax[plot_index].errorbar(T_plot, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
 
 
         #we set the title of the plot
