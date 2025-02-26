@@ -621,7 +621,7 @@ class moments_toolkit(bulding_block):
         Function returning the gvar variable with the ground state energy obtained from the fit to the two point correlator
         
         Input:
-            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
             - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returneds
             
         Output:
@@ -656,7 +656,7 @@ class moments_toolkit(bulding_block):
         Function returning the gvar variable with the mass, obtained from the ground state energy, obtained from the fit to the two point correlator
         
         Input:
-            - force_fit: bool, if True avoid re-doing the fit if the value of the energy can be fetched from the class
+            - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
             - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returned
             
         Output:
@@ -678,6 +678,27 @@ class moments_toolkit(bulding_block):
 
         #then we return a gv variable containing mean and std of the best estimate for the mass
         return m
+
+    #function used to get the list with the kinenatic factors associated to each of the selected operator
+    def get_Klist(self, force_fit: bool=False) -> list[gv._gvarcore.GVar]:
+        """
+        Function used to obtain the list with all the numerical values of the kinematic factors associated to the selected operators
+        
+        Input
+            - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
+            
+        Output:
+            - Klist: the list with the kinematic factors (as gvar variables)
+        """
+
+        #we first fetch the quantities we need to evaluate the kinematic factors (energy, mass and momentum)
+        E0 = self.get_E()
+        m = self.get_m()
+        p1, p2, p3 = self.get_P()
+
+        #we return a list containing a kinematic factor for each operator
+        return [op.evaluate_K_gvar(m_value=m, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3) for op in self.selected_op]
+
 
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
@@ -1931,47 +1952,33 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
     #we instantiate the list with the allowed matrix elements as empty
     mat_ele_array = np.zeros(shape=(len(T_list),), dtype=float) #shape = (nT,)
 
-    #we loop over the values of tau skip
-    for itskip,tskip in enumerate(tskip_list):
 
-        #for the given value of tau skip we compute the treshold value of T 
-        T_treshold = 1 + 2*tskip #because we want to have (T+1) -2 -2tau_skip > 0
+    #we loop over the source-sink separations T
+    for iT, T in enumerate(T_list):
 
-        #we initialize the value of the cut to 0
-        iT_cut = 0
+        #we instantiate a tmp list where we store all the matrix elements related to the given T
+        tmp_mat_ele_list = []
 
-        #we loop over all the smaller values of T to find the one from which we should start cutting the data
-        for T in range(T_treshold, T_list[0]-1,-1):
+        #we loop over the values of tau skip
+        for itskip,tskip in enumerate(tskip_list):
 
-            #when (and if) we find the biggest value that can be removed, we remove from it onward and stop the loop
-            if T in T_list:
+            #we skip the not allowed values
+            if np.abs( S_list[iT,itskip] ) < 10**(-18): continue
 
-                #the index from where we will cut is
-                iT_cut = T_list.index(T) + 1
-
-                #we break the loop
-                break
-
-        #we loop over the source-sink separations T, from the cut on
-        for iT, T in enumerate(T_list[iT_cut:]):
-
-            #we instantiate a tmp list where we store all the matrix elements related to the given T
-            tmp_mat_ele_list = []
-
-            #we loopv over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
+            #we loop over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
             for delta in delta_list:
                 
                 #a combination T,delta is allowed only if their sum is in the available Ts
-                if T + delta in T_list:
+                if T + delta not in T_list: continue
 
-                    #we check what is the index of the T we have to consider
-                    iT_plus_delta = T_list.index(T + delta)
+                #we check what is the index of the T we have to consider
+                iT_plus_delta = T_list.index(T + delta)
 
-                    #we compute the matrix element as the slope of the summed ratio function
-                    tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT+iT_cut,itskip])/delta )
+                #we compute the matrix element as the slope of the summed ratio function
+                tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT,itskip])/delta )
 
-            #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
-            mat_ele_array[iT+iT_cut] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done than the plain unweighted average
+        #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
+        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done than the plain unweighted average
 
     #we return the array with the matrix element just computed
     return mat_ele_array
