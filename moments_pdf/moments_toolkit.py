@@ -1945,7 +1945,7 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
         for iT , T in enumerate(T_list):
 
             #we compute the summed ratio with the formula
-            S_list[iT,i_tskip] = sum_ratios_formula( ratio_formula(p3_corr[:,iT,:], p2_corr, T=T, gauge_axis=1), T, tskip, time_axis=-1)
+            S_list[iT,i_tskip] = sum_ratios_formula( ratio_formula(p3_corr[:,iT,:], p2_corr, T=T, gauge_axis=0), T, tskip, time_axis=-1)
 
     ## Then the computation of all the matrix elements (one for each available compination of delta+T, and one for each tau skip)
 
