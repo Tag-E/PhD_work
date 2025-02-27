@@ -1242,7 +1242,7 @@ class moments_toolkit(bulding_block):
         p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(p2corr, lambda x: np.mean(x, axis=0), jack_axis_list=0, time_axis=-1)
 
         #then we use the jackknife to compute a value of the effective mass (mean, std and cov)
-        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(p2corr, effective_mass, jack_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
+        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(p2corr, effective_mass_formula, jack_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
         #we look at the point where the mass starts to be negative (i.e. the first point that is always set to 0, and hence as a std equal to 0)
         cut=np.where(meff_std_raw<=0)[0][0]
@@ -2091,72 +2091,8 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
 
 
 
-#function used to convert the ratio of correlators to a value of the effective mass (iterative procedure - takes into account the periodicity of the lattice) TO DO: double check this function with computations (!!!!) #TO DO: remove this function if not used
-def ratio2p_to_mass(ratio2p: float, t: int, T: int, case:int=2, max_it:int=1000) -> float:
-    """
-    Input:
-        - ratio2p: the ratio of the two point correlators at two consecutive times
-        - t: the time of the correlator at the numerator
-        - T: time extent of the lattice
-        - case: case considered (cosh, sinh or exp)
-        - max_it: maximum number of iteration of the iterative algorithm for the mass determination
-    
-    Output:
-        - m: the mass value extracted from the ratio of the correlators
-    """
-
-    sign = [1.0, -1.0, 0.0]
-    
-
-    
-    # If the ratio is less than or equal to 1.0 we return a value of the mass that is 0
-    if ratio2p <= 1.0:
-        return 0.0
-    
-    #if the ratio is bigger than 1 we proceed with the iterative determination of the effective mass
-
-    #0th value of the mass in the iterative procedure
-    m0 = np.log(ratio2p)
-
-    #we also instantiate the value of the previous iteration to be the 0th value
-    old_m = m0
-    m_new = m0
-
-    #then we loop over the iteration of the iterative algorithm
-    for it in range(max_it):
-        
-        # Specific conditions for early exit
-        if ((T - 2 * (t - 1) + 2) == 0 and sign[case] == -1) or ((T - 2 * (t - 1) - 2) == 0 and sign[case] == -1):
-            break
-        
-        if t <= (T / 2):
-            d = 1.0 + sign[case] * np.exp(-old_m * (T - 2.0 * (t - 1)))
-            u = 1.0 + sign[case] * np.exp(-old_m * (T - 2.0 * (t - 1) - 2.0))
-        else:
-            d = 1.0 + sign[case] * np.exp(old_m * (T - 2.0 * (t - 1)))
-            u = 1.0 + sign[case] * np.exp(old_m * (T - 2.0 * (t - 1) + 2.0))
-        
-        rud = u / d
-        m_new = np.log(ratio2p * rud)
-        
-
-        #if the new mass exceeds a max value or it is smaller than 0 we stop the algortihm
-        if abs(m_new) > 4.0 or m_new <= 0.0:
-            return 10.0
-        
-        #if the change in the mass due to the iteration process is small we stop the iterative procedure
-        if abs(old_m - m_new) <= 3.0e-7:
-            break
-        
-        old_m = m_new
-
-    #in the end we return the new mass
-    return m_new
-
-
-
 #function used to extract the effective mass for the two-point correlators
-def effective_mass(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
+def effective_mass_formula(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
     """
     Input:
         - corr_2p: two point correlators, with shape (nconf, Tlat) (with Tlat being the time extent of the lattice)
@@ -2270,26 +2206,6 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
     return int(len_array/2), int(len_array/2)+1
 
 
-
-#exponential function used in the fit for the mass extraction
-def exp_fit_func(t: np.ndarray, amp: float, mass: float) -> np.ndarray:
-    """
-    This function is only used to fit the two point correlators to an exponential to extract the mass using scipy curve fit
-    
-    Input:
-        - t: numpy array with the times (the x array of the fit)
-        - amp: the amplitude of the exponential
-        - mass: the mass at the exponent (the parameter we actually want to extract from the fit)
-        
-    Output:
-        - corr_2p(t) = amp * exp(-t * m): the values of the correlator in the purely exponential form (the y array of the fit)
-    """
-    
-    #we just return the exponential
-    return amp * np.exp(-t * mass)
-
-
-
 #function used to extract the fit mass from the two-point correlators
 def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None=None, guess_amp:float|None=None) -> np.ndarray:
     """
@@ -2320,7 +2236,7 @@ def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None
     times = np.arange(t0, t0+np.shape(corr_gavg)[0])
 
     #we perform the fit
-    popt,pcov = curve_fit(exp_fit_func, times, corr_gavg, p0=guess)#,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
+    popt,pcov = curve_fit(lambda t,amp,mass: amp*np.exp(-t*mass), times, corr_gavg, p0=guess)#,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
     #perr = np.sqrt(np.diag(pcov)) #perr being the std of the parameters extracted from the fit
 
     #we read the mass (that's the only thing we're interested about, the amplitude we discard)
