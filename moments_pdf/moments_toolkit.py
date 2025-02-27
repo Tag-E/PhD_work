@@ -151,18 +151,30 @@ class moments_toolkit(bulding_block):
         #and we also put the number of selected operators to 0
         self.Nop: int = 0
 
-        #we initialize the value of the ground state energy
-        self.E0: gv._gvarcore.GVar | None = None
-
-        #we initialize the value of the mass
-        self.m: gv._gvarcore.GVar | None = None
-
         #we initialize the values of the times chosen in the analysis
         self.chosen_T_list = self.T_list[:]
         self.nT = len(self.chosen_T_list)
 
         #we initialize the default value of the isospin
         self.default_isospin = 'U-D'
+
+
+        ## We initialize to None some variables that will be later accessed using getter methods
+
+        #we initialize the value of the ground state energy
+        self.E0: gv._gvarcore.GVar | None = None
+
+        #we initialize the value of the mass
+        self.m: gv._gvarcore.GVar | None = None
+
+        #we initialize the list with the kinematic factors of all the selected operators
+        self.Klist: list[gv._gvarcore.GVar] | None = None
+
+        #we initialize the matrix element(M) and the moments(x) array (from the S extraction) with the various methods (fit and finite difference)
+        self.M_from_S_fit:  np.ndarray[gv._gvarcore.GVar] | None = None #shape = (Nop,NT) --> with zero as padding for the values of T not allowed
+        self.x_from_S_fit:  np.ndarray[gv._gvarcore.GVar] | None = None
+        self.M_from_S_diff: np.ndarray[gv._gvarcore.GVar] | None = None
+        self.x_from_S_diff: np.ndarray[gv._gvarcore.GVar] | None = None
 
 
         ## We build the list of all the available operators
@@ -413,6 +425,9 @@ class moments_toolkit(bulding_block):
         #we also update the total number of T in the analysis
         self.nT = len(self.chosen_T_list)
 
+        #we re-initialize all the variables depending on T_list
+        self.re_initialize_T_variables()
+
         #info print
         if verbose:
                 print(f"\nAvailable source-skink separation values: {self.T_list}\nChosen source-sink separation values: {self.chosen_T_list}")
@@ -448,6 +463,9 @@ class moments_toolkit(bulding_block):
         #we update the number of selected operators
         self.Nop = len(self.selected_op)
 
+        #we re-initialize all the variables depending on the list selected_op
+        self.re_initialize_operator_variables()
+
     #function used to append an operator (not necessarily one in the catalogue) to the list of selected operators
     def append_operator(self, new_operator: Operator) -> None:
         """
@@ -467,6 +485,9 @@ class moments_toolkit(bulding_block):
 
         #we update the number of selected operators
         self.Nop +=1
+
+        #we re-initialize all the variables depending on the list selected_op
+        self.re_initialize_operator_variables()
         
         #we return None
         return None
@@ -487,6 +508,7 @@ class moments_toolkit(bulding_block):
         if old_operator is None:
             self.selected_op = []
             self.Nop = 0
+            self.re_initialize_operator_variables()
             return None
 
         #raise an error if the input is specified but it's not of the correct type
@@ -501,6 +523,7 @@ class moments_toolkit(bulding_block):
         else:
             self.selected_op.remove(old_operator)
             self.Nop -= 1
+            self.re_initialize_operator_variables()
             return None
 
 
@@ -680,25 +703,31 @@ class moments_toolkit(bulding_block):
         return m
 
     #function used to get the list with the kinenatic factors associated to each of the selected operator
-    def get_Klist(self, force_fit: bool=False) -> list[gv._gvarcore.GVar]:
+    def get_Klist(self, force_computation: bool=False, force_fit: bool=False) -> list[gv._gvarcore.GVar]:
         """
         Function used to obtain the list with all the numerical values of the kinematic factors associated to the selected operators
         
         Input
-            - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
+            - force_computation: bool, if True the K factorsa are computed again even though they could have been fetched from a class variable
+            - force_fit: bool, if True the fit of the 2 point correlator is performed again even though the value of the energy  and the mass could have been fetched from the class
             
         Output:
-            - Klist: the list with the kinematic factors (as gvar variables)
+            - Klist: the list with the kinematic factors (as gvar variables), shape = (Nop,)
         """
 
-        #we first fetch the quantities we need to evaluate the kinematic factors (energy, mass and momentum)
-        E0 = self.get_E()
-        m = self.get_m()
-        p1, p2, p3 = self.get_P()
+        #we check whether we have to do the computation
+        if self.Klist is None or force_computation==True:
 
-        #we return a list containing a kinematic factor for each operator
-        return [op.evaluate_K_gvar(m_value=m, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3) for op in self.selected_op]
+            #we first fetch the quantities we need to evaluate the kinematic factors (energy, mass and momentum)
+            m = self.get_m(force_fit=force_fit)
+            E0 = self.get_E() #(force fit not required here because the value of E0 gets updated by the call to get_m )
+            p1, p2, p3 = self.get_P()
 
+            #we create the list containing the kinematic factor for each operator
+            self.Klist = [op.evaluate_K_gvar(m_value=m, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3) for op in self.selected_op]
+
+        #we return a the list with the kinematic factors
+        return self.Klist 
 
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
@@ -734,7 +763,7 @@ class moments_toolkit(bulding_block):
         return Rmean, Rstd, Rcovmat
 
     #function used to to compute the sum of ratios S
-    def get_S(self, tskip: int, isospin:str|None=None) -> tuple[np.ndarray, float, float]:
+    def get_S(self, tskip: int, isospin:str|None=None) -> tuple[np.ndarray, np.ndarray]:
         """
         Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
 
@@ -766,6 +795,172 @@ class moments_toolkit(bulding_block):
 
         #we return S
         return Smean, Sstd
+
+    #function used to extract the matrix elements from the summed ratios
+    def get_M_from_S(self, method:str="fit", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], isospin:str|None=None, moments:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+        """
+        Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
+
+        Input:
+            - method: str, either "fit or "finite differences", is the method that will be used to extract the matrix element from the summed ratios
+            - tskip_list: list of tau skip we want to use in the analysis
+            - delta_list: list of delta that we want to use in the analysis (only used if method == "finite differences")
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
+            - moments: bool, if True the moments are returned (i.e. matrix elements normalized to the kinematic factors)
+            - force_computation: bool, if True the matrix element is computed again even though it could have been fetched from a class variable
+        
+        Output:
+            - matrix_elemets: np.ndarray of gvar variables, with shape (Nop, NT) containing the values of the matrix elements (or moments) - Achtung: some values are padded with zeros to match the shape of self.chosen_T_list
+        """
+
+        ## We perform a different calculation depending on the chosen method
+
+        #fit method
+        if method=="fit":
+            
+            #we check if we have to do the computation
+            if self.M_from_S_fit is None or force_computation==True:
+                
+                #We first compute all the summed ratios we need
+
+                #we initialize the array  summed ratios
+                Smean_array = np.zeros(shape=(len(tskip_list),self.Nop,self.nT))
+                Sstd_array = np.zeros(shape=(len(tskip_list),self.Nop,self.nT))
+
+                #for each tskip we compute S
+                for itskip,tskip in enumerate(tskip_list): #TO DO: pythonize this for loop (after changing the output format of the get_S function)
+                    Smean, Sstd = self.get_S(tskip=tskip)
+                    Smean_array[itskip] = Smean
+                    Sstd_array[itskip] = Sstd
+
+                #we also take the list of kinematic factors
+                Klist = self.get_Klist()
+
+                #We now acutally do the fit
+
+                #we fill the output arrays with zeros
+                self.M_from_S_fit = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
+                self.x_from_S_fit = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
+
+
+                #loop over different operators
+                for iop,op in enumerate(self.selected_op):
+
+                    #loop over starting times
+                    for iTstart, Tstart in enumerate(self.chosen_T_list):
+
+                        #for each tuple (operator,starting time) we instantiate a fit state
+                        fit_state = CA.FitState()
+
+                        ## we want to average over various fit changing the value of tskip and that of the last time considered 
+
+                        for itskip,tskip in enumerate(tskip_list):
+
+                            #we skip the value of tskip that are not allowed
+                            if tskip >= (Tstart-1)/2: continue
+
+                            #we loop over the maximum time considered
+                            for iTend,Tend in enumerate(self.chosen_T_list):
+
+                                #we skip all the endtimes that are smaller (by 2) w.r.t. the start time
+                                if iTend-iTstart < 1: continue
+
+                                #we determine the fit abscissa and ordinate
+                                abscissa = np.asarray( self.chosen_T_list[iTstart:iTend+1] )
+                                ordinate = Smean_array[itskip,iop,iTstart:iTend+1]
+                                ordinate_err = Sstd_array[itskip,iop,iTstart:iTend+1]
+
+                                #we determine the prior
+
+                                #we instantiate the prior dict
+                                prior = gv.BufferDict()
+
+                                #we get an estimate on slope and intercept
+                                slope = (ordinate[-1] - ordinate[0]) / (abscissa[-1] - abscissa[0])
+                                intercept = ordinate[0] - slope * abscissa[0]
+
+                                #we give a 100% error on the value of the slope and of the intercept
+                                prior["m"] = gv.gvar(slope,slope)
+                                prior["q"] = gv.gvar(intercept,intercept)
+
+
+                                #we do the fit
+                                fit_result = CA.fit(
+
+                                    abscissa                = abscissa,
+                                    
+                                    ordinate_est            = ordinate, 
+                                    ordinate_std            =  ordinate_err, 
+                                    ordinate_cov            =   None, 
+                                    
+                                    resample_ordinate_est   = None,
+                                    resample_ordinate_std   = None, 
+                                    resample_ordinate_cov   = None,
+
+                                    # fit strategy, default: only uncorrelated central value fit:
+                                    central_value_fit            = True,
+                                    central_value_fit_correlated = False,
+
+                                    resample_fit                 = False,
+                                    resample_fit_correlated      = False,
+                                    
+                                    resample_fit_resample_prior  = False,
+                                    resample_type               = "bst", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
+
+                                    # args for lsqfit:
+                                    model   = lambda x,p: p["m"]*x+p["q"],
+                                    prior   = prior,
+                                    p0      = None,
+
+                                    svdcut  = None,
+                                    maxiter = 10_000,
+                                )
+
+                                #we append the fit result to the fit state
+                                fit_state.append(fit_result)
+
+
+                        #we compute the matrix elements using the fit model average (we pad with 0 +- 0 if the fit was not possible)
+                        self.M_from_S_fit[iop,iTstart] = gv.gvar(fit_state.model_average()["est"]["m"],fit_state.model_average()["err"]["m"]) if len(fit_state.model_average())>0 else gv.gvar(0,0)
+                        self.x_from_S_fit[iop,iTstart] = self.M_from_S_fit[iop,iTstart] / Klist[iop]
+
+            #after computing it we return the matrix element (or moment) array
+            return self.x_from_S_fit if moments==True else self.M_from_S_fit
+
+        #finite differences calculation
+        elif method=="finite differences":
+
+             #we check if we have to do the computation
+            if self.M_from_S_diff is None or force_computation==True:
+                
+                #we first take the correlators we need to compute everything
+                p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
+                p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
+
+                #we also take the list of kinematic factors
+                Klist = self.get_Klist()
+
+                #we fill the output arrays with zeros
+                self.M_from_S_diff = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
+                self.x_from_S_diff = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
+
+                #we fill the output array using the formula for the matrix element from S
+                for iop in range(self.Nop):
+
+                    #we compute mean and std of the matrix element using the jackknife
+                    mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
+
+                    #we put them into a gvar variable and store it into the array
+                    self.M_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std)
+                    self.x_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std) / Klist[iop]
+
+            #after computing it we return the matrix element (or moment) array
+            return self.x_from_S_diff if moments==True else self.M_from_S_diff
+
+        #raise an error if something else is specified
+        else:
+            raise ValueError(f"The variable method can only assume values in the list ['fit', 'finite differences'], however method={method} was specified.")
+
 
 
 
@@ -1249,7 +1444,7 @@ class moments_toolkit(bulding_block):
 
 
 
-    ## Auxiliary Methods (useful methods implementing computations that are not at the core of the data analysis)
+    ## Auxiliary Methods (useful methods implementing computations and auxiliary routines that are not at the core of the data analysis)
 
     #function used to convert an energy value from lattice units to MeV
     def lattice_to_MeV(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
@@ -1293,6 +1488,44 @@ class moments_toolkit(bulding_block):
         #we return the value in lattice units
         return output_value
 
+    #function used to re-initialize all the operator dependant class variables
+    def re_initialize_T_variables(self) -> None:
+        """
+        Function that needs to be called after a change in the list of the source-sink separations T to be sure that all the T_list dependant variables are correctly re-initialized
+        
+        Input:
+            - None
+        
+        Output:
+            - None (all the relevant class variables get re-initialized)
+        """
+
+        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
+        self.M_from_S_fit  = None
+        self.x_from_S_fit  = None
+        self.M_from_S_diff = None
+        self.x_from_S_diff = None
+
+    #function used to re-initialize all the operator dependant class variables
+    def re_initialize_operator_variables(self) -> None:
+        """
+        Function that needs to be called after a change in the list of the selected operators to be sure that all the operator dependant variables are correctly re-initialized
+        
+        Input:
+            - None
+        
+        Output:
+            - None (all the relevant class variables get re-initialized)
+        """
+
+        #we reset the list of the kinematic factors (shape = (Nop,))
+        self.Klist = None
+
+        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
+        self.M_from_S_fit  = None
+        self.x_from_S_fit  = None
+        self.M_from_S_diff = None
+        self.x_from_S_diff = None
 
 
 
@@ -2324,8 +2557,8 @@ class ratio_func_form:
     def __call__(self, t:tuple[int,int], parms:dict):
 
         #we grep the input
-        T = t[:,0]
-        tau = t[:,1]
+        T = float(t[:,0])
+        tau = float(t[:,1])
         MatEle = parms["M"]
         R1 = parms["R1"]
         R2 = parms["R2"]
