@@ -32,6 +32,7 @@ import sys #to fetch command line argument
 from tqdm import tqdm #for a nice view of for loops with loading bars
 import gvar as gv #to propagate gaussian uncertainties in the kinematic factor
 from sympy import lambdify #to evaluate symbolic expression with gvar variables
+from IPython.display import display, Math #to display the operator inside a notebook
 
 ##Persoal Libraries
 from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
@@ -354,7 +355,19 @@ class Operator:
         #we return
         return None
 
+    #method used to display the operator inside a jupyer notebook
+    def display(self) -> None:
+        """
+        Method used to display the operator (its latex expression) inside a jupyter notebook
+        
+        Input:
+            - None
+        
+        Output:
+            - None (the latex expression gets displayed in the notebook)
+        """
 
+        display(Math(self.latex_O))
 
 ########### Auxiliary Functions #################
 

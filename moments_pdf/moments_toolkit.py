@@ -89,6 +89,9 @@ class moments_toolkit(bulding_block):
     #list with the available energy units that can be used
     energy_units = ["lattice", "mev"]
 
+    #value that is used as threshold for 0
+    eps: float = 10**(-20)
+
                         
 
 
@@ -378,7 +381,7 @@ class moments_toolkit(bulding_block):
 
     ##  Setter Methods (methods used to set the values of important parameters used in the analysis)
 
-    #method used to select the default value of the isospin used by default by the other methods
+    #method used to select the default value of the isospin used by default by the other methods #TO DO: add isospin variables re-initialization
     def select_isospin(self, isospin:str) -> None:
         """
         Function used to change the default value of the isospin (by default it is set to "U-D" by the init method)
@@ -816,7 +819,7 @@ class moments_toolkit(bulding_block):
         ## We perform a different calculation depending on the chosen method
 
         #fit method
-        if method=="fit":
+        if method=="fit": #TO DO: move computation to another sub-routine
             
             #we check if we have to do the computation
             if self.M_from_S_fit is None or force_computation==True:
@@ -829,7 +832,7 @@ class moments_toolkit(bulding_block):
 
                 #for each tskip we compute S
                 for itskip,tskip in enumerate(tskip_list): #TO DO: pythonize this for loop (after changing the output format of the get_S function)
-                    Smean, Sstd = self.get_S(tskip=tskip)
+                    Smean, Sstd = self.get_S(tskip=tskip, isospin=isospin)
                     Smean_array[itskip] = Smean
                     Sstd_array[itskip] = Sstd
 
@@ -935,7 +938,7 @@ class moments_toolkit(bulding_block):
                 
                 #we first take the correlators we need to compute everything
                 p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
-                p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
+                p3corr = self.get_p3corr(isospin=isospin) #shape = (Nop, Nconf, NT, maxT+1)
 
                 #we also take the list of kinematic factors
                 Klist = self.get_Klist()
@@ -1527,155 +1530,23 @@ class moments_toolkit(bulding_block):
         self.M_from_S_diff = None
         self.x_from_S_diff = None
 
+    #function used to display the selected operators inside a jupyter notebook
+    def display_operators(self) -> None:
+        """
+        Function used to display into a notebook each of the selected operators.
+        
+        Input:
+            - None
+        
+        Output:
+            - None (the operators in the list of selected operators are shown in the notebook)
+        """
+
+        for op in self.selected_op:
+            op.display()
 
 
     ## Work in Progress Methods (stuff still in development)
-
-    #method to extract the matrix element from the summed ratios
-    def MatEle_from_S(self, tskip_list:list[int] = [1,2,3], delta_list:list[int] = [1,2,3], isospin:str|None=None) -> np.ndarray:
-        """
-        Function returning a value of the (unrenormalized) matrix element for each operator, extracting them from the summed ratios S
-        
-        Input:
-            - tskip_list: list of tau skip we want to use in the analysis
-            - delta_list: list of delta that we want to use in the analysis (see reference paper for their meaning)
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
-        
-        Output:
-            - mat_ele: np array with shape (Nop, nT-1), with one value of the matrix element for each operator and for each allowed time value
-        """
-
-        #we first take the correlators we need to compute everything
-        p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
-        p3corr = self.get_p3corr(isospin=isospin) #shape = (Nop, Nconf, NT, maxT+1)
-
-        #we instantiate the output array
-        mat_ele_array = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
-
-        #we fill the output array using the formula for the matrix element from S
-        for iop in range(self.Nop):
-
-            #we compute mean and std of the matrix element using the jackknife
-            mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
-
-            #we put them into a gvar variable and store it into the array
-            mat_ele_array[iop] = gv.gvar(mat_ele,mat_ele_std)
-
-        #the last value of T is removed, since it has no allowed value of T+delta (delta=0 an option)
-        mat_ele_array = np.delete(mat_ele_array, self.nT-1, axis=1)
-
-        #we then remove the values of T that are too small for the given tskip
-        T_treshold = 1 + 2*min(tskip_list)
-
-        #we loop over all the values of T smaller than the treshold one
-        for T in range(T_treshold, self.chosen_T_list[0]-1, -1):
-
-            #we remove such values
-            mat_ele_array = np.delete(mat_ele_array, self.chosen_T_list.index(T), axis=1) #we remove from biggest to lowest value, so the index is the correct one
-
-        
-        #we return the matrix element array
-        return mat_ele_array
-
-
-
-    #function to get a value of the mass from the two point function
-    def get_meff(self, show:bool=False, save:bool=False, chi2_treshold:float=1.0, zoom:int=0, figname:str='mass_plateau') -> tuple[float, float]:
-        """
-        Input:
-            - show: bool, if True the effective mass vs time plot is shown to screen
-            - save: bool, if True the effective mass vs time plot is saved to file
-            - chi2_treshold:  treshold for the plateau determination using a chi2 analysis
-            - zoom: int, number of extra points plotted on the sides of the plateau
-            - figname: name of the .png file containing the plot
-        
-        Output:
-            - meff_plat, meff_plat_std: value of the mass extracted from the plateau of the effective mass, with related std
-        """
-
-        #first we recall the two point correlators
-        corr_2p = self. get_p2corr() #the cast to real is done here
-
-        #we use the jackknife to compute the effective mass (mean and std)
-        meff, meff_std, meff_covmat = jackknife(corr_2p, effective_mass, jack_axis_list=0, time_axis=-1)
-
-        #to remove this problematic part we look for the first time the std is 0
-        cut=np.where(meff_std<=0)[0][0]
-
-        #and we cut the meff arrays there
-        meff = meff[:cut]
-        meff_std = meff_std[:cut]
-        meff_covmat = meff_covmat[:cut,:cut]
-
-
-        #we compute a mean value and a std from the plateau
-
-        #first we identify the boundaries of the plateau region
-        start_plateau, end_plateau = plateau_search(meff, meff_covmat, chi2_treshold=chi2_treshold)
-
-        #then we get the mass from the plateau value
-        meff_plat = np.mean(meff[start_plateau:end_plateau])
-        #its std is given by sqrt of sum variance/ N
-        meff_plat_std = np.sqrt( np.mean( meff_std[start_plateau:end_plateau]**2 ) )
-
-        #we make a plot 
-
-        #the plot is made if the user ask either to see it or to save it to file
-        if show or save:
-            
-            #we instantiate the figure
-            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=(32, 14))
-
-            #we determine the time values to be displayed on the plot (x axis)
-            m_times = np.arange(np.shape(meff)[0]) + 0.5
-
-            #we plot the plateau and the neighbouring effective mass values
-            plt.errorbar(m_times[start_plateau-zoom:end_plateau+zoom], meff[start_plateau-zoom:end_plateau+zoom], yerr=meff_std[start_plateau-zoom:end_plateau+zoom],linewidth=0.5,marker='o',markersize=4,elinewidth=1.0)
-            plt.hlines(meff_plat ,start_plateau+0.5, end_plateau+0.5, color='red')
-            plt.hlines(meff_plat + meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-            plt.hlines(meff_plat - meff_plat_std, start_plateau+0.5, end_plateau+0.5, color='red', linestyles='dashed')
-
-            #plot styling
-            plt.title("Effective Mass Plateau")
-            plt.ylabel(r"$m_{eff}(t)$")
-            plt.xlabel(r"$t$")
-
-
-            #we save the figure if asked
-            if save:
-                plt.savefig(f"{self.plots_folder}/{figname}.png")
-
-            #we show the figure if asked
-            if show:
-                plt.show()
-
-
-        #we return the plateau values
-        return meff_plat, meff_plat_std
-    
-
-    #function used to extract a value of the fit mass from the two point correlators
-    def get_mfit(self) -> tuple[float,float]:
-        """
-        Input:
-            - None
-
-        Output:
-            - mfit, mfit_std: mean value and std of the mass extracted from the fit, using the jackknife analysis
-        """
-
-        #first we recall the two point correlators
-        #corr_2p = self.bb_list[0].p2_corr.real
-        corr_2p = self.get_p2corr()
-
-        #then we use the jackknife to compute the fit mass and its std
-        m_A_fit, m_A_fit_std , _= jackknife(corr_2p, fit_mass, jack_axis_list=0, time_axis=None)
-        mfit = m_A_fit[0]
-        mfit_std = m_A_fit_std[0]
-
-        #we return the fit mass and its std
-        return mfit, mfit_std
-
 
 
     def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=3, tskip_list=[1,2], show=True, save=True, verbose=False, rescale=True,
@@ -1755,7 +1626,9 @@ class moments_toolkit(bulding_block):
         #dE = gv.gvar(fit2p_parms['est']['dE1'], fit2p_parms['err']['dE1'])
 
         #we will use as prior the value extracted from S
-        matele_fromS = self.MatEle_from_S(tskip_list=tskip_list)
+        matele_fromS = self.get_M_from_S(method="fit",moments=False)
+
+        
 
         #we instantiate a prior dict for each operator
         priordict_list = []
@@ -1768,7 +1641,7 @@ class moments_toolkit(bulding_block):
             #we fill it
             prior["dE"] = gv.gvar(fit2p_parms['est']['dE1'], fit2p_parms['err']['dE1'])
 
-            prior["M"] = np.average(matele_fromS[iop], weights= [ele.sdev**(-2) for ele in matele_fromS[iop]] )
+            prior["M"] = np.average(np.asarray([e for e in matele_fromS[iop] if np.abs(e.mean)>self.eps]), weights= [ele.sdev**(-2) for ele in matele_fromS[iop] if np.abs(ele.mean)>self.eps] )
 
             prior["R1"] = gv.gvar(0.5,1)
             prior["R2"] = gv.gvar(0,1)
@@ -2514,6 +2387,44 @@ def make_fitplot_2pcorr(fit_result:CA.FitResult, correlator:gv._gvarcore.GVar ,a
     _ = ax.legend()
 
 
+#auxiliary function used to average values of the moments over various values of T
+def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.0) -> gv._gvarcore.GVar:
+    """
+    Function used to average the moments over different source sink separations, as in eq 14 of the reference paper
+    
+    Input:
+        - in_array: 1D np array of gvar variables, shape = (Ntimes,), either moments or matrix elements that needs to be averaged
+        - chi2: value of the chi2 used as treshold for the average determination
+    
+    Output:
+        - average: gvar variable with mean and std of the average moment (or matrix element)
+    """
+
+    #first we remove the padding
+    in_array = np.asarray( [ e for e in in_array if np.abs(e.mean)>0 ] )
+
+    #then we grep the mean and std from the gvar variables
+    mean_array = np.asarray( [ e.mean for e in in_array ] )
+    std_array = np.asarray( [ e.sdev for e in in_array ] )
+
+    #we compute the weights (inverse sigma squared)
+    weights = std_array**(-2)
+
+    #we now loop over the values of T, starting from the lowest, and we cut from there
+    for iTmin in range(int(len(mean_array)/2)):
+
+        #we compute the average value
+        avg = np.average(in_array[iTmin:], weights=weights[iTmin:])
+
+        #if the chi2 is smaller than the treshold then we return the array
+        if np.sum( ((mean_array[iTmin:] - avg.mean)/std_array[iTmin:])**2 ) < chi2:
+            return avg
+
+    #if the chi2 is never smaller than the treshold we just return the last value
+    return avg
+
+
+
 #auxiliary function used to check if all elements in an iterable are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
 def all_equal(iterable):
     """
@@ -2557,8 +2468,8 @@ class ratio_func_form:
     def __call__(self, t:tuple[int,int], parms:dict):
 
         #we grep the input
-        T = float(t[:,0])
-        tau = float(t[:,1])
+        T = np.asarray(t[:,0],dtype=float)
+        tau = np.asarray(t[:,1],dtype=float)
         MatEle = parms["M"]
         R1 = parms["R1"]
         R2 = parms["R2"]
