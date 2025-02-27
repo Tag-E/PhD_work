@@ -402,7 +402,7 @@ class moments_toolkit(bulding_block):
             self.default_isospin = isospin
 
     #function used to deselect some source-sink separation values T from the analysis
-    def remove_T(self, *args: int, verbose:bool=True) -> None:
+    def remove_T(self, *args: int, verbose:bool=False) -> None:
         """
         Function used to deselect some source-sink separation values T from the analyses performed by the class
         
