@@ -2180,23 +2180,23 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
         #then we loop over the possible initial points of the plateau
         for start_plateau in range(0,len_array-len_plat+1,1):
 
-                #the suggested plateau region in this case is
-                plat = in_array[start_plateau:start_plateau+len_plat]
+            #the suggested plateau region in this case is
+            plat = in_array[start_plateau:start_plateau+len_plat]
 
-                #we also have to reshape the covariance matrix
-                covmat_plat = covmat[start_plateau:start_plateau+len_plat, start_plateau:start_plateau+len_plat]
+            #we also have to reshape the covariance matrix
+            covmat_plat = covmat[start_plateau:start_plateau+len_plat, start_plateau:start_plateau+len_plat]
 
-                #the value of the plateau is
-                plat_value = np.average(plat, weights = np.diag(np.linalg.inv(covmat_plat)), axis=0, keepdims=True) #the weights are the inverse of the sigma squared
+            #the value of the plateau is
+            plat_value = np.average(plat, weights = np.diag(np.linalg.inv(covmat_plat)), axis=0, keepdims=True) #the weights are the inverse of the sigma squared
 
-                #we compute the chi2 of the current plateau
-                chi2 = redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig)
+            #we compute the chi2 of the current plateau
+            chi2 = redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig)
 
-                #we see if the chi2 meets the condition
-                if chi2 < chi2_treshold: #TO DO: in this case put the value in a list and then at the end of the inner loop search for the better one
+            #we see if the chi2 meets the condition
+            if chi2 < chi2_treshold: #TO DO: in this case put the value in a list and then at the end of the inner loop search for the better one
 
-                    #in that case we add the values of the starting and ending point fo the plateau to a dictionary, along with the associated chi2
-                    tmp_chi2_dict[(start_plateau, start_plateau+len_plat)] = chi2
+                #in that case we add the values of the starting and ending point fo the plateau to a dictionary, along with the associated chi2
+                tmp_chi2_dict[(start_plateau, start_plateau+len_plat)] = chi2
         
         #after looking at all the possible starting values, for a fixed plateau len, if at least one chi2 was <1, we return the smallest
         if len(tmp_chi2_dict) > 0:
