@@ -866,7 +866,7 @@ class moments_toolkit(bulding_block):
                             for iTend,Tend in enumerate(self.chosen_T_list):
 
                                 #we skip all the endtimes that are smaller (by 2) w.r.t. the start time
-                                if iTend-iTstart < 1: continue
+                                if iTend-iTstart < 3: continue
 
                                 #we determine the fit abscissa and ordinate
                                 abscissa = np.asarray( self.chosen_T_list[iTstart:iTend+1] )
