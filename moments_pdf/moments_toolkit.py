@@ -52,6 +52,7 @@ from building_blocks_reader import bulding_block #to read the 3p and 2p correlat
 from moments_operator import Operator, Operator_from_file, make_operator_database #to handle lattice operators
 from utilities import all_equal #auxiliary function used to check if all elements in an iterable are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
 from utilities import jackknife, jackknife_resamples #to perform a statistical analysis using the jackknife resampling technique
+from utilities import plateau_search #function used to search for the plateau region of a 1D array
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 
 
@@ -1959,86 +1960,6 @@ def effective_mass_formula(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
     #we send back the effective mass
     return meff
 
-
-
-#function used to compute the reduced chi2 of a 1D array using the covariance matrix
-def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig:bool=False) -> float:
-    """
-    Input:
-        - in_array: a 1D array, with len T
-        - fit_array: a 1D array, also with len T, representing the function we want the in_arrya fitted to
-        - covmat: a 2D array with shape (T,T), representing the covariance matrix of in_array
-        - only_sig: bool, if True the diag of the covmat is used (the covariance) instead of the whole covmat
-
-    Output:
-        - chi2: the reduced chi2 of the fit
-    """
-
-    #then we compute the differences between the fit and input array
-    deltas = in_array - fit_array
-
-    #then we compute the number of d.o.f. (the len of the plateau)
-    ndof = np.shape(in_array)[0]
-
-    #TO DO: fix the issue with the covmat
-    if only_sig==False:
-        #first we invert the covariance array
-        cov_inv = np.linalg.inv(covmat)
-        #then we compute the reduced chi2 according to its formula and we return it
-        return np.einsum( 'j,j->' , deltas, np.einsum('jk,k->j',cov_inv,deltas) ) / ndof
-    else:
-        sig = np.sqrt(np.diag(covmat))
-        return np.sum( (deltas/sig)**2 ) / ndof
-
-#function that given a 1D array returns the values of the indices identifying its plateau (the first and last index)
-def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0, only_sig:bool=True) -> tuple[int,int]:
-    """
-    Input:
-        - in_array: the 1D array we want to search the plateau of
-        - covmat: a 2D array, representing the covariance matrix of in_array
-        - chi2_treshold: the treshold for the plateau determination
-        - only_sig: bool, if True only the standard deviation, and not the whole cavariance matrix, is used for the plateau determination
-    
-    Output:
-        - (start_plateau,end_plateau): indices such that in_array[start_plateau,end_plateau] is the region with the plateau
-    """
-
-    #first we compute the len of the array
-    len_array = np.shape(in_array)[0]
-
-    #we loop over all the possible plateau lenghts, starting from the biggest possible one and then diminishing it up to a plataeau of len 2
-    for len_plat in range(len_array,1,-1):
-
-        #we instantiate a tmp dictionary where we are gonna store the values of the chi2 corresponding to the different starting value of the plateau (for a fixed lenght)
-        tmp_chi2_dict = {}
-
-        #then we loop over the possible initial points of the plateau
-        for start_plateau in range(0,len_array-len_plat+1,1):
-
-            #the suggested plateau region in this case is
-            plat = in_array[start_plateau:start_plateau+len_plat]
-
-            #we also have to reshape the covariance matrix
-            covmat_plat = covmat[start_plateau:start_plateau+len_plat, start_plateau:start_plateau+len_plat]
-
-            #the value of the plateau is
-            plat_value = np.average(plat, weights = np.diag(np.linalg.inv(covmat_plat)), axis=0, keepdims=True) #the weights are the inverse of the sigma squared
-
-            #we compute the chi2 of the current plateau
-            chi2 = redchi2_cov(plat, plat_value, covmat_plat,only_sig=only_sig)
-
-            #we see if the chi2 meets the condition
-            if chi2 < chi2_treshold: #TO DO: in this case put the value in a list and then at the end of the inner loop search for the better one
-
-                #in that case we add the values of the starting and ending point fo the plateau to a dictionary, along with the associated chi2
-                tmp_chi2_dict[(start_plateau, start_plateau+len_plat)] = chi2
-        
-        #after looking at all the possible starting values, for a fixed plateau len, if at least one chi2 was <1, we return the smallest
-        if len(tmp_chi2_dict) > 0:
-            return min(tmp_chi2_dict, key=tmp_chi2_dict.get)
-                
-    #if by the end of the loop the chi2 condition is never met (i.e. if len_plat is 1) we return the point corresponding to the middle of the dataset
-    return int(len_array/2), int(len_array/2)+1
 
 
 #function used to extract the fit mass from the two-point correlators
