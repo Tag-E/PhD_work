@@ -30,12 +30,15 @@
 
 ######################## Library Imports ################################
 
+##General Libraries
 import sympy as sym #to handle symbolic computations
 from sympy import I # = imaginary unit
 import numpy as np #to handle just everything
 from math import gcd #to construct the coefficients - latex conversion dict
 
 
+##Personal Libraries
+from utilities import is_square #function used to asses whether an int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
 
 
 
@@ -127,32 +130,6 @@ den_K = 2 * E * sym.trace( Gamma_pol * (-I*pslash + mN*Id_4) ).simplify(rational
 
 
 ## We instantiate a dictionary to convert from numerical coefficients to Latex espression (to do so we define some useful functions #TO DO: move this into a  general utility python script
-
-# function used to asses whether an int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
-def is_square(apositiveint:int) -> bool:
-    """
-    Function used to to asses whether the input int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
-    
-    Input:
-        - apositive int: an int bigger than 1
-    
-    Output:
-        - bool: True if the input is a perfect square, False otherwise
-    """
-    
-    #input check
-    if type(apositiveint) is not int or apositiveint<2:
-        raise ValueError("The function checking for the perfect square condition work only with integer numbers bigger than 1!")
-
-    #algorithmic determination of perfect square condition
-    x = apositiveint // 2
-    seen = set([x])
-    while x * x != apositiveint:
-        x = (x + (apositiveint // x)) // 2
-        if x in seen: return False
-        seen.add(x)
-    return True
-
 
 #to generate this dict we use numbers up to this max int
 max_int = 1000

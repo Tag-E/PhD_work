@@ -36,6 +36,7 @@ from IPython.display import display, Math #to display the operator inside a note
 
 ##Persoal Libraries
 from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
+from utilities import parity #function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
 
 
 
@@ -601,31 +602,7 @@ def index_symm(cgmat: np.ndarray) -> str:
     return symm_new
 
 
-#function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
-def parity(permutation: tuple) -> int:
-    """
-    Function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
-    
-    Input:
-        - permutation: a tuple coming out of itertools.permutation()
-    
-    Output:
-        - parity: int, either 1 or -1, respectively for an even or for an odd permutation
-    """
-    #code copied from the referenced source:
-    permutation = list(permutation)
-    length = len(permutation)
-    elements_seen = [False] * length
-    cycles = 0
-    for index, already_seen in enumerate(elements_seen):
-        if already_seen:
-            continue
-        cycles += 1
-        current = index
-        while not elements_seen[current]:
-            elements_seen[current] = True
-            current = permutation[current]
-    return (-1)**( (length-cycles) % 2 ) # even,odd are 1,-1
+
 
 
 #function used to remap the cg coefficients from a 4**n column to a n rank matrix of dimension 4 (with n number of tensors in the product)
