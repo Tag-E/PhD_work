@@ -206,6 +206,40 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
 
     return obs_resamp
 
+#function that generates the bootstap resampled of the given array along a specified axis
+def bootstrap_resamples(array: np.ndarray, axis:int, Nres:int):
+    """
+    Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
+    (obtained with minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
+    
+    Input:
+        - array: input array to be resampled
+        - axis: the axis over which to perform the resampling with replacement
+        - Nres: the number of required resamples
+    
+    Output:
+        - resamples_array: the array with the resamples, shape = (Nres,) + array.shape
+    """
+
+    #we read the number of dimensions of the input array
+    ndim = array.ndim
+
+    #input control on the axis parameter
+    if axis >= ndim or axis<-ndim:
+        raise ValueError(f"The input array has shape {array.shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={axis} were given.")
+    
+    #cast axis to a postive number in the correct range
+    axis = (axis + array.ndim) % array.ndim
+
+    #we swap the array as to have the axis to resample on the last axis
+    swapped_array = np.swapaxes(array,axis1=axis, axis2=-1)
+
+    #we resample along the last axis
+    resamples_array = resamples_last_axis(swapped_array,Nres)
+
+    #we swap again the input axis with the last one (with the +1 taking into account now there is also the resample dimension)
+    return np.swapaxes(resamples_array, axis1=axis+1, axis2=-1)
+
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
 def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig:bool=False) -> float:
     """
@@ -328,10 +362,10 @@ def plateau_search_symm(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:
 
 ## Auxiliary Routines ##
 
-#function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+#function used to find the parity of a permutation (forum discussion: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity) 
 def parity(permutation: tuple) -> int:
     """
-    Function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+    Function used to find the parity of a permutation (credit: https://stackoverflow.com/a/1504565)
     
     Input:
         - permutation: a tuple coming out of itertools.permutation()
@@ -354,10 +388,10 @@ def parity(permutation: tuple) -> int:
             current = permutation[current]
     return (-1)**( (length-cycles) % 2 ) # even,odd are 1,-1
 
-#function used to asses whether an int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
+#function used to asses whether an int is a perfect square or not (formu discussion: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
 def is_square(apositiveint:int) -> bool:
     """
-    Function used to to asses whether the input int is a perfect square or not (credit: https://stackoverflow.com/questions/2489435/check-if-a-number-is-a-perfect-square)
+    Function used to to asses whether the input int is a perfect square or not (credit: https://stackoverflow.com/a/2489519)
     
     Input:
         - apositive int: an int bigger than 1
@@ -379,10 +413,10 @@ def is_square(apositiveint:int) -> bool:
         seen.add(x)
     return True
 
-#auxiliary function used to check if all elements in an iterable are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
+#auxiliary function used to check if all elements in an iterable are equal (forum discussion: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
 def all_equal(iterable):
     """
-    Function used to check if all elements in a list are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
+    Function used to check if all elements in a list are equal (credit: https://stackoverflow.com/a/3844832)
     
     Input:
         - iterable: the list (or iterable in general) to be checked
@@ -392,3 +426,28 @@ def all_equal(iterable):
     """
     g = it.groupby(iterable)
     return next(g, True) and not next(g, False)
+
+#function that resample the given arrays along the innermost axis (forum discussion: https://stackoverflow.com/questions/53236040/how-can-i-bootstrap-the-innermost-array-of-a-numpy-array)
+def resamples_last_axis(arr, reps):
+    """
+    Function used to resample with replacement the innermost axis of the given array (credit: https://stackoverflow.com/a/53236272)
+    
+    Input:
+        - arr: the input array to be resampled (along the innermost axis)
+        - reps: the number of resamples that is required
+    
+    Output:
+        - resampled_array: the input arry resampled along the last axis, shape = (reps,) + arr.shape
+    """
+
+    n = arr.shape[-1]
+
+
+    # create an array to shift random indexes as needed
+    shift = np.repeat(np.arange(0, arr.size, n), n).reshape(arr.shape)
+
+    # get a flat view of the array
+    arrflat = arr.ravel()
+
+    # sample the array by generating random ints and shifting them appropriately
+    return np.array([arrflat[np.random.randint(0, n, arr.shape) + shift] for i in range(reps)])
