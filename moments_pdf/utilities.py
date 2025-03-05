@@ -61,7 +61,7 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
         - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
     """
 
-    #we make a check on the input to asses that the number of input_array, jackknife axes and time_axes is consistend
+    #we make a check on the input to asses that the number of input_array, jackknife axes and time_axes are consistent
     if type(in_array_list) is list and (type(jack_axis_list) is not list or len(in_array_list)!=len(jack_axis_list) ):
         raise ValueError("The input array is a list, hence also the jackknife axis should be a list and have the same lenght, but that is not the case")
     
@@ -171,7 +171,7 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     Input:
         - in_array_list: input array to be jackknifed, or a list containing such arrays
         - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
-        - jack_axis_list: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations) (or a list with such axis for every input array)
+        - jack_axis_list: the axis over which perform the jacknife analysis (from a physics p.o.v. the axis with the configurations), or a list with such axis for every input array
         - binsize: binning of the jackknife procedure
         - first_conf: index of the first configuration taken into account while performing the jackknife procedure
         - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
@@ -180,7 +180,7 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
         - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
     """
 
-    #we make a check on the input to asses that the number of input_array, jackknife axes and time_axes is consistend
+    #we make a check on the input to asses that the number of input_array is consistent with the number of jackknife axes
     if type(in_array_list) is list and (type(jack_axis_list) is not list or len(in_array_list)!=len(jack_axis_list) ):
         raise ValueError("The input array is a list, hence also the jackknife axis should be a list and have the same lenght, but that is not the case")
     
@@ -207,38 +207,64 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     return obs_resamp
 
 #function that generates the bootstap resampled of the given array along a specified axis
-def bootstrap_resamples(array: np.ndarray, axis:int, Nres:int):
+def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], bootstrap_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None): #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap
     """
     Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
     (obtained with minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
     
     Input:
-        - array: input array to be resampled
-        - axis: the axis over which to perform the resampling with replacement
+        - in_array_list: input array (or list of arrays) to be resampled
+        - bootstrap_axis_list: the axis (or list of axis) over which to perform the resampling with replacement, corresponding to the input array (the list of input array)
         - Nres: the number of required resamples
     
     Output:
         - resamples_array: the array with the resamples, shape = (Nres,) + array.shape
     """
 
-    #we read the number of dimensions of the input array
-    ndim = array.ndim
+    #we make a check on the input to asses that the number of input_array is consistent with the number of jackknife axes
+    if type(in_array_list) is list and (type(bootstrap_axis_list) is not list or len(in_array_list)!=len(bootstrap_axis_list) ):
+        raise ValueError("The input array is a list, hence also the bootstrap axis should be a list and have the same lenght, but that is not the case")
 
-    #input control on the axis parameter
-    if axis >= ndim or axis<-ndim:
-        raise ValueError(f"The input array has shape {array.shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={axis} were given.")
-    
-    #cast axis to a postive number in the correct range
-    axis = (axis + array.ndim) % array.ndim
+    #if the given input is just one array and not a list of arrays, then we put it in a list
+    if type(in_array_list) is not list:
+        in_array_list = [in_array_list]
+        bootstrap_axis_list = [bootstrap_axis_list]
 
-    #we swap the array as to have the axis to resample on the last axis
-    swapped_array = np.swapaxes(array,axis1=axis, axis2=-1)
+    #we make some input control and modifications on the axis array
+    for i,axis in enumerate(bootstrap_axis_list[:]):
 
-    #we resample along the last axis
-    resamples_array = resamples_last_axis(swapped_array,Nres)
+        #the number of dimension for the i_th array is
+        ndim = in_array_list[i].ndim
 
-    #we swap again the input axis with the last one (with the +1 taking into account now there is also the resample dimension)
-    return np.swapaxes(resamples_array, axis1=axis+1, axis2=-1)
+        #we check that axis is in the right range
+        if axis >= ndim or axis<-ndim:
+            raise ValueError(f"The input array has shape {in_array_list[i].shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={bootstrap_axis_list} were given.")
+        
+        #we cast each axis to a positive number
+        bootstrap_axis_list[i] = (axis + ndim) % ndim
+
+    #we check that the dimensionalities to resample are all equal
+    Nsamples_list = [array.shape[axis] for array,axis in zip(in_array_list,bootstrap_axis_list)]
+    if all_equal(Nsamples_list) == False:
+        raise ValueError("The input arrays should all have the same dimensionality along the specified axes (i.e. the same number of samples) but that is not the case.")
+
+    #we can now identify what the number of samples (configurations) is
+    Nsamples = Nsamples_list[0]
+
+    #if the number of sample for each resample is not specified we put it to the maximum value
+    sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else Nsamples        
+
+    #for each of the resamples we want to make we have to make a selection, i.e. a list with sample_per_resamples elements, each going from 0 to Nsamples-1
+    selection_list = [np.random.randint(0,Nsamples, sample_per_resamples) for _ in range(Nres)] 
+
+    #we can now use this list with selections of indices to bootstrap the input arrays
+    resamples_array_list = [ np.moveaxis( np.take(array, indices = selection_list, axis=axis), source=axis, destination=0) for array,axis in zip(in_array_list,bootstrap_axis_list)]
+
+    if len(resamples_array_list) ==1:
+        return resamples_array_list[0]
+    else:
+        return resamples_array_list
+
 
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
 def redchi2_cov(in_array: np.ndarray, fit_array: np.ndarray, covmat: np.ndarray, only_sig:bool=False) -> float:
