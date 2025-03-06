@@ -43,6 +43,7 @@ import gvar as gv #to handle gaussian variables (library by Lepage: https://gvar
 import itertools as it #for fancy iterations (product:to loop over indices; cycle: to cycle over markers)
 from typing import Any #to use annotations for fig and ax
 from matplotlib.figure import Figure #to use annotations for fig and ax
+from functools import partial #to specify arguments of functions
 
 
 
@@ -52,6 +53,7 @@ from building_blocks_reader import bulding_block #to read the 3p and 2p correlat
 from moments_operator import Operator, Operator_from_file, make_operator_database #to handle lattice operators
 from utilities import all_equal #auxiliary function used to check if all elements in an iterable are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
 from utilities import jackknife, jackknife_resamples #to perform a statistical analysis using the jackknife resampling technique
+from utilities import bootstrap, bootstrap_resamples #to perform a statistical analysis using the bootstrap resampling technique
 from utilities import plateau_search #function used to search for the plateau region of a 1D array
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 
@@ -91,6 +93,9 @@ class moments_toolkit(bulding_block):
     #list with the available energy units that can be used
     energy_units = ["lattice", "mev"]
 
+    #list with the available resampling techniques
+    resampling_list = ["jackknife", "bootstrap"]
+
     #value that is used as threshold for 0
     eps: float = 10**(-20)
 
@@ -106,7 +111,7 @@ class moments_toolkit(bulding_block):
     #Initialization function #TO DO; add properly the skip3p option and skipop option
     def __init__(self, p3_folder:str, p2_folder:str,
                  max_n:int=3, plot_folder:str="plots", skipop:bool=False, verbose:bool=False,
-                 operator_folder="operator_database", **kwargs) -> None:
+                 operator_folder:str="operator_database", **kwargs) -> None:
         
         """
         Initializaiton of the class containing data analysis routines related to moments of nucleon parton distribution functions
@@ -162,6 +167,9 @@ class moments_toolkit(bulding_block):
 
         #we initialize the default value of the isospin
         self.default_isospin = 'U-D'
+
+        #we initialize the resampling technique used in the analysis to be the jackknife
+        self.resampling = jackknife
 
 
         ## We initialize to None some variables that will be later accessed using getter methods
@@ -382,6 +390,53 @@ class moments_toolkit(bulding_block):
 
 
     ##  Setter Methods (methods used to set the values of important parameters used in the analysis)
+
+    #method used to the set the resempling technique used in the analysis (either jackknife or bootstrap)
+    def set_resampling_type(self, resampling:str,
+                            binsize:int=1, first_conf:int=0, last_conf:int=None,
+                            Nres:int|None=None, sample_per_resample:int|None=None) -> None:
+        """
+        Function used to set the resampling technique used in the analysis
+        
+        Input:
+            - resampling: str, either "jackknife" or "bootstrap", the resampling technique used in the analysis
+            - binsize, first_conf, last_conf: int, the parameters used to set the jackknife resampling technique
+            - Nres, sample_per_resample: int, the parameters used to set the bootstrap resampling technique
+        
+        Output:
+            - None (the resampling technique used in the analysis is updated)
+        """
+
+        #input control
+        if resampling not in self.resampling_list:
+            raise ValueError(f"The resampling technique must be one in the list {self.resampling_list}, but instead {resampling} was chosen.")
+        
+        #if the input is ok we change the resampling technique
+
+        #we set the resampling technique to be either the jackknife ...
+        elif resampling == "jackknife":
+
+            #the number of bins and the first and last configuration are set
+            self.resampling = partial( jackknife, binsize=binsize, first_conf=first_conf, last_conf=last_conf ) 
+
+        #... or the bootstrap
+        elif resampling == "bootstrap":
+
+            #we adjust the input to the standard values if we have to
+            Nres = Nres if Nres is not None else self.nconf
+            sample_per_resample = sample_per_resample if sample_per_resample is not None else 10*(self.nconf-1)
+
+            #the number of resamples and the samples per resamples are set 
+            self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resample )
+
+        #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized
+        self.E0 = None
+        self.m = None
+        self.Klist= None
+        self.M_from_S_fit = None 
+        self.x_from_S_fit = None
+        self.M_from_S_diff= None
+        self.x_from_S_diff= None
 
     #method used to select the default value of the isospin used by default by the other methods #TO DO: add isospin variables re-initialization
     def select_isospin(self, isospin:str) -> None:
@@ -695,7 +750,7 @@ class moments_toolkit(bulding_block):
         if units not in self.energy_units:
             raise ValueError(f"Error: the value of units must be one in the list {self.energy_units}, but instead units={units} was chosen.")
 
-        #we check whether we can aavoid doing the computation again
+        #we check whether we can avoid doing the computation again
         if self.m is None or force_fit==True:
             
             #we update the value of the mass
@@ -762,7 +817,7 @@ class moments_toolkit(bulding_block):
         for iT,T in enumerate(self.chosen_T_list):
 
             #we perform the jackknife analysis (the observable being the ratio we want to compute)
-            Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = jackknife([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), jack_axis_list=[1,0], time_axis=-1)
+            Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = self.resampling([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0], time_axis=-1)
 
         #we return the ratios just computed and the results of the jackknife analysis
         return Rmean, Rstd, Rcovmat
@@ -796,7 +851,7 @@ class moments_toolkit(bulding_block):
         for iT,T in enumerate(self.chosen_T_list):
             
             #we compute S using the jackknife algorithm
-            Smean[:,iT], Sstd[:,iT], _ = jackknife( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), jack_axis_list=[1,0], time_axis=None )
+            Smean[:,iT], Sstd[:,iT], _ = self.resampling( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0], time_axis=None )
 
         #we return S
         return Smean, Sstd
@@ -953,7 +1008,7 @@ class moments_toolkit(bulding_block):
                 for iop in range(self.Nop):
 
                     #we compute mean and std of the matrix element using the jackknife
-                    mat_ele, mat_ele_std, _ = jackknife([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), jack_axis_list=[0,0], time_axis=None)
+                    mat_ele, mat_ele_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), res_axis_list=[0,0], time_axis=None)
 
                     #we put them into a gvar variable and store it into the array
                     self.M_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std)
@@ -1241,10 +1296,10 @@ class moments_toolkit(bulding_block):
         p2corr = self.get_p2corr() #shape = (nconf, latticeT)
 
         #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = jackknife(p2corr, lambda x: np.mean(x, axis=0), jack_axis_list=0, time_axis=-1)
+        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = self.resampling(p2corr, lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1)
 
         #then we use the jackknife to compute a value of the effective mass (mean, std and cov)
-        meff_raw, meff_std_raw, meff_covmat_raw = jackknife(p2corr, effective_mass_formula, jack_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
+        meff_raw, meff_std_raw, meff_covmat_raw = self.resampling(p2corr, effective_mass_formula, res_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
         #we look at the point where the mass starts to be negative (i.e. the first point that is always set to 0, and hence as a std equal to 0)
         cut=np.where(meff_std_raw<=0)[0][0]
@@ -1362,8 +1417,8 @@ class moments_toolkit(bulding_block):
             for i_tstart, t_start in enumerate(t_start_list):
 
                 #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = jackknife(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), jack_axis_list=0, time_axis=-1)
-                p2corr_resamples_plat = jackknife_resamples(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), jack_axis_list=0)
+                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = self.resampling(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1)
+                p2corr_resamples_plat = jackknife_resamples(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), res_axis_list=0)
 
                 #we handle the prior determination of the parameters
 
@@ -1371,7 +1426,7 @@ class moments_toolkit(bulding_block):
                 prior = gv.BufferDict()
 
                 #we get a first estimate for the mass and the amplitude from  the scipy fit + jackknife analysis
-                m_A_fit, m_A_fit_std , _= jackknife(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), jack_axis_list=0, time_axis=None) #first entry of m_A_fit is the amplitude, the second is the mass
+                m_A_fit, m_A_fit_std , _= self.resampling(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), res_axis_list=0, time_axis=None) #first entry of m_A_fit is the amplitude, the second is the mass
 
                 #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't fully trust the simple scipy fit
                 prior["A0"] = gv.gvar(m_A_fit[1], m_A_fit_std[1] * fit_doubt_factor) 
@@ -1608,13 +1663,13 @@ class moments_toolkit(bulding_block):
         p2corr = self.get_p2corr()
 
         #we resample the ratios, len = Nop,, each element with shape = (Nres, Nallowed(T,tau) )
-        ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
+        ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), res_axis_list=[1,0] ) for iop in range(self.Nop) ]
 
         #the number of resamples is given by
         nres = ratio_resamples_list[0].shape[0]
 
         #ratio_list = [ np.asarray( [e for l in [ ratio_formula(p3corr, p2corr, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop) ]
-        ratio_list = [ jackknife([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), jack_axis_list=[1,0] ) for iop in range(self.Nop) ]
+        ratio_list = [ self.resampling([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), res_axis_list=[1,0] ) for iop in range(self.Nop) ]
         ratio_mean_list = [ np.asarray([e for l in  [Rmean[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
         ratio_std_list = [ np.asarray([e for l in  [Rstd[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
         #ratio_cov_list = [ np.asarray([e for l in  [Rcovmat[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1], plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
