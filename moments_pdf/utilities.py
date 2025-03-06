@@ -43,7 +43,7 @@ import itertools as it #for fancy iterations (groupby: used to asses the equalit
 ## Data Analysis Specific Routines ##
 
 #function implementing the jackknife analysis
-def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int|None]=0, time_axis:int|None=-1, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray] | tuple[np.ndarray,np.ndarray,None]:
+def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int|None]=0, time_axis:int|None=None, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]:
     """
     Function implemeneting the Jackknife mean and std estimation. The input array(s) has to match the input required by the observable function. If a list of array is given then also a list of
     jackknife axis and time axis has to be given.
@@ -71,6 +71,19 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
     if type(in_array_list) is not list:
         in_array_list = [in_array_list]
         jack_axis_list = [jack_axis_list]
+
+    #we make some input control and modifications on the axis array
+    for i,axis in enumerate(jack_axis_list[:]):
+
+        #the number of dimension for the i_th array is
+        ndim = in_array_list[i].ndim
+
+        #we check that axis is in the right range
+        if axis >= ndim or axis<-ndim:
+            raise ValueError(f"The input array has shape {in_array_list[i].shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={jack_axis_list} were given.")
+        
+        #we cast each axis to a positive number
+        jack_axis_list[i] = (axis + ndim) % ndim
 
     #we set last conf to its default value
     if last_conf is None:
@@ -143,8 +156,6 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
                 s[axe2] = slice(t2,t2+1)
 
                 #we update the covariance matrix
-                #covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis) - np.take(obs,t1,axis=new_time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis) - np.take(obs,t2,axis=new_time_axis) ), axis=0 ),
-                 #                                  [axe1,axe2])
                 covmat[tuple(s)] = np.expand_dims( (nresamp-1)/nresamp * np.sum( (  np.take(obs_resamp,t1,axis=time_axis+1) - np.take(jack_mean,t1,axis=time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis+1) - np.take(jack_mean,t2,axis=time_axis) ), axis=0 ),
                                                    [axe1,axe2]) #--> obs_resamp has a +1 because it has the resample dimension at the beginning!
                 
@@ -156,7 +167,7 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
     return [obs_mean, obs_std, covmat]
 
 #function used to obtain the jackknife resamplings for the given observable with the given input
-def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int|None]=0, binsize:int=1,first_conf:int=0, last_conf:int|None=None) -> list[np.ndarray]:
+def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], jack_axis_list:int|list[int|None]=0, binsize:int=1,first_conf:int=0, last_conf:int|None=None) -> np.ndarray:
     """
     Function returning the jackknife resamples of the given observablem that can be computed with the given inputs.
 
@@ -181,6 +192,19 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
         in_array_list = [in_array_list]
         jack_axis_list = [jack_axis_list]
 
+    #we make some input control and modifications on the axis array
+    for i,axis in enumerate(jack_axis_list[:]):
+
+        #the number of dimension for the i_th array is
+        ndim = in_array_list[i].ndim
+
+        #we check that axis is in the right range
+        if axis >= ndim or axis<-ndim:
+            raise ValueError(f"The input array has shape {in_array_list[i].shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={jack_axis_list} were given.")
+        
+        #we cast each axis to a positive number
+        jack_axis_list[i] = (axis + ndim) % ndim
+
     #we set last conf to its default value
     if last_conf is None:
         last_conf = np.shape(in_array_list[0])[jack_axis_list[0]]
@@ -202,18 +226,23 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     return obs_resamp
 
 #function that generates the bootstap resampled of the given array along a specified axis
-def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], bootstrap_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None): #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap
+def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], bootstrap_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None) -> np.ndarray: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap (see https://stackoverflow.com/questions/53236040/how-can-i-bootstrap-the-innermost-array-of-a-numpy-array)
     """
     Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
     (obtained with minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
     
     Input:
         - in_array_list: input array (or list of arrays) to be resampled
+        - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
         - bootstrap_axis_list: the axis (or list of axis) over which to perform the resampling with replacement, corresponding to the input array (the list of input array)
         - Nres: the number of required resamples
+        - sample_per_resamples: the number of samples (configurations) that each resamples has
     
     Output:
-        - resamples_array: the array with the resamples, shape = (Nres,) + input_array.shape
+        - resamples_array: the array with the resamples, shape = (Nres,) + output_array.shape
+
+    References:
+        - for a faster way of bootstrap resempling see https://stackoverflow.com/a/53236272
     """
 
     ## Step 0: Input check and Adjustments
@@ -251,6 +280,7 @@ def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     #if the number of sample for each resample is not specified we put it to the maximum value
     sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else Nsamples
 
+
     ## Step 1: Creation of the bootstrap resamples        
 
     #for each of the resamples we want to make we have to make a selection, i.e. a list with sample_per_resamples elements, each going from 0 to Nsamples-1
@@ -259,18 +289,116 @@ def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     #we can now use this list with selections of indices to bootstrap the input arrays
     resamples_array_list = [ np.moveaxis( np.take(array, indices = selection_list, axis=axis), source=axis, destination=0) for array,axis in zip(in_array_list,bootstrap_axis_list)]
 
-    #if len(resamples_array_list)==1:
-    #    return resamples_array_list[0]
-    #else:
-    #    return resamples_array_list
 
     ## Step 2: for each resample we compute the observable of interest
 
     #we use the resampled input array to compute the observable we want, and we have nresamp of them
-    obs_resamp = np.asarray( [observable( *[boot_resamples[i] for boot_resamples in resamples_array_list] ) for i in range(Nres) ] )                                                                          #shape = (nresamp,) + output_shape
+    obs_resamp = np.asarray( [observable( *[boot_resamples[i] for boot_resamples in resamples_array_list] ) for i in range(Nres) ] )     #shape = (nresamp,) + output_shape
 
     #we return the observables resampled 
     return obs_resamp
+
+#function that generates the bootstap resampled of the given array along a specified axis
+def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], bootstrap_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None, time_axis:int|None=-1) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap 
+    """
+    Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
+    (obtained with minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
+    
+    Input:
+        - in_array_list: input array (or list of arrays) to be resampled
+        - observable: function taking as input an array of the same shape of in_array (i.e. an observable that should be computed over it), and giving as output an array with the jackknife axis (i.e. conf axis) removed
+        - bootstrap_axis_list: the axis (or list of axis) over which to perform the resampling with replacement, corresponding to the input array (the list of input array)
+        - Nres: int, the number of required resamples
+        - sample_per_resamples: int, the number of samples (configurations) that each resamples has
+        - time_axis: int, the axis on the output array (i.e. after observable is applyied!!) over to which look for the autocorrelation, (if None the covariance matrix is not computed)
+    
+    Output:
+        - mean, std, covmat: mean, standard deviation and covariance matrix of the observable of interest, computed with the bootstrap procedure, the shape is the output one of the observable function for
+                             mean and std, while instead covmat has an extra time_axis in the last position
+
+    References:
+        - For an explicit writing of the bias correction: https://garstats.wordpress.com/2018/01/23/bias-correction/
+        - somewhat useful forum discussion: https://stats.stackexchange.com/questions/129478/when-is-the-bootstrap-estimate-of-bias-valid/310042#310042
+    """
+
+    ## Step 0: Input check and adjustments
+
+    #we make a check on the input to asses that the number of input_array is consistent with the number of jackknife axes
+    if type(in_array_list) is list and (type(bootstrap_axis_list) is not list or len(in_array_list)!=len(bootstrap_axis_list) ):
+        raise ValueError("The input array is a list, hence also the bootstrap axis should be a list and have the same lenght, but that is not the case")
+
+    #if the given input is just one array and not a list of arrays, then we put it in a list
+    if type(in_array_list) is not list:
+        in_array_list = [in_array_list]
+        bootstrap_axis_list = [bootstrap_axis_list]
+
+
+    ##  Step 1 and 2: creation of resamples and computation of the specified observable for each resample
+
+    #we just have to call the routine for the boostrap resampling
+    obs_resamp = bootstrap_resamples(in_array_list=in_array_list, observable=observable, bootstrap_axis_list=bootstrap_axis_list, Nres=Nres, sample_per_resamples=sample_per_resamples) #shape = (nresamp,) + output_shape
+
+
+    ## Step 3: we compute the observable also on the whole dataset
+    obs_total = observable(*in_array_list)                                                                                                             #shape = output_shape
+
+
+    ## Step4: compute estimate, bias and std according to the bootstrap method (i.e. just compute them along the resample axis)
+    
+    #the estimate is the mean of the resamples
+    boot_mean = np.mean(obs_resamp,axis=0) #axis 0 is the resamples one                                                                                #shape = (nresamp,) + output_shape - (nresamp,) = output_shape
+
+    #the bootstrap bias is given by the following formula #TO DO: check this formula
+    bias =  (boot_mean - obs_total)                                                                                                                    #shape = output_shape
+
+    #the jack std is given by the following formula #TO DO: add proper cast to real
+    obs_std =  np.sqrt( 1/Nres * np.sum( (obs_resamp - boot_mean)**2, axis=0 ) ) #the axis 0 is the resamples one, and this is just the std formula                        #shape = (nresamp,) + output_shape - (nresamp,) = output_shape
+
+    #to obtain the final estimate we correct the observable computed on the whole dataset by the bias
+    obs_mean = obs_total - bias     # = 2 x obs_total - boot_mean                                                                                      #shape = output_shape
+
+
+    #step 5: covariance matrix computation #TO DO: implement
+
+    #we perform such a computation only if there actually see a time axis over which to look for a correlation
+    if time_axis is not None:
+
+        #to account for the fact that we have removed the jackknife dimension we change the time dimension
+
+        #first we compute the lenght in the time dimension (by looking at the output array)
+        lenT = np.shape(obs_total)[time_axis]
+
+        #we the instantiate the covariance matrix (we add an extra time dimension so that we can compute the correlation)
+        covmat = np.zeros(shape = np.shape(obs_mean) + (lenT,), dtype=float )
+
+        #the time axis is translated to a positive value
+        if time_axis<0:
+            #time_axis = lenT+time_axis
+            time_axis = len(np.shape(obs_total))+time_axis
+
+        #TO DO: add cast to real values before computing covariance matrix
+
+        #we then loop over the times and fill the covariance matrix
+        for t1 in range(lenT):
+            for t2 in range(lenT):
+
+                #we do a little bit of black magic to addres the right indices combinations (credit https://stackoverflow.com/questions/68437726/numpy-array-assignment-along-axis-and-index)
+                s = [slice(None)] * len(np.shape(covmat))
+                axe1 = time_axis #position of the first time axis
+                s[axe1] = slice(t1,t1+1)
+                axe2 =  len(np.shape(covmat))-1 #because the new time axis is at the end of the array
+                s[axe2] = slice(t2,t2+1)
+
+                #we update the covariance matrix
+                covmat[tuple(s)] = np.expand_dims(  1/Nres * np.sum( (  np.take(obs_resamp,t1,axis=time_axis+1) - np.take(boot_mean,t1,axis=time_axis) ) * (  np.take(obs_resamp,t2,axis=time_axis+1) - np.take(boot_mean,t2,axis=time_axis) ), axis=0 ),
+                                                   [axe1,axe2]) #--> obs_resamp has a +1 because it has the resample dimension at the beginning!
+                
+    #if instead there is not a time axis we set the covariance matrix to None
+    else:
+        covmat = None
+
+    #we return mean and std obtained with the bootstrap method
+    return obs_mean, obs_std, covmat
 
 
 #function used to compute the reduced chi2 of a 1D array using the covariance matrix
@@ -459,28 +587,3 @@ def all_equal(iterable):
     """
     g = it.groupby(iterable)
     return next(g, True) and not next(g, False)
-
-#function that resample the given arrays along the innermost axis (forum discussion: https://stackoverflow.com/questions/53236040/how-can-i-bootstrap-the-innermost-array-of-a-numpy-array)
-def resamples_last_axis(arr, reps):
-    """
-    Function used to resample with replacement the innermost axis of the given array (credit: https://stackoverflow.com/a/53236272)
-    
-    Input:
-        - arr: the input array to be resampled (along the innermost axis)
-        - reps: the number of resamples that is required
-    
-    Output:
-        - resampled_array: the input arry resampled along the last axis, shape = (reps,) + arr.shape
-    """
-
-    n = arr.shape[-1]
-
-
-    # create an array to shift random indexes as needed
-    shift = np.repeat(np.arange(0, arr.size, n), n).reshape(arr.shape)
-
-    # get a flat view of the array
-    arrflat = arr.ravel()
-
-    # sample the array by generating random ints and shifting them appropriately
-    return np.array([arrflat[np.random.randint(0, n, arr.shape) + shift] for i in range(reps)])
