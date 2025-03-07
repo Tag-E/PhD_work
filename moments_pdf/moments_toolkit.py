@@ -2046,8 +2046,8 @@ def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None
     #we define the x and y arrays used for the fit (which are respectively times and corr_gavg)
     times = np.arange(t0, t0+np.shape(corr_gavg)[0])
 
-    #we perform the fit
-    popt,pcov = curve_fit(lambda t,amp,mass: amp*np.exp(-t*mass), times, corr_gavg, p0=guess)#,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
+    #we perform the fit #TO DO: look at maxfev
+    popt,pcov = curve_fit(lambda t,amp,mass: amp*np.exp(-t*mass), times, corr_gavg, p0=guess,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
     #perr = np.sqrt(np.diag(pcov)) #perr being the std of the parameters extracted from the fit
 
     #we read the mass (that's the only thing we're interested about, the amplitude we discard)
