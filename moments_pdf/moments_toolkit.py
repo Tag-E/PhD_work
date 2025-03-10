@@ -1430,7 +1430,7 @@ class moments_toolkit(bulding_block):
                 m_A_fit, m_A_fit_std , _= self.resampling(p2corr[:,t_start:t_end], lambda x: fit_mass(x, t0=t_start, guess_mass=gv_meff_plateau.mean,), res_axis_list=0, time_axis=None) #first entry of m_A_fit is the amplitude, the second is the mass
 
                 #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't fully trust the simple scipy fit
-                prior["A0"] = gv.gvar(m_A_fit[1], m_A_fit_std[1] * fit_doubt_factor) 
+                prior["A0"] = gv.gvar(m_A_fit[1], m_A_fit_std[1] * fit_doubt_factor)
                 prior["E0"] = gv.gvar(m_A_fit[0], m_A_fit_std[0] * fit_doubt_factor)
 
                 #we then model a prior for the exponential corresponding to the efirst excited state, if needed
@@ -1976,7 +1976,7 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
                 tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT,itskip])/delta )
 
         #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
-        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done than the plain unweighted average
+        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done rather than the plain unweighted average
 
     #we return the array with the matrix element just computed
     return mat_ele_array
@@ -2146,10 +2146,10 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
 
         #if the chi2 is smaller than the treshold then we return the array
         if np.sum( ((mean_array[iTmin:] - avg.mean)/std_array[iTmin:])**2 ) < chi2:
-            return avg
+            return avg, iTmin
 
     #if the chi2 is never smaller than the treshold we just return the last value
-    return avg
+    return avg, iTmin
 
 
 
