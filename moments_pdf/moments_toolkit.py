@@ -424,7 +424,7 @@ class moments_toolkit(bulding_block):
 
             #we adjust the input to the standard values if we have to
             Nres = Nres if Nres is not None else self.nconf
-            sample_per_resample = sample_per_resample if sample_per_resample is not None else 10*(self.nconf-1)
+            sample_per_resample = sample_per_resample if sample_per_resample is not None else self.nconf
 
             #the number of resamples and the samples per resamples are set 
             self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resample )
@@ -1268,7 +1268,7 @@ class moments_toolkit(bulding_block):
 
     #function used to perform the fit of the two point correlator and to extract from it the ground state energy
     def fit_2pcorr(self, 
-                   chi2_treshold:float=1.0, fit_doubt_factor:float=3,                        #statistical analysis params
+                   chi2_treshold:float=1.0, fit_doubt_factor:float=3, cut_treshold:float=-0.2, #statistical analysis params
                    zoom:int=0, show=True, save=True, verbose=False,                          #output printing params
                    central_value_fit:bool=True, central_value_fit_correlated:bool=True,      #correlator analyser params
                    resample_fit:bool=False, resample_fit_correlated:bool=False,
@@ -1277,6 +1277,7 @@ class moments_toolkit(bulding_block):
         Input:
             - chi2_treshold: float, treshold value of the chi2 used for the plateau determination
             - fit_doubt_factor: enhancement to the std used as prior that is obtained from a simple scipy fit
+            - cut_treshold: float, treshold value used to cut the effective mass array (cut is performed when the ratio between the effective mass and its std is below this value)
             - zoom: int, number of points around the plateau to be shown in the plot (i.e. how much "zoom out" should be used in the plot)
             - central_value_fit: bool, as in correlator analyser (see  https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
             - central_value_fit_correlated: bool, as in correlator analyser
@@ -1302,7 +1303,7 @@ class moments_toolkit(bulding_block):
         meff_raw, meff_std_raw, meff_covmat_raw = self.resampling(p2corr, effective_mass_formula, res_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
         #we look at the point where the mass starts to be negative (i.e. the first point that is always set to 0, and hence as a std equal to 0)
-        cut=np.where(meff_std_raw<=0)[0][0]
+        cut=np.where(meff_raw/meff_std_raw<=cut_treshold)[0][0]
 
         #and we cut the meff arrays there
         meff = meff_raw[:cut]
@@ -2047,7 +2048,7 @@ def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None
     times = np.arange(t0, t0+np.shape(corr_gavg)[0])
 
     #we perform the fit #TO DO: look at maxfev
-    popt,pcov = curve_fit(lambda t,amp,mass: amp*np.exp(-t*mass), times, corr_gavg, p0=guess,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
+    popt,pcov = curve_fit(lambda t,amp,mass: amp*np.exp(-t*mass), times, corr_gavg, p0=guess)#,maxfev = 1300) #popt,pcov being mean and covariance matrix of the parameters extracted from the fit
     #perr = np.sqrt(np.diag(pcov)) #perr being the std of the parameters extracted from the fit
 
     #we read the mass (that's the only thing we're interested about, the amplitude we discard)
