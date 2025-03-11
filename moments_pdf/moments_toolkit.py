@@ -91,7 +91,7 @@ class moments_toolkit(bulding_block):
     a_fine   : gv._gvarcore.GVar = gv.gvar(0.0926, 0.0006)
 
     #list with the available energy units that can be used
-    energy_units = ["lattice", "mev"]
+    energy_units = ["lattice", "MeV"]
 
     #list with the available resampling techniques
     resampling_list = ["jackknife", "bootstrap"]
@@ -178,6 +178,9 @@ class moments_toolkit(bulding_block):
 
         #we initialize the value of the ground state energy
         self.E0: gv._gvarcore.GVar | None = None
+
+        #we initialize the value of the energy difference between first excited and ground state
+        self.dE: gv._gvarcore.GVar | None = None
 
         #we initialize the value of the mass
         self.m: gv._gvarcore.GVar | None = None
@@ -437,6 +440,7 @@ class moments_toolkit(bulding_block):
 
         #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized
         self.E0 = None
+        self.dE = None
         self.m = None
         self.Klist= None
         self.M_from_S_fit = None 
@@ -592,7 +596,7 @@ class moments_toolkit(bulding_block):
             self.re_initialize_operator_variables()
             return None
 
-
+    #TO DO: add setters for fit parameters (fit_doubt_factor, central_value_fit, central_value_fit_correlated, resample_fit, resample_fit_correlated ecc.)
 
     ## Getter Methods (methods used to access properly the data stored in the attributes of the class)
 
@@ -677,7 +681,7 @@ class moments_toolkit(bulding_block):
         Function returning the3 gvar variables with corresponding to Px, Py and Pz, the 3 components of the momentum P at the sink
         
         Input:
-            - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returned
+            - units: str, either "lattice" or "MeV", the chosen energy units in which the result will be returned
             
         Output:
             - Px, Py Pz: gv.gvar, variables with mean value and std of the 3 components of the momentum 3-vector P
@@ -693,7 +697,7 @@ class moments_toolkit(bulding_block):
         Pz = gv.gvar(self.P_vec[2], 0)
 
         #we convert the values to MeV if the user asks for it
-        if units=="mev":
+        if units=="MeV":
             Px = self.lattice_to_MeV(Px)
             Py = self.lattice_to_MeV(Py)
             Pz = self.lattice_to_MeV(Pz)
@@ -711,7 +715,7 @@ class moments_toolkit(bulding_block):
         
         Input:
             - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
-            - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returneds
+            - units: str, either "lattice" or "MeV", the chosen energy units in which the result will be returneds
             
         Output:
             - E0: gv.gvar, mean value and std of the ground state energy
@@ -725,7 +729,7 @@ class moments_toolkit(bulding_block):
         if self.E0 is None or force_fit==True:
 
             #first we perform the fit with the main method
-            fit2p = self.fit_2pcorr(show=False,save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples, i.e. check whether resample fit can be True
+            fit2p = self.fit_2pcorr(show=False, save=False, fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples, i.e. check whether resample fit can be True
 
             #then we grep the parameters from the models average
             results = fit2p.model_average()
@@ -739,6 +743,41 @@ class moments_toolkit(bulding_block):
         #then we return a gv variable containing mean and std of the best estimate of the ground state energy
         return E0
     
+    #function used to obtain the energy difference between the the first excited state and the ground state, from the fit to the two point function
+    def get_dE(self, force_fit:bool=False,  units:str="lattice") -> gv._gvarcore.GVar:
+        """
+        Function returning the gvar variable with the delta E (first excited state - ground state) obtained from the fit to the two point correlator
+        
+        Input:
+            - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
+            - units: str, either "lattice" or "MeV", the chosen energy units in which the result will be returneds
+            
+        Output:
+            - dE: gv.gvar, mean value and std of the energy difference between the first excited state and the ground state
+        """
+
+        #input control on the chosen units
+        if units not in self.energy_units:
+            raise ValueError(f"Error: the value of units must be one in the list {self.energy_units}, but instead units={units} was chosen.")
+
+        #we check whether we can avoid doing the fit
+        if self.dE is None or force_fit==True:
+
+            #first we perform the fit with the main method
+            fit2p = self.fit_2pcorr(show=False, save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples, i.e. check whether resample fit can be True
+
+            #then we grep the parameters from the models average
+            results = fit2p.model_average()
+
+            #we update the value of the ground state energy stored in the class
+            self.dE = gv.gvar( results["est"]["dE1"], results["err"]["dE1"] )
+
+        #we select a value of the energy according to the units specified by the user
+        dE = self.dE if units == "lattice" else self.lattice_to_MeV(self.dE)
+
+        #then we return a gv variable containing mean and std of the best estimate of the ground state energy
+        return dE
+
     #function used to obtain the mass from the ground state energy obtained from the fit to the two point function
     def get_m(self, force_fit:bool=False, units:str="lattice") -> gv._gvarcore.GVar:
         """
@@ -746,7 +785,7 @@ class moments_toolkit(bulding_block):
         
         Input:
             - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
-            - units: str, either "lattice" or "mev", the chosen energy units in which the result will be returned
+            - units: str, either "lattice" or "MeV", the chosen energy units in which the result will be returned
             
         Output:
             - m: gv.gvar, mean value and std of the mass extracted from the fit
@@ -1309,7 +1348,7 @@ class moments_toolkit(bulding_block):
         meff_raw, meff_std_raw, meff_covmat_raw = self.resampling(p2corr, effective_mass_formula, res_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
 
         #we look at the point where the mass starts to be negative (i.e. the first point that is always set to 0, and hence as a std equal to 0)
-        cut=np.where(meff_raw/meff_std_raw<=cut_treshold)[0][0]
+        cut=np.where(meff_raw <= cut_treshold * meff_std_raw)[0][0]
 
         #and we cut the meff arrays there
         meff = meff_raw[:cut]
@@ -1444,13 +1483,17 @@ class moments_toolkit(bulding_block):
                 if nstates==2:
 
                     #for the energy we don't know, so we just give a wide prior assuming the energy doubles from ground to first excited state
-                    dE1 = gv.gvar( self.MeV_to_lattice(self.m_pi).mean,  self.MeV_to_lattice(self.m_pi).mean )
+                    dE1 = gv.gvar( self.MeV_to_lattice(self.m_pi).mean,  self.MeV_to_lattice(self.m_pi).mean * E0.sdev/E0.mean )
                     prior[f"log(dE1)"]= np.log(dE1)
 
                     #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
-                    t_probe = t_start
-                    A1 = (p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*E0) ) * np.exp( t_probe * ( dE1 + E0) )
-                    prior[f"A1"] = gv.gvar( A1.mean, A1.mean)
+                    #t_probe = t_start
+                    #A1 = (p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*E0) ) * np.exp( t_probe * ( dE1 + E0) )
+                    A1_list = []
+                    for t_probe in np.arange(t_start,t_end):
+                        A1_list.append((p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*E0) ) * np.exp( t_probe * ( dE1 + E0) ))
+                    A1 = np.mean(A1_list)
+                    prior[f"A1"] = gv.gvar( A1.mean, prior["A0"].sdev/prior["A0"].mean * A1.mean)
 
                 #we actually do the fit using the correlator analyser library
 
