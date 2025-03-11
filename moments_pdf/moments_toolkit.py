@@ -421,6 +421,45 @@ class moments_toolkit(bulding_block):
         elif verbose:
             print(f"\nOperators catalogue available in {file_name}\n")
 
+    #overwrite of the bulting repr method to show to the user all the relavant paramters of the class
+    def __repr__(self) -> str:
+        """
+        Function used to show to the user all the relevant paramters of the class
+
+        Input:
+            - None: all the information is already stored inside the class
+        
+        Output:
+            - out_string: a string containing all the relevant information about the class instance
+        """
+
+        #we create the string to be returned
+        string = f"Instance of the moments_toolkit class\n\n"
+
+        string += "Dataset Specifics:\n"
+        string += f"Number of configurations: {self.nconf}\n"
+        string += f"P: {self.n_P_vec}\n"
+        string += f"q: {self.n_q_vec}\n\n"
+
+        string += "Current Selection of Parameters:\n"
+        string += f"Number of Selected Operators: {self.Nop}\n"
+        string += f"Selected Isospin: {self.isospin}\n"
+        string += f"Selected T values: {self.chosen_T_list}\n\n"
+
+        string += "Fit parameters:\n"
+        string += f" - Central Value Fit:            {self.central_value_fit}\n"
+        string += f" - Central Value Fit Correlated: {self.central_value_fit_correlated}\n"
+        string += f" - Resample Fit:                 {self.resample_fit}\n"
+        string += f" - Resample Fit Correlated:      {self.resample_fit_correlated}\n"
+        string += f" - Resample Fit Resample Prior:  {self.resample_fit_resample_prior}\n"
+        string += f" - SVD Cut: {self.svdcut}\n"
+        string += f" - Max Iterations: {self.maxiter}\n\n"
+
+        string += f"Resampling Technique: {self.resampling_type}\n"
+
+        #we return the string
+        return string
+        
 
 
     ##  Setter Methods (methods used to set the values of important parameters used in the analysis)
@@ -675,6 +714,7 @@ class moments_toolkit(bulding_block):
         self.x_from_S_diff= None
 
 
+
     ## Getter Methods (methods used to access properly the data stored in the attributes of the class)
 
     #function that returns the operator according to the label given in the catalogue
@@ -780,6 +820,7 @@ class moments_toolkit(bulding_block):
 
         #we return the three components of the momentum
         return Px, Py, Pz
+
 
 
     ## Advanced Getter Methods (methods that return parameters stored in the class, but that require a computation being made each time the method is called)
@@ -1141,7 +1182,6 @@ class moments_toolkit(bulding_block):
         #raise an error if something else is specified
         else:
             raise ValueError(f"The variable method can only assume values in the list ['fit', 'finite differences'], however method={method} was specified.")
-
 
 
 
@@ -1711,8 +1751,8 @@ class moments_toolkit(bulding_block):
             op.display()
 
 
-    ## Work in Progress Methods (stuff still in development)
 
+    ## Work in Progress Methods (stuff still in development)
 
     def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=3, tskip_list=[1,2], show=True, save=True, verbose=False, rescale=True,
                         figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8):
