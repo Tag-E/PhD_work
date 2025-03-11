@@ -99,6 +99,20 @@ class moments_toolkit(bulding_block):
     #value that is used as threshold for 0
     eps: float = 10**(-20)
 
+    ## default values of some class attributes
+
+    #isospin
+    default_isospin: str = 'U-D'
+
+    #resampling technique specifics
+    default_central_value_fit:            bool = True
+    default_central_value_fit_correlated: bool = True
+    default_resample_fit:                 bool = False
+    default_resample_fit_correlated:      bool = False
+    default_resample_fit_resample_prior:  bool = False
+    default_svdcut: float|None  = None
+    default_maxiter: int = 10_000
+
                         
 
 
@@ -166,7 +180,7 @@ class moments_toolkit(bulding_block):
         self.nT = len(self.chosen_T_list)
 
         #we initialize the default value of the isospin
-        self.default_isospin = 'U-D'
+        self.isospin = self.default_isospin
 
         #we initialize the resampling technique used in the analysis to be the jackknife
         self.resampling = jackknife
@@ -194,6 +208,21 @@ class moments_toolkit(bulding_block):
         self.M_from_S_diff: np.ndarray[gv._gvarcore.GVar] | None = None
         self.x_from_S_diff: np.ndarray[gv._gvarcore.GVar] | None = None
 
+        #we initialize the parameters we have to specify in the fit
+        self.central_value_fit:            bool = self.default_central_value_fit
+        self.central_value_fit_correlated: bool = self.default_central_value_fit_correlated
+        self.resample_fit:                 bool = self.default_resample_fit
+        self.resample_fit_correlated:      bool = self.default_resample_fit_correlated
+        self.resample_fit_resample_prior:  bool = self.default_resample_fit_resample_prior
+        self.svdcut: float|None  = self.default_svdcut
+        self.maxiter: int = self.default_maxiter
+
+        #we instantiate the fit function we are going to use to perform the various analysis (with some of the paramters already specified)
+        self.fit = partial(CA.fit,
+                           central_value_fit=self.central_value_fit, central_value_fit_correlated=self.central_value_fit_correlated, # <- args for fit strategy
+                           resample_fit=self.resample_fit, resample_fit_correlated=self.resample_fit_correlated,
+                           resample_fit_resample_prior=self.resample_fit_resample_prior,
+                           svdcut=self.svdcut, maxiter=self.maxiter)                                                                 # <- args for lsqfit
 
         ## We build the list of all the available operators
 
@@ -449,7 +478,7 @@ class moments_toolkit(bulding_block):
         self.x_from_S_diff= None
 
     #method used to select the default value of the isospin used by default by the other methods #TO DO: add isospin variables re-initialization
-    def select_isospin(self, isospin:str) -> None:
+    def set_isospin(self, isospin:str) -> None:
         """
         Function used to change the default value of the isospin (by default it is set to "U-D" by the init method)
         
@@ -466,7 +495,7 @@ class moments_toolkit(bulding_block):
         
         #if the input is ok we change the default value of the isospin (the one that will be used by the other methods if the isospin parameter is not specified when calling them)
         else:
-            self.default_isospin = isospin
+            self.isospin = isospin
 
     #function used to deselect some source-sink separation values T from the analysis
     def remove_T(self, *args: int, verbose:bool=False) -> None:
@@ -596,7 +625,55 @@ class moments_toolkit(bulding_block):
             self.re_initialize_operator_variables()
             return None
 
-    #TO DO: add setters for fit parameters (fit_doubt_factor, central_value_fit, central_value_fit_correlated, resample_fit, resample_fit_correlated ecc.)
+    #function used to select the fit parameters used for all the fits throughout the analysis
+    def set_fit_parms(self, central_value_fit:bool|None=None, central_value_fit_correlated:bool|None=None,
+                      resample_fit:bool|None=None, resample_fit_correlated:bool|None=None,
+                      resample_fit_resample_prior:bool|None=None,
+                      svdcut:float|None=None, maxiter:int|None=None) -> None:
+        """
+        Function used to specify the paramters that will be used in all the fits performed in the analysis (see  https://github.com/Marcel-Rodekamp/CorrelatorAnalyser).
+        The specified paramters will be changed according to the user choice, the others will be given their default value
+        Consequently all the quantites that have been computed using the previous fit parameters will be re-initialized.
+        
+        Input:
+            - central_value_fit: bool, if True a central value fit is performed
+            - central_value_fit_correlated: bool, if True the correlation is taken into account in the central value fit
+            - resample_fit: bool, if True a resample fit is performed
+            - resample_fit_correlated: bool, if True the correlation is taken into account in the resample fit
+            - resample_fit_resample_prior: bool, if True the mean value of the prior is resampled in the resample fit
+            - sdvcut: float, paramter of the lsqfit by Lepage
+            - maxiter: int, the maximum number of iterations in the lsqfit by Lepage
+            
+        Output:
+            - None (the fit parameters used in the analysis are updated)
+        """
+
+        #we update the parmaters if they have been specified by the user
+        self.central_value_fit            = central_value_fit            if central_value_fit            is not None else self.default_central_value_fit
+        self.central_value_fit_correlated = central_value_fit_correlated if central_value_fit_correlated is not None else self.default_central_value_fit_correlated
+        self.resample_fit                 = resample_fit                 if resample_fit                 is not None else self.default_resample_fit
+        self.resample_fit_correlated      = resample_fit_correlated      if resample_fit_correlated      is not None else self.default_resample_fit_correlated
+        self.resample_fit_resample_prior  = resample_fit_resample_prior  if resample_fit_resample_prior  is not None else self.default_resample_fit_resample_prior
+        self.svdcut                       = svdcut                       if svdcut                       is not None else self.default_svdcut
+        self.maxiter                      = maxiter                      if maxiter                      is not None else self.default_maxiter
+
+        #we update the fit function used in the analysis
+        self.fit = partial(CA.fit,
+                           central_value_fit=self.central_value_fit, central_value_fit_correlated=self.central_value_fit_correlated, # <- args for fit strategy
+                           resample_fit=self.resample_fit, resample_fit_correlated=self.resample_fit_correlated, 
+                           resample_fit_resample_prior=self.resample_fit_resample_prior,
+                           svdcut=self.svdcut, maxiter=self.maxiter)                                                                 # <- args for lsqfit
+        
+        #we re-initialize all the variables depending on the fit results
+        self.E0 = None
+        self.dE = None
+        self.m = None
+        self.Klist= None
+        self.M_from_S_fit = None 
+        self.x_from_S_fit = None
+        self.M_from_S_diff= None
+        self.x_from_S_diff= None
+
 
     ## Getter Methods (methods used to access properly the data stored in the attributes of the class)
 
@@ -645,8 +722,7 @@ class moments_toolkit(bulding_block):
         """
 
         #if the isospin parameter is not specified we use the default value (the input control is performed in the last method being called in the tree)
-        if isospin is None:
-                isospin = self.default_isospin
+        isospin = isospin if isospin is not None else self.isospin
  
 
         #we compute the dimensionality of the tau axis (so for T<maxT there is a padding with zeros from taus bigger than their max value)
@@ -729,7 +805,7 @@ class moments_toolkit(bulding_block):
         if self.E0 is None or force_fit==True:
 
             #first we perform the fit with the main method
-            fit2p = self.fit_2pcorr(show=False, save=False, fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples, i.e. check whether resample fit can be True
+            fit2p = self.fit_2pcorr(show=False, save=False, fit_doubt_factor=3) #TO DO: adjust resamples, i.e. check whether resample fit can be True
 
             #then we grep the parameters from the models average
             results = fit2p.model_average()
@@ -764,7 +840,7 @@ class moments_toolkit(bulding_block):
         if self.dE is None or force_fit==True:
 
             #first we perform the fit with the main method
-            fit2p = self.fit_2pcorr(show=False, save=False,fit_doubt_factor=3, central_value_fit=True, central_value_fit_correlated=True, resample_fit=False, resample_fit_correlated=False) #TO DO: adjust resamples, i.e. check whether resample fit can be True
+            fit2p = self.fit_2pcorr(show=False, save=False,fit_doubt_factor=3) #TO DO: adjust resamples, i.e. check whether resample fit can be True
 
             #then we grep the parameters from the models average
             results = fit2p.model_average()
@@ -1314,21 +1390,13 @@ class moments_toolkit(bulding_block):
     #function used to perform the fit of the two point correlator and to extract from it the ground state energy
     def fit_2pcorr(self, 
                    chi2_treshold:float=1.0, fit_doubt_factor:float=3, cut_treshold:float=-0.2, #statistical analysis params
-                   zoom:int=0, show=True, save=True, verbose=False,                          #output printing params
-                   central_value_fit:bool=True, central_value_fit_correlated:bool=True,      #correlator analyser params
-                   resample_fit:bool=False, resample_fit_correlated:bool=False,
-                   resample_fit_resample_prior:bool=False) -> CA.FitState:
+                   zoom:int=0, show=True, save=True, verbose=False) -> CA.FitState:            #output printing params
         """
         Input:
             - chi2_treshold: float, treshold value of the chi2 used for the plateau determination
             - fit_doubt_factor: enhancement to the std used as prior that is obtained from a simple scipy fit
             - cut_treshold: float, treshold value used to cut the effective mass array (cut is performed when the ratio between the effective mass and its std is below this value)
             - zoom: int, number of points around the plateau to be shown in the plot (i.e. how much "zoom out" should be used in the plot)
-            - central_value_fit: bool, as in correlator analyser (see  https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
-            - central_value_fit_correlated: bool, as in correlator analyser
-            - resample_fit: bool, as in correlator analyser
-            - resample_fit_correlated: bool, as in correlator analyser
-            - resample_fit_resample_prior: bool, as in correlator analyser
 
         Output:
             - fit_state: instance of the FitState class containing all the information regarding the fits performed
@@ -1498,7 +1566,7 @@ class moments_toolkit(bulding_block):
                 #we actually do the fit using the correlator analyser library
 
                 #we do the fit
-                fit_result = CA.fit(
+                fit_result = self.fit(
 
                     abscissa                = np.arange(t_start,t_end),
                     
@@ -1511,22 +1579,12 @@ class moments_toolkit(bulding_block):
                     resample_ordinate_cov   = p2corr_jack_plat_cov,
 
                     # fit strategy, default: only uncorrelated central value fit:
-                    central_value_fit            = central_value_fit,
-                    central_value_fit_correlated = central_value_fit_correlated,
-
-                    resample_fit                 = resample_fit,
-                    resample_fit_correlated      = resample_fit_correlated,
-                    
-                    resample_fit_resample_prior  = resample_fit_resample_prior,
                     resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
 
                     # args for lsqfit:
                     model   = SumOrderedExponentials(nstates),
                     prior   = prior,
                     p0      = None,
-
-                    svdcut  = None,
-                    maxiter = 10_000,
                 )
 
                 #we append the fit result to the fit_state
@@ -1657,10 +1715,7 @@ class moments_toolkit(bulding_block):
 
 
     def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=3, tskip_list=[1,2], show=True, save=True, verbose=False, rescale=True,
-                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-                        central_value_fit            = True, central_value_fit_correlated = True,
-                        resample_fit                 = False,resample_fit_correlated      = False,
-                        resample_fit_resample_prior  = False):
+                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8):
         """
         Input:
             - 
@@ -1779,7 +1834,7 @@ class moments_toolkit(bulding_block):
 
 
                     #we do the fit
-                    fit_result = CA.fit(
+                    fit_result = self.fit(
 
                         abscissa                = abscissa_list[iop],
                         
@@ -1792,22 +1847,12 @@ class moments_toolkit(bulding_block):
                         resample_ordinate_cov   = (nres-1) * np.cov (ratio_res, rowvar=False),
 
                         # fit strategy, default: only uncorrelated central value fit:
-                        central_value_fit            = central_value_fit,
-                        central_value_fit_correlated = central_value_fit_correlated,
-
-                        resample_fit                 = resample_fit,
-                        resample_fit_correlated      = resample_fit_correlated,
-                        
-                        resample_fit_resample_prior  = resample_fit_resample_prior,
                         resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn",#"jkn",
 
                         # args for lsqfit:
                         model   = ratio_func_form(r1=True,r2=r2,r3=r3),
                         prior   = priordict_list[iop],
                         p0      = None,
-
-                        svdcut  = None,
-                        maxiter = 10_000,
                     )
 
                     #we append the fit to the list
