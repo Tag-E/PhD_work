@@ -170,6 +170,8 @@ class moments_toolkit(bulding_block):
 
         #we initialize the resampling technique used in the analysis to be the jackknife
         self.resampling = jackknife
+        self.resamples_array = jackknife_resamples
+        self.resampling_type = "jackknife"
 
 
         ## We initialize to None some variables that will be later accessed using getter methods
@@ -394,14 +396,14 @@ class moments_toolkit(bulding_block):
     #method used to the set the resempling technique used in the analysis (either jackknife or bootstrap)
     def set_resampling_type(self, resampling:str,
                             binsize:int=1, first_conf:int=0, last_conf:int=None,
-                            Nres:int|None=None, sample_per_resample:int|None=None) -> None:
+                            Nres:int|None=None, sample_per_resamples:int|None=None) -> None:
         """
         Function used to set the resampling technique used in the analysis
         
         Input:
             - resampling: str, either "jackknife" or "bootstrap", the resampling technique used in the analysis
             - binsize, first_conf, last_conf: int, the parameters used to set the jackknife resampling technique
-            - Nres, sample_per_resample: int, the parameters used to set the bootstrap resampling technique
+            - Nres, sample_per_resamples: int, the parameters used to set the bootstrap resampling technique
         
         Output:
             - None (the resampling technique used in the analysis is updated)
@@ -417,17 +419,21 @@ class moments_toolkit(bulding_block):
         elif resampling == "jackknife":
 
             #the number of bins and the first and last configuration are set
-            self.resampling = partial( jackknife, binsize=binsize, first_conf=first_conf, last_conf=last_conf ) 
+            self.resampling = partial( jackknife, binsize=binsize, first_conf=first_conf, last_conf=last_conf )
+            self.resamples_array = partial( jackknife_resamples, binsize=binsize, first_conf=first_conf, last_conf=last_conf )
+            self.resampling_type = "jackknife" 
 
         #... or the bootstrap
         elif resampling == "bootstrap":
 
             #we adjust the input to the standard values if we have to
-            Nres = Nres if Nres is not None else self.nconf
-            sample_per_resample = sample_per_resample if sample_per_resample is not None else self.nconf
+            Nres = Nres if Nres is not None else self.nconf * 2
+            sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else self.nconf
 
             #the number of resamples and the samples per resamples are set 
-            self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resample )
+            self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resamples )
+            self.resamples_array = partial( bootstrap_resamples, Nres=Nres, sample_per_resamples=sample_per_resamples )
+            self.resampling_type = "bootstrap" 
 
         #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized
         self.E0 = None
@@ -965,7 +971,7 @@ class moments_toolkit(bulding_block):
                                     resample_fit_correlated      = False,
                                     
                                     resample_fit_resample_prior  = False,
-                                    resample_type               = "bst", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
+                                    resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
 
                                     # args for lsqfit:
                                     model   = lambda x,p: p["m"]*x+p["q"],
@@ -1419,7 +1425,7 @@ class moments_toolkit(bulding_block):
 
                 #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
                 p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = self.resampling(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1)
-                p2corr_resamples_plat = jackknife_resamples(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), res_axis_list=0)
+                p2corr_resamples_plat = self.resamples_array(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), res_axis_list=0)
 
                 #we handle the prior determination of the parameters
 
@@ -1431,20 +1437,20 @@ class moments_toolkit(bulding_block):
 
                 #we store the values in the prior dict and we rescale their uncertainy by a factor accounting for the fact that we don't fully trust the simple scipy fit
                 prior["A0"] = gv.gvar(m_A_fit[1], m_A_fit_std[1] * fit_doubt_factor)
-                prior["E0"] = gv.gvar(m_A_fit[0], m_A_fit_std[0] * fit_doubt_factor)
+                E0 = gv.gvar(m_A_fit[0], m_A_fit_std[0] * fit_doubt_factor)
+                prior["log(E0)"] = np.log(E0)
 
                 #we then model a prior for the exponential corresponding to the efirst excited state, if needed
                 if nstates==2:
 
                     #for the energy we don't know, so we just give a wide prior assuming the energy doubles from ground to first excited state
-                    prior[f"dE1"]= self.MeV_to_lattice( self.m_pi )
+                    dE1 = gv.gvar( self.MeV_to_lattice(self.m_pi).mean,  self.MeV_to_lattice(self.m_pi).mean )
+                    prior[f"log(dE1)"]= np.log(dE1)
 
                     #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
                     t_probe = t_start
-                    tmp = (p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*prior["E0"]) ) * np.exp( t_probe * ( prior["dE1"] + prior["E0"]) )
-                    prior[f"A1"] = gv.gvar( 
-                        gv.mean(tmp),gv.mean(tmp)
-                    )
+                    A1 = (p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*E0) ) * np.exp( t_probe * ( dE1 + E0) )
+                    prior[f"A1"] = gv.gvar( A1.mean, A1.mean)
 
                 #we actually do the fit using the correlator analyser library
 
@@ -1469,7 +1475,7 @@ class moments_toolkit(bulding_block):
                     resample_fit_correlated      = resample_fit_correlated,
                     
                     resample_fit_resample_prior  = resample_fit_resample_prior,
-                    resample_type               = "bst", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
+                    resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
 
                     # args for lsqfit:
                     model   = SumOrderedExponentials(nstates),
@@ -1664,7 +1670,7 @@ class moments_toolkit(bulding_block):
         p2corr = self.get_p2corr()
 
         #we resample the ratios, len = Nop,, each element with shape = (Nres, Nallowed(T,tau) )
-        ratio_resamples_list = [ jackknife_resamples([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), res_axis_list=[1,0] ) for iop in range(self.Nop) ]
+        ratio_resamples_list = [ self.resamples_array([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), res_axis_list=[1,0] ) for iop in range(self.Nop) ]
 
         #the number of resamples is given by
         nres = ratio_resamples_list[0].shape[0]
@@ -1750,7 +1756,7 @@ class moments_toolkit(bulding_block):
                         resample_fit_correlated      = resample_fit_correlated,
                         
                         resample_fit_resample_prior  = resample_fit_resample_prior,
-                        resample_type               = "bst",#"jkn",
+                        resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn",#"jkn",
 
                         # args for lsqfit:
                         model   = ratio_func_form(r1=True,r2=r2,r3=r3),
@@ -2161,13 +2167,13 @@ class SumOrderedExponentials:
         self.number_states = number_states
 
     def __call__(self,t,p):
-        E = p["E0"]
+        E = np.exp(p["log(E0)"]) if "log(E0)" in p.keys() else p["E0"]
         out = p[f"A{0}"] * np.exp( -t*E )
     
         for n in range(1,self.number_states):
             #    ΔE_n = E_n - E_{n-1}
             # =>  E_n = E_{n-1} + ΔE_n
-            E += p[f"dE{n}"]
+            E += np.exp(p[f"log(dE{n})"]) if f"log(dE{n})" in p.keys() else p[f"dE{n}"]
     
             out += p[f"A{n}"] * np.exp( -t*E )
     
