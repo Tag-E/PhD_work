@@ -1169,7 +1169,7 @@ class moments_toolkit(bulding_block):
                 #we fill the output array using the formula for the matrix element from S
                 for iop in range(self.Nop):
 
-                    #we compute mean and std of the matrix element using the jackknife
+                    #we compute mean and std of the matrix element using the jackknife #TO DO: check whether the resampling function can be called once and not for each operator
                     mat_ele, mat_ele_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), res_axis_list=[0,0], time_axis=None)
 
                     #we put them into a gvar variable and store it into the array
