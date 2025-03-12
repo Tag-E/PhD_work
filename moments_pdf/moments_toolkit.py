@@ -2279,7 +2279,7 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
         avg = np.average(in_array[iTmin:], weights=weights[iTmin:])
 
         #if the chi2 is smaller than the treshold then we return the array
-        if np.sum( ((mean_array[iTmin:] - avg.mean)/std_array[iTmin:])**2 ) < chi2:
+        if np.sum( ((mean_array[iTmin:] - avg.mean)/std_array[iTmin:])**2 ) / len(in_array[iTmin:]) < chi2: 
             return avg, iTmin
 
     #if the chi2 is never smaller than the treshold we just return the last value
