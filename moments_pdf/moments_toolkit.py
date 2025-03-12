@@ -502,8 +502,8 @@ class moments_toolkit(bulding_block):
             sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else self.nconf
 
             #the number of resamples and the samples per resamples are set 
-            self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resamples )
-            self.resamples_array = partial( bootstrap_resamples, Nres=Nres, sample_per_resamples=sample_per_resamples )
+            self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=False )
+            self.resamples_array = partial( bootstrap_resamples, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=False ) #new_resamples=False so that the configurations are drawn randomly only once
             self.resampling_type = "bootstrap" 
 
         #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized

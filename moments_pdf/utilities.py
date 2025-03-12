@@ -226,7 +226,7 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     return obs_resamp
 
 #function that generates the bootstap resampled of the given array along a specified axis
-def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None) -> np.ndarray: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap (see https://stackoverflow.com/questions/53236040/how-can-i-bootstrap-the-innermost-array-of-a-numpy-array)
+def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None, new_resamples:bool=True) -> np.ndarray: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap (see https://stackoverflow.com/questions/53236040/how-can-i-bootstrap-the-innermost-array-of-a-numpy-array)
     """
     Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
     (obtained with minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
@@ -237,6 +237,7 @@ def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
         - res_axis_list: the axis (or list of axis) over which to perform the resampling with replacement, corresponding to the input array (the list of input array)
         - Nres: the number of required resamples
         - sample_per_resamples: the number of samples (configurations) that each resamples has
+        - new_resamples: bool, if True the the configurations in each resamples are drawn randomly again, if False the configuration drawn randomly during the last execution are used
     
     Output:
         - resamples_array: the array with the resamples, shape = (Nres,) + output_array.shape
@@ -280,14 +281,22 @@ def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     #if the number of sample for each resample is not specified we put it to the maximum value
     sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else Nsamples
 
+    #we force new resamples to True if the relevant parameters changed since the last call to the function or this is the first call
+    new_resamples = True if "selection_list" not in bootstrap_resamples.__dict__ or {"Nres":Nres, "sample_per_resamples":sample_per_resamples, "Nsamples":Nsamples, "selection_list":bootstrap_resamples.selection_list} != bootstrap_resamples.__dict__ else new_resamples
+        
+    #we then store the relavant parameters in order to compare them during the next function call
+    bootstrap_resamples.Nres = Nres
+    bootstrap_resamples.sample_per_resamples = sample_per_resamples
+    bootstrap_resamples.Nsamples = Nsamples
+
 
     ## Step 1: Creation of the bootstrap resamples        
 
-    #for each of the resamples we want to make we have to make a selection, i.e. a list with sample_per_resamples elements, each going from 0 to Nsamples-1
-    selection_list = [np.random.randint(0,Nsamples, sample_per_resamples) for _ in range(Nres)] 
+    #for each of the resamples we want to make we have to make a selection, i.e. a list with sample_per_resamples elements, each going from 0 to Nsamples-1 (we do this only if new_resamples has been set to true - see line above)
+    bootstrap_resamples.selection_list = [np.random.randint(0,Nsamples, sample_per_resamples) for _ in range(Nres)] if new_resamples else bootstrap_resamples.selection_list
 
     #we can now use this list with selections of indices to bootstrap the input arrays
-    resamples_array_list = [ np.moveaxis( np.take(array, indices = selection_list, axis=axis), source=axis, destination=0) for array,axis in zip(in_array_list,res_axis_list)]
+    resamples_array_list = [ np.moveaxis( np.take(array, indices = bootstrap_resamples.selection_list, axis=axis), source=axis, destination=0) for array,axis in zip(in_array_list,res_axis_list)]
 
 
     ## Step 2: for each resample we compute the observable of interest
@@ -299,10 +308,10 @@ def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     return obs_resamp
 
 #function that generates the bootstap resampled of the given array along a specified axis
-def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None, time_axis:int|None=-1) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap 
+def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None, new_resamples:bool=True, time_axis:int|None=-1) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap 
     """
     Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
-    (obtained with minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
+    (obtained with (not so) minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
     
     Input:
         - in_array_list: input array (or list of arrays) to be resampled
@@ -310,6 +319,7 @@ def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
         - res_axis_list: the axis (or list of axis) over which to perform the resampling with replacement, corresponding to the input array (the list of input array)
         - Nres: int, the number of required resamples
         - sample_per_resamples: int, the number of samples (configurations) that each resamples has
+        - new_resamples: bool, if True the the configurations in each resamples are drawn randomly again, if False the configuration drawn randomly during the last execution are used
         - time_axis: int, the axis on the output array (i.e. after observable is applyied!!) over to which look for the autocorrelation, (if None the covariance matrix is not computed)
     
     Output:
@@ -336,7 +346,7 @@ def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
     ##  Step 1 and 2: creation of resamples and computation of the specified observable for each resample
 
     #we just have to call the routine for the boostrap resampling
-    obs_resamp = bootstrap_resamples(in_array_list=in_array_list, observable=observable, res_axis_list=res_axis_list, Nres=Nres, sample_per_resamples=sample_per_resamples) #shape = (nresamp,) + output_shape
+    obs_resamp = bootstrap_resamples(in_array_list=in_array_list, observable=observable, res_axis_list=res_axis_list, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=new_resamples) #shape = (nresamp,) + output_shape
 
 
     ## Step 3: we compute the observable also on the whole dataset
