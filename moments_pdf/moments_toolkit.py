@@ -1273,7 +1273,7 @@ class moments_toolkit(bulding_block):
 
                 #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
                 #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
-                ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, linewidth = 0.3, linestyle='dashed',label=f"T{T}")
+                ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2, linestyle='',label=f"T{T}")
                 ax.legend()
 
                 ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
