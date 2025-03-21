@@ -180,9 +180,9 @@ fit_result = ca.fit(
     resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
     
     central_value_fit = True,
-    central_value_fit_correlated = False,
+    central_value_fit_correlated = True,
     resample_fit = True,
-    resample_fit_correlated = False,
+    resample_fit_correlated = True,
     resample_fit_resample_prior = False,
     resample_type = "bst",
     # Fitting infos
