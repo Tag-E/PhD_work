@@ -528,8 +528,8 @@ def plateau_search_symm(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:
 
             return start_plateau, start_plateau+len_plat
                 
-    #if by the end of the loop the chi2 condition is never met (i.e. if len_plat is 1) we return the point corresponding to the middle of the dataset
-    return int(len_array/2), int(len_array/2)+2-len_array%2
+    #if by the end of the loop the chi2 condition is never met (i.e. if len_plat is 1) we return None
+    return None
 
 ## Auxiliary Routines ##
 

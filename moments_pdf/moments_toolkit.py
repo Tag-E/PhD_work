@@ -1755,8 +1755,8 @@ class moments_toolkit(bulding_block):
 
     ## Work in Progress Methods (stuff still in development)
 
-    def fit_ratio(self, chi2_treshold=1.0,  fit_doubt_factor=3, tskip_list=[1,2], show=True, save=True, verbose=False, rescale=True,
-                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8):
+    def fit_ratio(self,verbose=False,
+                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
         """
         Input:
             - 
@@ -1900,94 +1900,6 @@ class moments_toolkit(bulding_block):
                     fit_state_list[iop].append(fit_result)
 
         return fit_state_list
-
-        if show or save:
-
-            #we first fetch R using the dedicate method
-            Rmean, Rstd, Rcovmat = self.get_R()
-
-            #wewe instantiate the output list where we will store all the figure and axes
-            #fig_ax_list:list[tuple[Figure, Any]]  = []
-            #fig_ax_list = self.plot_R(show=False,save=True) #TO DO: adjust save - show condition in plot_R
-
-
-
-            #loop over selected operators (for each we make a plot)
-            for iop,op in enumerate(self.selected_op):
-                
-
-                
-                
-                
-                #fit avg results
-                avg_result = fit_state_list[iop].model_average()
-                dE = gv.gvar(avg_result["est"]['dE'], avg_result["err"]['dE'])
-                matele = gv.gvar(avg_result["est"]['M'], avg_result["err"]['M'])
-                R1 = gv.gvar(avg_result["est"]['R1'], avg_result["err"]['R1'])
-                R2 = gv.gvar(avg_result["est"]['R2'], avg_result["err"]['R2'])
-                R3 = gv.gvar(avg_result["est"]['R3'], avg_result["err"]['R3'])
-
-                post_dict = {key:gv.gvar(avg_result["est"][key], avg_result["err"][key]) for key in avg_result["est"].keys()}
-
-                
-                #instantiate figure
-                fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
-
-                #we add figure and axes to the output list
-                #fig_ax_list.append((fig,ax))
-
-                #we cycle on the markers
-                marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
-
-                #we loop over T and each time we add a graph to the plot
-                for iT, T in enumerate(self.chosen_T_list):
-
-                    #times = np.arange(-T/2+1,T/2)
-
-                    start_plateau, end_plateau = plateau_dict[(iop,iT)]
-
-                    times = np.arange(start_plateau, end_plateau)
-
-                    #we grep the interesting part of the array and we ignore the padding along the last axis
-                    ratio = Rmean[iop,iT,start_plateau:end_plateau]
-                    ratio_err = Rstd[iop,iT,start_plateau:end_plateau]
-
-                    #we discard the endpoints
-                    r = ratio#[1:-1]
-                    r_err = ratio_err#[1:-1]
-
-                    #we rescale to the kfactor #TO DO: check the kinematics factors
-                    if rescale:
-                        #mass = self.get_meff()[0]
-                        #mass = self.fit_2pcorr(save=False,show=False).model_average()['est']['E0']
-                        a = 0.1163 #we cheat
-                        hc = 197.327
-                        mp_mev = 1000
-                        mass = mp_mev/hc * a
-                        #kin = 1j * op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) #this 1j in front comes from the fact that mat_ele = <x> * i K
-                        #if np.iscomplex(kin):
-                        #    kin *= -1j
-                        #kin = kin.real
-                        kin = op.evaluate_K_real(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0)
-                        ratio /= kin if kin!=0 else 1
-                        #ratio /= np.abs( op.evaluate_K(m_value=mass,E_value=mass,p1_value=0,p2_value=0,p3_value=0) )
-
-
-                    #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
-                    #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
-                    ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, linewidth = 0.3, linestyle='dashed',label=f"T{T}")
-                    ax.legend()
-
-                    ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
-                    ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
-                    ax.set_ylabel('R', fontsize=fontsize_y)
-
-                    model = ratio_func_form(r1=True,r2=True,r3=True)
-
-                    ax.plot(times,model( np.asarray( [(T,tau) for tau in times] ).mean ,post_dict))
-
-
-                plt.show()
 
 
 
