@@ -76,7 +76,7 @@ Ratios_bst = {}
 for iT,T in enumerate(opAnalyzer.chosen_T_list):
 
     #we perform the jackknife analysis (the observable being the ratio we want to compute)
-    Ratios_bst[T] = bootstrap_resamples([p3_corr[0,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0], Nres=Nbst)[:,:T+1]
+    Ratios_bst[T] = bootstrap_resamples([p3_corr[0,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0], Nres=Nbst, new_resamples=False)[:,:T+1]
     #Ratios_bst[T] = jackknife_resamples([p3_corr[0,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0])[:,:T+1]
 
 ## rest of the code
@@ -137,21 +137,21 @@ class SymmetricRatioModel:
     def prior(self, **kwargs):
         prior = gv.BufferDict()
 
-        prior["A00"] = gv.gvar(1,0.5) 
+        prior["A00"] = gv.gvar(1,100) #gv.gvar(1,0.5) 
         
         # The excited state at source 
         if self.number_states_source == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(0.1, 1))
-            prior["A01"]    = gv.gvar(1e-2,1)
+            prior["log(dE1(0))"] = gv.log(gv.gvar(1,100)) #gv.log(gv.gvar(0.1, 1))
+            prior["A01"]    = gv.gvar(1,100) #gv.gvar(1e-2,1)
 
         # The excited state at sink
         if self.number_states_sink == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(0.1, 1))
-            prior["A01"]    = gv.gvar(1e-2,1)
+            prior["log(dE1(0))"] = gv.log(gv.gvar(1,100)) #gv.log(gv.gvar(0.1, 1))
+            prior["A01"]    = gv.gvar(1,100) #gv.gvar(1e-2,1)
 
         # The excited states at source and sink 
         if self.number_states_source == 2 and self.number_states_sink == 2 and self.include_mix_term:
-            prior["A11"]    = gv.gvar(0.1,1)   
+            prior["A11"]    = gv.gvar(1,100) #gv.gvar(0.1,1)   
         
         return prior
 
