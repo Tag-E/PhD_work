@@ -1591,7 +1591,8 @@ class moments_toolkit(bulding_block):
                 if nstates==2:
 
                     #for the energy we don't know, so we just give a wide prior assuming the energy doubles from ground to first excited state
-                    dE1 = gv.gvar( self.MeV_to_lattice(self.m_pi).mean,  self.MeV_to_lattice(self.m_pi).mean * E0.sdev/E0.mean )
+                    #dE1 = gv.gvar( self.MeV_to_lattice(self.m_pi).mean,  self.MeV_to_lattice(self.m_pi).mean * E0.sdev/E0.mean *fit_doubt_factor )
+                    dE1 = self.MeV_to_lattice(self.m_pi)
                     prior[f"log(dE1)"]= np.log(dE1)
 
                     #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
