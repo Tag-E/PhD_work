@@ -491,7 +491,7 @@ def plateau_search(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float
     return int(len_array/2), int(len_array/2)+1
 
 #function that given a 1D array returns the values of the indices identifying its plateau (the first and last index), that is symmetric around its middle point
-def plateau_search_symm(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0, only_sig:bool=True) -> tuple[int,int]:
+def plateau_search_symm(in_array: np.ndarray, covmat: np.ndarray, chi2_treshold:float=1.0, only_sig:bool=True) -> tuple[int,int]|None:
     """
     Input:
         - in_array: the 1D array we want to search the plateau of

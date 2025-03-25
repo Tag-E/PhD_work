@@ -1755,8 +1755,8 @@ class moments_toolkit(bulding_block):
 
     ## Work in Progress Methods (stuff still in development)
 
-    def fit_ratio(self,verbose=False,
-                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
+    def fit_ratio(self,verbose=False, show=False, plot=False,
+                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> CA.FitState:
         """
         Input:
             - 
@@ -1768,6 +1768,54 @@ class moments_toolkit(bulding_block):
         #info print
         if verbose:
             print("\nPreparing the fit for the ratio of the correlators...\n")
+
+        
+        ## We store quantities we are going to need later for the fit
+
+        #the mean value of the energy difference
+        dE_mean = self.get_dE().mean
+
+        #the mean value of the matrix element as estimated from the summed ratios
+        mat_ele, _ = average_moments_over_T( self.get_M_from_S(method="fit", moments=False), chi2=10 )
+        mat_ele_mean = mat_ele.mean
+
+        ## We construct the bootstrap or jackknife resamples of the ratios
+        
+        #first we get the 2 and 3 points correlators
+        p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
+        p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+
+        #we construct the resamples of the ratio for each value of T
+
+        #we initialize a dictionary where we store the resamples
+        Ratios_resamples = {}
+
+        #we loop over all the T values we have
+        for iT,T in enumerate(self.chosen_T_list):
+
+            #we perform the jackknife or bootstrap analysis (the observable being the ratio we want to compute)
+            Ratios_resamples[T] = self.resamples_array([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0])[:,:T+1]
+
+        
+        ## We search for the plateau regions
+
+        ########################### insert here  cut_dict and N points dict, plateau search ecc. 
+
+
+
+        ## Now that we have the above values we can remove some values of T that are not useful from the fit, and also the related ratios
+
+        #first we copy the available values of T into the list we're going to use here
+        T_to_use_list = self.chosen_T_list[:]
+
+        #then we define the values of T that we don't want to use in the fit
+        T_to_remove_list = [1,2,3,12] #(3 has too few points, 12 is too noisy)
+
+        #we remove the values of T we don't want to use, and the related ratios
+        for T_to_remove in T_to_remove_list:
+            if T_to_remove in T_to_use_list:
+                T_to_use_list.remove(T_to_remove)
+                del Ratios_resamples[T_to_remove]
 
         ## We construct the abscissa for the fit as the list of tuples (T,tau) of values that have a plateau
 
