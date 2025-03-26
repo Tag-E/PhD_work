@@ -44,6 +44,7 @@ import itertools as it #for fancy iterations (product:to loop over indices; cycl
 from typing import Any #to use annotations for fig and ax
 from matplotlib.figure import Figure #to use annotations for fig and ax
 from functools import partial #to specify arguments of functions
+from copy import deepcopy #to make a deepcopy of dictionaries
 
 
 
@@ -1756,8 +1757,9 @@ class moments_toolkit(bulding_block):
 
     ## Work in Progress Methods (stuff still in development)
 
+    # TO DO: review and adjust everything
     def fit_ratio(self,verbose=False, show=False, plot=False,
-                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> CA.FitState:
+                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
         """
         Input:
             - 
@@ -1780,6 +1782,10 @@ class moments_toolkit(bulding_block):
         mat_ele_list = [ average_moments_over_T( self.get_M_from_S(method="fit", moments=False)[iop], chi2=10 )[0] for iop in range(self.Nop) ]
         mat_ele_mean_list = [ mat_ele.mean for mat_ele in mat_ele_list ]
 
+        #list with all the kinematic factors of the operators
+        Klist = self.get_Klist()
+
+
         ## We construct the bootstrap or jackknife resamples of the ratios
         
         #first we get the 2 and 3 points correlators
@@ -1789,13 +1795,15 @@ class moments_toolkit(bulding_block):
         #we construct the resamples of the ratio for each value of T
 
         #we initialize a dictionary where we store the resamples
-        Ratios_resamples = {}
+        Ratios_resamples_list = [{} for iop in range(self.Nop)]
 
-        #we loop over all the T values we have
-        for iT,T in enumerate(self.chosen_T_list):
+        #we loop over the chosen operator
+        for iop in range(self.Nop):
+            #we loop over all the T values we have
+            for iT,T in enumerate(self.chosen_T_list):
 
-            #we perform the jackknife or bootstrap analysis (the observable being the ratio we want to compute)
-            Ratios_resamples[T] = self.resamples_array([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0])[:,:T+1]
+                #we perform the jackknife or bootstrap analysis (the observable being the ratio we want to compute)
+                Ratios_resamples_list[iop][T] = self.resamples_array([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0])[:,:T+1]
 
         
         ## We search for the plateau regions
@@ -1806,17 +1814,18 @@ class moments_toolkit(bulding_block):
         Rmean,Rstd,Rcov = self.get_R() #Rmean shape -> (Nop,NT,maxT+1)
 
         #we instantiate the dictionaries with the number of points to cut and the total number of points for each ratio
-        cut_dict = {T:{} for T in self.chosen_T_list}
-        N_points_dict = {T:{} for T in self.chosen_T_list}
+        cut_dict_list = [{} for iop in range(self.Nop)]
+        N_points_dict_list = [{} for iop in range(self.Nop)]
 
-        for iT,T in enumerate(self.chosen_T_list):
-            for iop in range(self.Nop):
+        #we loop over the chosen operators
+        for iop in range(self.Nop):
+            #we loop over the T values we have
+            for iT,T in enumerate(self.chosen_T_list):
+                
+                #we find how much data points we have to cut and store the detail about the cut (and the number of remaining points) into dictionaries
                 cut = plateau_search_symm(Rmean[iop,iT,:T+1],Rcov[iop,iT,:T+1,:T+1],only_sig=True, chi2_treshold=5.0)
-                cut_dict[T][iop] = cut
-                N_points_dict[T][iop] = cut[1]-cut[0] if cut is not None else 0
-
-        ########## TO DO: invert the T and iop in the above loop and dict
-
+                cut_dict_list[iop][T] = cut
+                N_points_dict_list[iop][T] = cut[1]-cut[0] if cut is not None else 0
 
 
         ## Now that we have the above values we can remove some values of T that are not useful from the fit, and also the related ratios and dictionary entries
@@ -1831,149 +1840,205 @@ class moments_toolkit(bulding_block):
         for T_to_remove in T_to_remove_list:
             if T_to_remove in T_to_use_list:
                 T_to_use_list.remove(T_to_remove)
-                del Ratios_resamples[T_to_remove]
-                del cut_dict[T_to_remove]
-                del N_points_dict[T_to_remove]
+                for iop in range(self.Nop):
+                    del Ratios_resamples_list[iop][T_to_remove]
+                    del cut_dict_list[iop][T_to_remove]
+                    del N_points_dict_list[iop][T_to_remove]
 
 
-        ## We can now prepare abscissa
+        # ## We can now prepare abscissa and ordinate for each operators
+
+        # #we define a function that 
+
+        # #we have a list with the abscissa array for each operator
+        # abscissa_list = [   np.array( [ [T, tau] for T in T_to_use_list if cut_dict[iop][T] is not None for tau in np.arange(0,T+1)[cut_dict[iop][T][0]:cut_dict[iop][T][1]] ] )    for iop in range(self.Nop)]
+
+        # #for a given operator the ordinate is just the resamples rearranged in the right way, we have a list full of those, one entry for each operator
+
+        # #we take the number of resamples from the first axis of the ratio resampling
+        # Nres = Ratios_resamples_list[0][T_to_use_list[0]].shape[0]
+
+        # #we rearrange the ratios in the right way
+
+        # #first we instantiate the empty rearranged ratios
+        # Ratios_rear_list = [np.zeros( (Nres, len(abscissa)) ) for abscissa in abscissa_list]
+
+        # #then we actually rearrange the ratios
+        # for iop, (Ratios_rear,abscissa) in enumerate(zip(Ratios_rear_list,abscissa_list)):
+        #     for idx, (T,tau) in enumerate(abscissa):
+        #          Ratios_rear[:,idx] = Ratios_resamples_list[iop][T][:,tau]
 
 
+        #we instantiate the list with all the fit statates that we want to return
+        fit_state_list = []
 
 
-        ################## OLD ##################
+        ## We now actually start going through with the fit procedure
 
-        ## We construct the abscissa for the fit as the list of tuples (T,tau) of values that have a plateau
+        #first a loop on the selected operators
+        for iop, op in enumerate(self.selected_op):
 
-        #we instantiate the abscissa as an empty list
-        #abscissa = np.empty(shape=(self.Nop,), dtype=list)
-        abscissa_list = []
+            #we take the ratios we need
+            Ratios_resamples = Ratios_resamples_list[iop]
 
-        #we take the values of R
-        Rmean, Rstd, Rcovmat = self.get_R()
+            #we take the dictionaries we are going to use
+            cut_dict = cut_dict_list[iop]
+            N_points_dict = N_points_dict_list[iop]
+            
+            #since we are going to change the dictionaries during the fit procedure we store in memory how they originally looked like (usin a deepcopy)
+            cut_dict_old = deepcopy(cut_dict)
+            N_points_dict_old = deepcopy(N_points_dict)
 
-        #we instantiate the dict where we will store the range of the plateaux used to define the abscissa
-        plateau_dict = {}
+            #we instanatiate the states of the fits we want to do
+            fit_state = CA.FitState()
 
-        for iop,op in enumerate(self.selected_op):
+            #we loop now over the possible parameters we vary in the fit (mix term and the number of data points we use)
 
-            #abscissa[iop] = []
-            tmp_a = []
+            #loop over the mix term of the model (True it is there, Flase it is not)
+            for mix_term in [False,True]:
 
-            for iT,T in enumerate(self.chosen_T_list):
+                #we instantiate the model
+                model = SymmetricRatioModel(number_states_sink=2,number_states_source=2, include_mix_term = mix_term)
 
-                start_plateau, end_plateau = plateau_search(Rmean[iop,iT,:T+1 ], Rcovmat[iop,iT,:T+1 , :T+1 ], only_sig=False, chi2_treshold=chi2_treshold)
+                #we compute a prior for the model (we use a flat prior)
+                flat_prior = model.flat_prior(sign=1 if mat_ele_mean_list[iop]>0 else -1,dE_mean=dE_mean)
 
-                plateau_dict[(iop,iT)] = start_plateau, end_plateau
+                #we compute abscissa and ordinate using the dictionary identifying the plateau region
+                abscissa, Ratio_ror = abscissa_ratio_from_cutdict(Ratios_resamples,cut_dict)
 
-                for tau in range(start_plateau,end_plateau):
-                    #abscissa[iop].append( (T,tau) )
-                    tmp_a.append( (T,tau) )
-
-            abscissa_list.append( np.asarray(tmp_a) )
-
-        #the number of resamples is given by
-        #nres = abscissa_list[0].shape[0]
-
-
-        ## Next we construct the ordinate
-
-        #we take the correlators
-        p3corr = self.get_p3corr() #shape = (Nop, nconf, nT, maxT+1)
-        p2corr = self.get_p2corr()
-
-        #we resample the ratios, len = Nop,, each element with shape = (Nres, Nallowed(T,tau) )
-        ratio_resamples_list = [ self.resamples_array([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), res_axis_list=[1,0] ) for iop in range(self.Nop) ]
-
-        #the number of resamples is given by
-        nres = ratio_resamples_list[0].shape[0]
-
-        #ratio_list = [ np.asarray( [e for l in [ ratio_formula(p3corr, p2corr, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop) ]
-        ratio_list = [ self.resampling([p3corr,p2corr], lambda x,y: np.asarray( [e for l in [ ratio_formula(x, y, T, gauge_axis=1)[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1] ] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ), res_axis_list=[1,0] ) for iop in range(self.Nop) ]
-        ratio_mean_list = [ np.asarray([e for l in  [Rmean[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
-        ratio_std_list = [ np.asarray([e for l in  [Rstd[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
-        #ratio_cov_list = [ np.asarray([e for l in  [Rcovmat[iop,iT, plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1], plateau_dict[(iop,iT)][0] : plateau_dict[(iop,iT)][1]] for iT,T in enumerate(self.chosen_T_list) ] for e in l] ) for iop in range(self.Nop)]
-
-        ## Then the prior construction
-
-        #we use the fit of the 2 point function
-        fit2p_parms = self.fit_2pcorr(show=False,save=False).model_average()
-
-        #from the result of the fit we take the energy
-        #dE = gv.gvar(fit2p_parms['est']['dE1'], fit2p_parms['err']['dE1'])
-
-        #we will use as prior the value extracted from S
-        matele_fromS = self.get_M_from_S(method="fit",moments=False)
-
-        
-
-        #we instantiate a prior dict for each operator
-        priordict_list = []
-
-        for iop in range(self.Nop):
-
-            #we instantiate the dict
-            prior = gv.BufferDict()
-
-            #we fill it
-            prior["dE"] = gv.gvar(fit2p_parms['est']['dE1'], fit2p_parms['err']['dE1'])
-
-            prior["M"] = np.average(np.asarray([e for e in matele_fromS[iop] if np.abs(e.mean)>self.eps]), weights= [ele.sdev**(-2) for ele in matele_fromS[iop] if np.abs(ele.mean)>self.eps] )
-
-            prior["R1"] = gv.gvar(0.5,1)
-            prior["R2"] = gv.gvar(0,1)
-            prior["R3"] = gv.gvar(0,1)
-
-            priordict_list.append(prior)
-        
-
-        ## Now we are ready to do the fit
-
-        #we instanatiate the states of the fits we want to do (one fit state for each operator)
-        fit_state_list = [ CA.FitState() for iop in range(self.Nop) ]
-
-
-        #for each operator we do a series of fits
-
-        for iop in range(self.Nop):
-
-            #we take the right resampling
-            ratio_res = ratio_resamples_list[iop]
-
-            #we take the ratio
-            ratio, ratio_std, ratio_cov = ratio_list[iop]
-
-            #we loop over the possible parameters
-            for r2 in [False, True]:
-                for r3 in [False]:#, True]:
-
-
-                    #we do the fit
-                    fit_result = self.fit(
-
-                        abscissa                = abscissa_list[iop],
+                #we immediately do one fit
+                fit_result = CA.fit(
+                        abscissa = abscissa,
+                        ordinate_est = np.mean( Ratio_ror, axis = 0 ),
+                        ordinate_std = np.std ( Ratio_ror, axis = 0 ),
+                        ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                        resample_ordinate_est = Ratio_ror,
+                        resample_ordinate_std = np.std ( Ratio_ror, axis = 0 ),
+                        resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
                         
-                        ordinate_est            = ratio, #np.mean(ratio_res, axis = 0), # ratio_mean_list[iop], #ratio, #np.mean(ratio_res, axis = 0),
-                        ordinate_std            = ratio_std, #np.sqrt(nres-1) *np.std (ratio_res, axis = 0), # ratio_std_list[iop], #ratio_std, ##np.sqrt((nres-1)/nres) * np.std (ratio_res, axis = 0),
-                        ordinate_cov            = ratio_cov, #(nres-1) * np.cov (ratio_res, rowvar=False), #(nres-1)/nres * np.cov (ratio_res, rowvar=False),
-                        
-                        resample_ordinate_est   = ratio_res,
-                        resample_ordinate_std   = np.sqrt((nres-1)) * np.std (ratio_res, axis = 0),
-                        resample_ordinate_cov   = (nres-1) * np.cov (ratio_res, rowvar=False),
+                        central_value_fit = True,
+                        central_value_fit_correlated = True,
+                        resample_fit = True,
+                        resample_fit_correlated = True,
+                        resample_fit_resample_prior = False,
+                        resample_type = self.resampling_type,
+                        # Fitting infos
+                        model = model,
+                        prior=flat_prior,
+                        )
 
-                        # fit strategy, default: only uncorrelated central value fit:
-                        resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn",#"jkn",
+                #we append the result of the fit to the fit state class
+                fit_state.append(fit_result)
 
-                        # args for lsqfit:
-                        model   = ratio_func_form(r1=True,r2=r2,r3=r3),
-                        prior   = priordict_list[iop],
-                        p0      = None,
+                ## Now we proceed by doing more fits expanding the number of used data points
+
+                #we do a while true loop that breaks when we can no longer expand the number of available data points
+                fit_done = False
+                while fit_done==False:
+
+                    currentT_list = list(cut_dict.keys())
+                    cut_list = list(cut_dict.values())
+                    Npoints_list = list(N_points_dict.values())
+
+                    for i, (T, cuts, Npoints) in enumerate(zip(currentT_list,cut_list,Npoints_list)):
+
+                        if i==0 and Npoints!=0: continue
+
+                        if (i==0 and Npoints==0) or (Npoints < list(N_points_dict.values())[i-1] and Npoints <T):
+                            
+                            if Npoints!=0:
+                                cut_dict[T] = (cut_dict[T][0]-1,cut_dict[T][1]+1)
+                                N_points_dict[T] += 2
+                            else:
+                                cut_dict[T] = (int(T/2), int(T/2)+1 + T%2)
+                                N_points_dict[T] += 1 + T%2
+
+                            #do other fit.......
+                            abscissa, Ratio_ror = abscissa_ratio_from_cutdict(Ratios_resamples,cut_dict)
+
+                            fit_result = CA.fit(
+                                                abscissa = abscissa,
+                                                ordinate_est = np.mean( Ratio_ror, axis = 0 ),
+                                                ordinate_std = np.std ( Ratio_ror, axis = 0 ),
+                                                ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                                                resample_ordinate_est = Ratio_ror,
+                                                resample_ordinate_std = np.std ( Ratio_ror, axis = 0 ),
+                                                resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                                                
+                                                central_value_fit = True,
+                                                central_value_fit_correlated = True,
+                                                resample_fit = True,
+                                                resample_fit_correlated = True,
+                                                resample_fit_resample_prior = False,
+                                                resample_type = self.resampling_type,
+                                                # Fitting infos
+                                                model = model,
+                                                prior=flat_prior,
+                                                )
+                            fit_state.append(fit_result)
+                            fit_done = True
+                    
+            #once we have done all the fits we had to do for an operator we append its fit state to the list
+            fit_state_list.append(fit_state)
+
+            #we do the plot
+            if plot:
+
+                COLORS = ["red","blue","green", "orange", "purple", "brown", "pink", "black"]
+
+                _=plt.figure()
+
+                for iT, T in enumerate(T_to_use_list): #TO DO: make this chosen_T_list and then adjust control later
+
+                    norm_K = Klist[iop].mean
+                    taus = np.arange(1,T)
+
+                    _=plt.errorbar(
+                        taus - T/2,
+                        np.mean( Ratios_resamples[T][:,1:-1], axis = 0 )/norm_K,
+                        np.std ( Ratios_resamples[T][:,1:-1], axis = 0 )/np.abs(norm_K),
+                        fmt = '.:',
+                        capsize = 2,
+                        label = f"${T=}$",
+                        color = COLORS[iT]
                     )
 
-                    #we append the fit to the list
-                    fit_state_list[iop].append(fit_result)
+                    if cut_dict[T] is not None:
 
+                        eps=0.1
+                        cont_taus = np.linspace(cut_dict[T][0]-eps, cut_dict[T][1]-1+eps,100)
+
+                        abscissa = np.array([
+                            (T, tau) for tau in cont_taus
+                        ])
+
+                        fit_ordinate_array = np.array( [ gv.gvar( fitresult.eval( abscissa )["est"], fitresult.eval( abscissa )["err"] ) for fitresult in fit_state] )
+                        fit_ordinate = np.average(fit_ordinate_array, axis=0, weights=weights_from_fitstate(fit_state))
+
+                        ordinate_mean = np.array( [ordinate.mean for ordinate in fit_ordinate] )
+                        ordinate_high = np.array( [ordinate.mean + ordinate.sdev for ordinate in fit_ordinate] )
+                        ordinate_low = np.array( [ordinate.mean - ordinate.sdev for ordinate in fit_ordinate] )
+
+                        _=plt.plot(cont_taus-T/2, ordinate_mean / norm_K, color = COLORS[iT])
+                        
+                        _=plt.fill_between(
+                            cont_taus-T/2, 
+                            ordinate_high / norm_K,
+                            ordinate_low / norm_K,
+                            color = COLORS[iT],
+                            alpha = 0.2
+                        )
+
+                _=plt.xlabel(r"$\tau - t/2$")
+                _=plt.ylabel(r"$R(t,\tau)$")
+                _=plt.show()
+
+        #we return the list with all the fit states
         return fit_state_list
+
+
+
+        
 
 
 
@@ -2272,11 +2337,36 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
     #if the chi2 is never smaller than the treshold we just return the last value
     return avg, iTmin
 
+#auxiliary function used to prepare abscissa and ordinate for the ratio fit  #TO DO: comment and adjust
+def abscissa_ratio_from_cutdict(Ratios_resamples, cutdict):
+
+    #first we grep the list of times from the dictionaries with the cuts
+    Tlist = list( cutdict.keys() )
+
+    #then we also grep the number of resamples from the shape of the ratio resamples
+    Nres = Ratios_resamples[Tlist[0]].shape[0]
+
+    abscissa = np.array([
+        [T, tau] for T in Tlist if cutdict[T] is not None for tau in np.arange(0,T+1)[cutdict[T][0]:cutdict[T][1]] 
+    ])
+
+    Ratio_ror = np.zeros( (Nres, len(abscissa)) )
+
+    for idx, (t,tau) in enumerate(abscissa):
+
+        Ratio_ror[:,idx] = Ratios_resamples[t][:,tau]
+
+    return abscissa, Ratio_ror
+
+#auxiliary function for the ratio fit #TO DO: comment and adjust
+def weights_from_fitstate(fitstate):
+    AIC_array =np.array( [fitres.AIC for fitres in fitstate] )
+    AIC_min = np.min(AIC_array)
+    weights = np.exp(-0.5 * (AIC_array - AIC_min)) 
+    return weights/np.sum(weights)
 
 
-
-
-#auxiliary class used to fit the two point correlators
+#auxiliary class used to fit the two point correlators  #TO DO: comment and adjust
 class SumOrderedExponentials:
     def __init__(self, number_states):
         self.number_states = number_states
@@ -2295,33 +2385,125 @@ class SumOrderedExponentials:
         return out
 
 #auxiliary class used to fit the ratios
-class ratio_func_form:
-
-    def __init__(self,r1:bool=True,r2:bool=True,r3:bool=False):
-        self.r1:bool=r1
-        self.r2:bool=r2
-        self.r3:bool=r3
+class SymmetricRatioModel:
+    def __init__(self, number_states_sink, number_states_source, include_mix_term = True):
+        self.number_states_sink = number_states_sink
+        self.number_states_source = number_states_source
+        self.include_mix_term = include_mix_term
         
-    def __call__(self, t:tuple[int,int], parms:dict):
+        # GS
+        if   number_states_sink == 1 and number_states_source == 1:
+            self.Nparams = 1
+        # GS + ES @ sink 
+        elif number_states_sink == 2 and number_states_source == 1:
+            self.Nparams = 3
+        # GS + ES @ source
+        elif number_states_sink == 1 and number_states_source == 2:
+            self.Nparams = 3
+        # GS + ES @ source + ES @ sink + ES @ (source & sink)
+        elif number_states_sink == 2 and number_states_source == 2 and include_mix_term:
+            self.Nparams = 4
+        # GS + ES @ source + ES @ sink + ES @ (source & sink)
+        elif number_states_sink == 2 and number_states_source == 2:
+            self.Nparams = 3
+        else:
+            raise NotImplementedError("Model only implemented for at most one excited state at source and/or sink")
 
-        #we grep the input
-        T = np.asarray(t[:,0],dtype=float)
-        tau = np.asarray(t[:,1],dtype=float)
-        MatEle = parms["M"]
-        R1 = parms["R1"]
-        R2 = parms["R2"]
-        R3 = parms["R3"]
-        dE = parms["dE"]
+    def __call__(self, t_tau, p):
+        r"""
+            parameter:
+                - E-m = E_N(q)-m_N > 0 (Ground state exponent)
+                - dE{n}(q) = E_n(q) - E_N(q) > 0 (relative energy/mass if q=0)
+                    - Currently accepted: dE1(q), dE1(0)
+                - Amn (replace m,n by integers, matrix element for the mth excited state at source, and nth excited state a sink)
+                    - A00 is the ground state matrix element
+        """
+        t = t_tau[:,0]
+        tau = t_tau[:,1]
 
-        out = MatEle
+        # The ground state contribution (exponential is factorized)
+        out = np.full_like(tau, p['A00'], dtype = object)
 
-        if self.r1:
-            #out += np.sqrt(R1*R1) * np.exp(-T/2*dE)*np.cosh( (T/2 - tau) * dE)
-            out += R1 * np.exp(-T/2*dE)*np.cosh( (T/2 - tau) * dE)
-        if self.r2:
-            out += R2 * np.exp(-T*dE)
+        # The excited state at source 
+        if self.number_states_source == 2:
+            out += p["A01"] * np.exp(                        - tau * p["dE1(0)"])
 
-        if self.r3:
-            out /= (1 + R3 * np.exp(-T*dE))
+        # The excited state at sink
+        if self.number_states_sink == 2:
+            out += p["A01"] * np.exp( -(t-tau) * p["dE1(0)"]                    ) 
+
+        # The excited states at source and sink 
+        if self.number_states_source == 2 and self.number_states_sink == 2 and self.include_mix_term:
+            out += p["A11"] * np.exp( -(t-tau) * p["dE1(0)"] - tau * p["dE1(0)"])  
 
         return out
+
+    def flat_prior(self,sign,dE_mean):
+        prior = gv.BufferDict()
+
+        prior["A00"] = sign*gv.gvar(1,100) 
+        
+        # The excited state at source 
+        if self.number_states_source == 2:
+            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,10*dE_mean)) #gv.log(gv.gvar(1, 100))
+            prior["A01"]    = sign*gv.gvar(1,100) 
+
+        # The excited state at sink
+        if self.number_states_sink == 2:
+            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,10*dE_mean)) #gv.log(gv.gvar(1, 100))
+            prior["A01"]    = sign*gv.gvar(1,100) 
+
+        # The excited states at source and sink 
+        if self.number_states_source == 2 and self.number_states_sink == 2 and self.include_mix_term:
+            prior["A11"]    = sign*gv.gvar(1,100)  
+        
+        return prior
+    
+    def guess_prior(self,sign,dE_mean):
+        prior = gv.BufferDict()
+
+        prior["A00"] = sign*gv.gvar(1,0.5) 
+        
+        # The excited state at source 
+        if self.number_states_source == 2:
+            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean)) #gv.log(gv.gvar(0.1, 1))
+            prior["A01"]    =sign*gv.gvar(1e-2,1)
+
+        # The excited state at sink
+        if self.number_states_sink == 2:
+            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean)) #gv.log(gv.gvar(0.1, 1))
+            prior["A01"]    = sign*gv.gvar(1e-2,1)
+
+        # The excited states at source and sink 
+        if self.number_states_source == 2 and self.number_states_sink == 2 and self.include_mix_term:
+            prior["A11"]    = sign*gv.gvar(0.1,1)   
+        
+        return prior
+    
+    def model_prior(self, dE, matele, abscissa, ratio):
+        prior = gv.BufferDict()
+
+        r1_list=[]
+        for i_probe in range(len(abscissa)):
+            Tprobe,tprobe = abscissa[i_probe]
+            Rprobe = ratio[i_probe]
+            r1_list.append( (Rprobe - matele.mean  ) * np.exp(Tprobe/2 * dE.mean) / np.cosh((Tprobe/2-tprobe)*dE.mean) )
+        r1_mean = np.mean(r1_list)
+
+        prior["A00"] = matele
+        
+        # The excited state at source 
+        if self.number_states_source == 2:
+            prior["log(dE1(0))"] = gv.log(dE)
+            prior["A01"]    = gv.gvar(r1_mean,10*r1_mean)
+
+        # The excited state at sink
+        if self.number_states_sink == 2:
+            prior["log(dE1(0))"] = gv.log(dE)
+            prior["A01"]    = gv.gvar(r1_mean,10*r1_mean)
+
+        # The excited states at source and sink 
+        if self.number_states_source == 2 and self.number_states_sink == 2 and self.include_mix_term:
+            prior["A11"]    = gv.gvar(r1_mean,10*r1_mean)   
+        
+        return prior
