@@ -55,6 +55,7 @@ from utilities import all_equal #auxiliary function used to check if all element
 from utilities import jackknife, jackknife_resamples #to perform a statistical analysis using the jackknife resampling technique
 from utilities import bootstrap, bootstrap_resamples #to perform a statistical analysis using the bootstrap resampling technique
 from utilities import plateau_search #function used to search for the plateau region of a 1D array
+from utilities import plateau_search_symm #function used to search for the plateau region of a 1D array around its mid point
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 
 
@@ -1776,8 +1777,8 @@ class moments_toolkit(bulding_block):
         dE_mean = self.get_dE().mean
 
         #the mean value of the matrix element as estimated from the summed ratios
-        mat_ele, _ = average_moments_over_T( self.get_M_from_S(method="fit", moments=False), chi2=10 )
-        mat_ele_mean = mat_ele.mean
+        mat_ele_list = [ average_moments_over_T( self.get_M_from_S(method="fit", moments=False)[iop], chi2=10 )[0] for iop in range(self.Nop) ]
+        mat_ele_mean_list = [ mat_ele.mean for mat_ele in mat_ele_list ]
 
         ## We construct the bootstrap or jackknife resamples of the ratios
         
@@ -1801,9 +1802,24 @@ class moments_toolkit(bulding_block):
 
         ########################### insert here  cut_dict and N points dict, plateau search ecc. 
 
+        #we obtain the ratios
+        Rmean,Rstd,Rcov = self.get_R() #Rmean shape -> (Nop,NT,maxT+1)
+
+        #we instantiate the dictionaries with the number of points to cut and the total number of points for each ratio
+        cut_dict = {T:{} for T in self.chosen_T_list}
+        N_points_dict = {T:{} for T in self.chosen_T_list}
+
+        for iT,T in enumerate(self.chosen_T_list):
+            for iop in range(self.Nop):
+                cut = plateau_search_symm(Rmean[iop,iT,:T+1],Rcov[iop,iT,:T+1,:T+1],only_sig=True, chi2_treshold=5.0)
+                cut_dict[T][iop] = cut
+                N_points_dict[T][iop] = cut[1]-cut[0] if cut is not None else 0
+
+        ########## TO DO: invert the T and iop in the above loop and dict
 
 
-        ## Now that we have the above values we can remove some values of T that are not useful from the fit, and also the related ratios
+
+        ## Now that we have the above values we can remove some values of T that are not useful from the fit, and also the related ratios and dictionary entries
 
         #first we copy the available values of T into the list we're going to use here
         T_to_use_list = self.chosen_T_list[:]
@@ -1816,6 +1832,16 @@ class moments_toolkit(bulding_block):
             if T_to_remove in T_to_use_list:
                 T_to_use_list.remove(T_to_remove)
                 del Ratios_resamples[T_to_remove]
+                del cut_dict[T_to_remove]
+                del N_points_dict[T_to_remove]
+
+
+        ## We can now prepare abscissa
+
+
+
+
+        ################## OLD ##################
 
         ## We construct the abscissa for the fit as the list of tuples (T,tau) of values that have a plateau
 
