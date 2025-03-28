@@ -45,6 +45,7 @@ from typing import Any #to use annotations for fig and ax
 from matplotlib.figure import Figure #to use annotations for fig and ax
 from functools import partial #to specify arguments of functions
 from copy import deepcopy #to make a deepcopy of dictionaries
+from tqdm import tqdm #to loop with progress bars
 
 
 
@@ -1432,13 +1433,16 @@ class moments_toolkit(bulding_block):
     #function used to perform the fit of the two point correlator and to extract from it the ground state energy
     def fit_2pcorr(self, 
                    chi2_treshold:float=1.0, fit_doubt_factor:float=3, cut_treshold:float=-0.2, #statistical analysis params
-                   zoom:int=0, show=True, save=True, verbose=False) -> CA.FitState:            #output printing params
+                   zoom:int=0, show:bool=True, save:bool=True, verbose:bool=False) -> CA.FitState:            #output printing params
         """
         Input:
             - chi2_treshold: float, treshold value of the chi2 used for the plateau determination
             - fit_doubt_factor: enhancement to the std used as prior that is obtained from a simple scipy fit
             - cut_treshold: float, treshold value used to cut the effective mass array (cut is performed when the ratio between the effective mass and its std is below this value)
             - zoom: int, number of points around the plateau to be shown in the plot (i.e. how much "zoom out" should be used in the plot)
+            - show: bool, if True plots are shown
+            - save: bool, if True plots are saved to .png files
+            - verbose: bool, if True info are printed while the function is being executed
 
         Output:
             - fit_state: instance of the FitState class containing all the information regarding the fits performed
@@ -1758,14 +1762,22 @@ class moments_toolkit(bulding_block):
     ## Work in Progress Methods (stuff still in development)
 
     # TO DO: review and adjust everything
-    def fit_ratio(self,verbose=False, show=False, plot=False,
-                        figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
+    def fit_ratio(self, prior:str="guess",
+                  verbose:bool=False, show:bool=False, save:bool=False,
+                  figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
         """
         Input:
-            - 
+            - prior: str, either "guess" or "flat, depending if one wants to use a flat prior or a large prior centered around an initial guess known a priori
+            - figsize: tuple[int,int], size of the matplotlib figure
+            - fontsize_x: int, size of the font of the x label
+            - fontsize_y: int, size of the font of the y label
+            - markersize: int, size of the markers on the error bar plot
+            - show: bool, if True plots are shown
+            - save: bool, if True plots are saved to .png files
+            - verbose: bool, if True info are printed while the function is being executed
 
         Output:
-            - 
+            - fit_state_list: list with the FitState instances, one for each operator
         """
 
         #info print
@@ -1808,8 +1820,6 @@ class moments_toolkit(bulding_block):
         
         ## We search for the plateau regions
 
-        ########################### insert here  cut_dict and N points dict, plateau search ecc. 
-
         #we obtain the ratios
         Rmean,Rstd,Rcov = self.get_R() #Rmean shape -> (Nop,NT,maxT+1)
 
@@ -1846,37 +1856,17 @@ class moments_toolkit(bulding_block):
                     del N_points_dict_list[iop][T_to_remove]
 
 
-        # ## We can now prepare abscissa and ordinate for each operators
-
-        # #we define a function that 
-
-        # #we have a list with the abscissa array for each operator
-        # abscissa_list = [   np.array( [ [T, tau] for T in T_to_use_list if cut_dict[iop][T] is not None for tau in np.arange(0,T+1)[cut_dict[iop][T][0]:cut_dict[iop][T][1]] ] )    for iop in range(self.Nop)]
-
-        # #for a given operator the ordinate is just the resamples rearranged in the right way, we have a list full of those, one entry for each operator
-
-        # #we take the number of resamples from the first axis of the ratio resampling
-        # Nres = Ratios_resamples_list[0][T_to_use_list[0]].shape[0]
-
-        # #we rearrange the ratios in the right way
-
-        # #first we instantiate the empty rearranged ratios
-        # Ratios_rear_list = [np.zeros( (Nres, len(abscissa)) ) for abscissa in abscissa_list]
-
-        # #then we actually rearrange the ratios
-        # for iop, (Ratios_rear,abscissa) in enumerate(zip(Ratios_rear_list,abscissa_list)):
-        #     for idx, (T,tau) in enumerate(abscissa):
-        #          Ratios_rear[:,idx] = Ratios_resamples_list[iop][T][:,tau]
-
+        ## We now actually start going through with the fit procedure
 
         #we instantiate the list with all the fit statates that we want to return
         fit_state_list = []
 
-
-        ## We now actually start going through with the fit procedure
+        #info print
+        if verbose:
+            print("\nLooping over the operators, performing for each a series of fit: ...\n")
 
         #first a loop on the selected operators
-        for iop, op in enumerate(self.selected_op):
+        for iop, op in enumerate(tqdm(self.selected_op, disable=not verbose)):
 
             #we take the ratios we need
             Ratios_resamples = Ratios_resamples_list[iop]
@@ -1902,12 +1892,13 @@ class moments_toolkit(bulding_block):
 
                 #we compute a prior for the model (we use a flat prior)
                 flat_prior = model.flat_prior(sign=1 if mat_ele_mean_list[iop]>0 else -1,dE_mean=dE_mean)
+                guess_prior = model.guess_prior(sign=1 if mat_ele_mean_list[iop]>0 else -1,dE_mean=dE_mean)
 
                 #we compute abscissa and ordinate using the dictionary identifying the plateau region
                 abscissa, Ratio_ror = abscissa_ratio_from_cutdict(Ratios_resamples,cut_dict)
 
                 #we immediately do one fit
-                fit_result = CA.fit(
+                fit_result = self.fit(
                         abscissa = abscissa,
                         ordinate_est = np.mean( Ratio_ror, axis = 0 ),
                         ordinate_std = np.std ( Ratio_ror, axis = 0 ),
@@ -1915,48 +1906,55 @@ class moments_toolkit(bulding_block):
                         resample_ordinate_est = Ratio_ror,
                         resample_ordinate_std = np.std ( Ratio_ror, axis = 0 ),
                         resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
-                        
-                        central_value_fit = True,
-                        central_value_fit_correlated = True,
-                        resample_fit = True,
-                        resample_fit_correlated = True,
-                        resample_fit_resample_prior = False,
-                        resample_type = self.resampling_type,
-                        # Fitting infos
+                        resample_type = "bst" if self.resampling_type=="bootstrap" else "jkn",
                         model = model,
-                        prior=flat_prior,
+                        prior=flat_prior if prior=="flat" else guess_prior,
                         )
 
                 #we append the result of the fit to the fit state class
                 fit_state.append(fit_result)
 
+                #we restore the previous dictionaries
+                cut_dict = deepcopy(cut_dict_old)
+                N_points_dict = deepcopy(N_points_dict_old)
+
                 ## Now we proceed by doing more fits expanding the number of used data points
 
                 #we do a while true loop that breaks when we can no longer expand the number of available data points
-                fit_done = False
-                while fit_done==False:
+                while True:
 
+                    #fit done is the control variable we use for the loop (it is set to false at each iteration and if it stays like that at the end the loop breaks)
+                    fit_done=False
+
+                    #we get the relevant list (T values, cut values and number of points) from the related dicitonaries (that get updated after each fit)
                     currentT_list = list(cut_dict.keys())
-                    cut_list = list(cut_dict.values())
                     Npoints_list = list(N_points_dict.values())
 
-                    for i, (T, cuts, Npoints) in enumerate(zip(currentT_list,cut_list,Npoints_list)):
 
+                    #we loop over the time values T involved in the fit (and its total number of points)
+                    for i, (T, Npoints) in enumerate(zip(currentT_list,Npoints_list)):
+
+                        #for the shortest T, if there are no points, we do not include more
                         if i==0 and Npoints!=0: continue
 
+                        #instead for bigger values of T we expand the number of points (if they're not already too much)
                         if (i==0 and Npoints==0) or (Npoints < list(N_points_dict.values())[i-1] and Npoints <T):
                             
+                            #if there are already some points we add the next two ones on the edges
                             if Npoints!=0:
                                 cut_dict[T] = (cut_dict[T][0]-1,cut_dict[T][1]+1)
                                 N_points_dict[T] += 2
+
+                            #if instead there are no points we add the one (or ones) in the middle
                             else:
                                 cut_dict[T] = (int(T/2), int(T/2)+1 + T%2)
                                 N_points_dict[T] += 1 + T%2
 
-                            #do other fit.......
+                            #we take the abscissa and the ordinate for the fit by arranging them in the right way
                             abscissa, Ratio_ror = abscissa_ratio_from_cutdict(Ratios_resamples,cut_dict)
 
-                            fit_result = CA.fit(
+                            #we do another fit
+                            fit_result = self.fit(
                                                 abscissa = abscissa,
                                                 ordinate_est = np.mean( Ratio_ror, axis = 0 ),
                                                 ordinate_std = np.std ( Ratio_ror, axis = 0 ),
@@ -1964,74 +1962,138 @@ class moments_toolkit(bulding_block):
                                                 resample_ordinate_est = Ratio_ror,
                                                 resample_ordinate_std = np.std ( Ratio_ror, axis = 0 ),
                                                 resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
-                                                
-                                                central_value_fit = True,
-                                                central_value_fit_correlated = True,
-                                                resample_fit = True,
-                                                resample_fit_correlated = True,
-                                                resample_fit_resample_prior = False,
-                                                resample_type = self.resampling_type,
-                                                # Fitting infos
+                                                resample_type = "bst" if self.resampling_type=="bootstrap" else "jkn",
                                                 model = model,
-                                                prior=flat_prior,
+                                                prior=flat_prior if prior=="flat" else guess_prior,
                                                 )
+                            
+                            #we append the fit result to the fit state
                             fit_state.append(fit_result)
+
+                            #we flag the fact we have done another fit
                             fit_done = True
-                    
+
+                    #if no additional fit was done during this iteration we break the loop
+                    if fit_done==False: break
+            
+            #we store the updated dictionaries for later use (for the plot)
+            cut_dict_list[iop] = cut_dict
+            N_points_dict_list[iop] = N_points_dict
+
             #once we have done all the fits we had to do for an operator we append its fit state to the list
             fit_state_list.append(fit_state)
 
-            #we do the plot
-            if plot:
 
+        #we do the plot
+        if show or save:
+
+            #info print
+            if verbose:
+                print("\nPlotting the fit of the ratios for each operator ...\n")
+
+            #we loop over the operators
+            for iop, op in enumerate(self.selected_op):
+
+                #we retrieve the dictionaries we need from the right list
+                cut_dict = cut_dict_list[iop]
+                N_points_dict = N_points_dict_list[iop]
+
+                #we also retrieve the correct fit state
+                fit_state = fit_state_list[iop]
+
+                #we put the colors we are going to use in a list
                 COLORS = ["red","blue","green", "orange", "purple", "brown", "pink", "black"]
 
-                _=plt.figure()
+                #we instantiate the figure
+                plt.figure(figsize=figsize)
 
-                for iT, T in enumerate(T_to_use_list): #TO DO: make this chosen_T_list and then adjust control later
+                #we loop over alll the times used in the analysis
+                for iT, T in enumerate(self.chosen_T_list): 
 
+                    #we take the mean of the kinematic factor, so such that we can plot the normalized ratios
                     norm_K = Klist[iop].mean
+
+                    #we generate the values of tau to be shown on the plot
                     taus = np.arange(1,T)
 
-                    _=plt.errorbar(
+                    #we plot the ratios with their std
+                    plt.errorbar(
                         taus - T/2,
-                        np.mean( Ratios_resamples[T][:,1:-1], axis = 0 )/norm_K,
-                        np.std ( Ratios_resamples[T][:,1:-1], axis = 0 )/np.abs(norm_K),
-                        fmt = '.:',
+                        Rmean[iop][iT][1:T] / ( norm_K if norm_K!=0 else 1.0),
+                        Rstd[iop][iT][1:T] / ( np.abs(norm_K) if norm_K!=0 else 1.0),
+                        fmt = '',
+                        linewidth=0,
+                        elinewidth=1,
+                        markersize=markersize,
                         capsize = 2,
                         label = f"${T=}$",
                         color = COLORS[iT]
                     )
 
-                    if cut_dict[T] is not None:
+                    #if the given T was also involved in the fit we plot the fit result for that T
+                    if T in cut_dict and cut_dict[T] is not None:
 
+                        #we generate the abscissa used to plot the fit line 
+                        
+                        #we do such plot an eps around the last points involved
                         eps=0.1
+
+                        #we generate the taus
                         cont_taus = np.linspace(cut_dict[T][0]-eps, cut_dict[T][1]-1+eps,100)
 
+                        #from the taus we generate the abscissa
                         abscissa = np.array([
                             (T, tau) for tau in cont_taus
                         ])
 
+                        #for each fit result in the fit state we compute the ordinates to be shown on the plot
                         fit_ordinate_array = np.array( [ gv.gvar( fitresult.eval( abscissa )["est"], fitresult.eval( abscissa )["err"] ) for fitresult in fit_state] )
+
+                        #then we average them using as weights the AIC (same criterion used to average the parameters) #TO DO: check whether this is legit
                         fit_ordinate = np.average(fit_ordinate_array, axis=0, weights=weights_from_fitstate(fit_state))
 
+                        #from the ordinate obtained from the best fit result we construct arrays with the mean value and the +-1 sigma region
                         ordinate_mean = np.array( [ordinate.mean for ordinate in fit_ordinate] )
                         ordinate_high = np.array( [ordinate.mean + ordinate.sdev for ordinate in fit_ordinate] )
                         ordinate_low = np.array( [ordinate.mean - ordinate.sdev for ordinate in fit_ordinate] )
 
-                        _=plt.plot(cont_taus-T/2, ordinate_mean / norm_K, color = COLORS[iT])
+                        #we plot the mean value of the fit result as a continuous line
+                        plt.plot(cont_taus-T/2, ordinate_mean / ( norm_K if norm_K!=0 else 1.0), color = COLORS[iT])
                         
-                        _=plt.fill_between(
+                        #we plot the +-1sigma region around the mean value of the fit result
+                        plt.fill_between(
                             cont_taus-T/2, 
-                            ordinate_high / norm_K,
-                            ordinate_low / norm_K,
+                            ordinate_high / ( norm_K if norm_K!=0 else 1.0),
+                            ordinate_low / ( norm_K if norm_K!=0 else 1.0),
                             color = COLORS[iT],
                             alpha = 0.2
-                        )
+                            )
+                        
+                #we then plot also the horizontal line with the matrix element from S (we use as T the max T in the chosen ones)
 
-                _=plt.xlabel(r"$\tau - t/2$")
-                _=plt.ylabel(r"$R(t,\tau)$")
-                _=plt.show()
+                #we get first the average matrix element
+                mat_ele_avg = average_moments_over_T( self.get_M_from_S(method="finite differences", moments=True)[iop], chi2=1 )[0]
+
+                #we the central value of the matrixc element and the 1sigma region around it
+                plt.hlines(mat_ele_avg.mean,-T/2+1,T/2-1,linestyle="solid", color="orange")
+                plt.fill_between(np.arange(-T/2+1,T/2), mat_ele_avg.mean - mat_ele_avg.sdev, mat_ele_avg.mean + mat_ele_avg.sdev, alpha=0.2, color="orange")
+
+                #we add labels, title and legend
+                plt.xlabel(r"$\tau -T/2$",fontsize=fontsize_x)
+                plt.ylabel(r"$R(t,\tau)$",fontsize=fontsize_y)
+                plt.title(r"${}$".format(op),fontsize=fontsize_title)
+                plt.legend()
+
+                #we save the figure if the user asks for it
+                if save:
+                    plt.savefig(f"{self.plots_folder}/ratio_fit_iop{iop}.png")
+
+                #we show the figure if the user asks for it
+                if show:
+                    plt.show()
+        #info print
+        if verbose:
+            print("\nFit routine succesfully completed!\n")
 
         #we return the list with all the fit states
         return fit_state_list
@@ -2042,16 +2104,6 @@ class moments_toolkit(bulding_block):
 
 
 
-
-
-
-
-
-
-
-    
-
-            
 
 
 
@@ -2082,7 +2134,6 @@ def ratio_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int=
     return C_3pt / C_2pt[T]
 
 
-
 #function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately)
 def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -> np.ndarray:
     """
@@ -2098,7 +2149,6 @@ def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -
 
     #we implement the formula for the sum of rations in a fancy way (so that we can index the right dimension without knowing how many other dimensions there are)
     return np.sum( np.take(ratio, range(1 + tskip, T+1 -1 -tskip), axis=time_axis) , axis=time_axis) #the extra +1 and -1 are there to discard the endpoints
-
 
 
 #function used to extract the matrix element as the slop of the summed ratio function
@@ -2168,7 +2218,6 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
     return mat_ele_array
 
 
-
 #function used to extract the effective mass for the two-point correlators
 def effective_mass_formula(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
     """
@@ -2201,7 +2250,6 @@ def effective_mass_formula(corr_2p: np.ndarray, conf_axis:int=0) -> np.ndarray:
 
     #we send back the effective mass
     return meff
-
 
 
 #function used to extract the fit mass from the two-point correlators
@@ -2248,6 +2296,7 @@ def fit_mass(corr_2p: np.ndarray, t0:int, conf_axis:int=0, guess_mass:float|None
 
     #we return the fit mass and the fit amp
     return np.asarray([fit_mass,fit_amp])
+
 
 #auxiliary function used to plot the fit of the two point correlators
 def make_fitplot_2pcorr(fit_result:CA.FitResult, correlator:gv._gvarcore.GVar ,ax:Any, nstates:int=2, Nsigma:float=2, Ngrad:int=30) -> None:
@@ -2337,8 +2386,19 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
     #if the chi2 is never smaller than the treshold we just return the last value
     return avg, iTmin
 
-#auxiliary function used to prepare abscissa and ordinate for the ratio fit  #TO DO: comment and adjust
-def abscissa_ratio_from_cutdict(Ratios_resamples, cutdict):
+
+#auxiliary function used to prepare abscissa and ordinate for the ratio fit
+def abscissa_ratio_from_cutdict(Ratios_resamples:dict[np.ndarray], cutdict:dict[tuple[int,int]]) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Auxiliary function used to get the abscissa and ordinate needed in the fit of the ratios.
+
+    Input:
+        - Ratios_resamples: dict of numpy arrays, the keys being the source sink separations T, and the values being arrays of the resampled ratios
+        - cutdict: dictionary with the values of the cuts to be made in the ratios arrays, as computed in the fit3p routine
+
+    Output:
+        - abscissa, ratios rearranged: the abscissa and the ordinate that will be used to fit the ratios
+    """
 
     #first we grep the list of times from the dictionaries with the cuts
     Tlist = list( cutdict.keys() )
@@ -2346,27 +2406,57 @@ def abscissa_ratio_from_cutdict(Ratios_resamples, cutdict):
     #then we also grep the number of resamples from the shape of the ratio resamples
     Nres = Ratios_resamples[Tlist[0]].shape[0]
 
+    #we prepare the abscissa array, which is of the kind (T,tau) for all the allowed combinations of T and tau
     abscissa = np.array([
         [T, tau] for T in Tlist if cutdict[T] is not None for tau in np.arange(0,T+1)[cutdict[T][0]:cutdict[T][1]] 
     ])
 
+    #we instantiate the ordinate (the ratios but rearranged in a different way) as an empty array
     Ratio_ror = np.zeros( (Nres, len(abscissa)) )
 
-    for idx, (t,tau) in enumerate(abscissa):
+    #we now fill the ordinate by rearranging ratios in the right way
 
-        Ratio_ror[:,idx] = Ratios_resamples[t][:,tau]
+    #we loop over the abscissa
+    for idx, (T,tau) in enumerate(abscissa):
 
+        #we flatten the ratios in the space (T,tau)
+        Ratio_ror[:,idx] = Ratios_resamples[T][:,tau]
+
+    #we return the tuple abscissa, ratio
     return abscissa, Ratio_ror
 
+
 #auxiliary function for the ratio fit #TO DO: comment and adjust
-def weights_from_fitstate(fitstate):
+def weights_from_fitstate(fitstate:CA.FitState) -> np.ndarray:
+    """
+    Function used to compute the AIC criterion weights for a given fit state.
+    
+    Input:
+        - fitstate: correlator analyser's fit state
+    
+    Output:
+        - array with the normalized weights computed according to the AIC crierion, one weight for each fit result in the fit state instance
+    """
+
+    #first we compute one value of AIC for each fit result in the fit state
     AIC_array =np.array( [fitres.AIC for fitres in fitstate] )
+    
+    #then we look at the minimum AIC value
     AIC_min = np.min(AIC_array)
+    
+    #we construct the weights according to the AIC method
     weights = np.exp(-0.5 * (AIC_array - AIC_min)) 
+
+    #we normalize the weight and we return them
     return weights/np.sum(weights)
 
 
-#auxiliary class used to fit the two point correlators  #TO DO: comment and adjust
+
+
+######################## Auxiliary Classes ##########################
+
+
+#auxiliary class used to fit the two point correlators
 class SumOrderedExponentials:
     def __init__(self, number_states):
         self.number_states = number_states
@@ -2384,7 +2474,8 @@ class SumOrderedExponentials:
     
         return out
 
-#auxiliary class used to fit the ratios
+
+#auxiliary class used to fit the ratios (minimal modifications from the class provided by Marcel)
 class SymmetricRatioModel:
     def __init__(self, number_states_sink, number_states_source, include_mix_term = True):
         self.number_states_sink = number_states_sink
@@ -2438,7 +2529,18 @@ class SymmetricRatioModel:
 
         return out
 
+    #method used to construct a flat prior
     def flat_prior(self,sign,dE_mean):
+        """
+        Metod used to get a flat prior that can be used toghether with an instane of this model while fitting the ratios.
+        
+        Input:
+            - sign: either +1 or -1, depending on the sign of the matrix element
+            - dE_mean: mean value of the expected deltaE
+        
+        Output:
+            - prior: a dictionary of the kind paramter:prior_value
+        """
         prior = gv.BufferDict()
 
         prior["A00"] = sign*gv.gvar(1,100) 
@@ -2459,19 +2561,30 @@ class SymmetricRatioModel:
         
         return prior
     
+    #method used to construct a large prior around some already known (from previous studies) parameters
     def guess_prior(self,sign,dE_mean):
+        """
+        Metod used to get a large prior, around a guess known a prori, that can be used toghether with an instane of this model while fitting the ratios.
+        
+        Input:
+            - sign: either +1 or -1, depending on the sign of the matrix element
+            - dE_mean: mean value of the expected deltaE
+        
+        Output:
+            - prior: a dictionary of the kind paramter:prior_value
+        """
         prior = gv.BufferDict()
 
         prior["A00"] = sign*gv.gvar(1,0.5) 
         
         # The excited state at source 
         if self.number_states_source == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean)) #gv.log(gv.gvar(0.1, 1))
+            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean))
             prior["A01"]    =sign*gv.gvar(1e-2,1)
 
         # The excited state at sink
         if self.number_states_sink == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean)) #gv.log(gv.gvar(0.1, 1))
+            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean))
             prior["A01"]    = sign*gv.gvar(1e-2,1)
 
         # The excited states at source and sink 
@@ -2480,7 +2593,21 @@ class SymmetricRatioModel:
         
         return prior
     
+    #function used to construct a narrow prior according to the specifics of the functional form
     def model_prior(self, dE, matele, abscissa, ratio):
+        """
+        Metod used to get a  narrow prior, constructed around the model, that can be used toghether with an instane of this model while fitting the ratios.
+        
+        Input:
+            - dE_mean: gv.gvar, value of the expected deltaE
+            - matele:  gv.gvar, value of the expected matrix element
+            - absicssa: array that will be used as abscissa in the fit
+            - ratio: array that will be used as ordinate in the fit
+        
+        Output:
+            - prior: a dictionary of the kind paramter:prior_value
+        """
+
         prior = gv.BufferDict()
 
         r1_list=[]
