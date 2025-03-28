@@ -1657,111 +1657,7 @@ class moments_toolkit(bulding_block):
         #we return the fit state
         return fit_state
 
-
-
-    ## Auxiliary Methods (useful methods implementing computations and auxiliary routines that are not at the core of the data analysis)
-
-    #function used to convert an energy value from lattice units to MeV
-    def lattice_to_MeV(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
-        """
-        Function used to convert an energy value from lattice units to MeV
-        
-        Input:
-            - input_value: the value (float, array, gvar variable) that represents energy(ies) in lattice units
-        
-        Output:
-            - output_value: the input converted in MeV
-        """
-
-        #we multiply the input by hbar c
-        output_value = input_value * self.hbarc
-
-        #then we divide by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
-        output_value /= self.a_coarse if self.latticeT==48 else self.a_fine
-
-        #we return the value in MeV
-        return output_value
-    
-    #function used to convert an energy value from lattice units to MeV
-    def MeV_to_lattice(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
-        """
-        Function used to convert an energy value from MeV to lattice units
-        
-        Input:
-            - input_value: the value (float, array, gvar variable) that represents energy(ies) in MeV
-        
-        Output:
-            - output_value: the input converted in lattice units
-        """
-
-        #we divide the input by hbar c
-        output_value = input_value / self.hbarc
-
-        #then we multiply by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
-        output_value *= self.a_coarse if self.latticeT==48 else self.a_fine
-
-        #we return the value in lattice units
-        return output_value
-
-    #function used to re-initialize all the operator dependant class variables
-    def re_initialize_T_variables(self) -> None:
-        """
-        Function that needs to be called after a change in the list of the source-sink separations T to be sure that all the T_list dependant variables are correctly re-initialized
-        
-        Input:
-            - None
-        
-        Output:
-            - None (all the relevant class variables get re-initialized)
-        """
-
-        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
-        self.M_from_S_fit  = None
-        self.x_from_S_fit  = None
-        self.M_from_S_diff = None
-        self.x_from_S_diff = None
-
-    #function used to re-initialize all the operator dependant class variables
-    def re_initialize_operator_variables(self) -> None:
-        """
-        Function that needs to be called after a change in the list of the selected operators to be sure that all the operator dependant variables are correctly re-initialized
-        
-        Input:
-            - None
-        
-        Output:
-            - None (all the relevant class variables get re-initialized)
-        """
-
-        #we reset the list of the kinematic factors (shape = (Nop,))
-        self.Klist = None
-
-        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
-        self.M_from_S_fit  = None
-        self.x_from_S_fit  = None
-        self.M_from_S_diff = None
-        self.x_from_S_diff = None
-
-    #function used to display the selected operators inside a jupyter notebook
-    def display_operators(self) -> None:
-        """
-        Function used to display into a notebook each of the selected operators.
-        
-        Input:
-            - None
-        
-        Output:
-            - None (the operators in the list of selected operators are shown in the notebook)
-        """
-
-        for op in self.selected_op:
-            op.display()
-
-
-
-    ## Work in Progress Methods (stuff still in development)
-
-    # TO DO: review and adjust everything
+    #function used to perform the fit of the ratios of the 3p and 2p correlators (so that the value of the matrix element can be extracted)
     def fit_ratio(self, prior:str="guess",
                   verbose:bool=False, show:bool=False, save:bool=False,
                   figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
@@ -2100,9 +1996,113 @@ class moments_toolkit(bulding_block):
 
 
 
+    ## Auxiliary Methods (useful methods implementing computations and auxiliary routines that are not at the core of the data analysis)
+
+    #function used to convert an energy value from lattice units to MeV
+    def lattice_to_MeV(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
+        """
+        Function used to convert an energy value from lattice units to MeV
         
+        Input:
+            - input_value: the value (float, array, gvar variable) that represents energy(ies) in lattice units
+        
+        Output:
+            - output_value: the input converted in MeV
+        """
+
+        #we multiply the input by hbar c
+        output_value = input_value * self.hbarc
+
+        #then we divide by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
+        output_value /= self.a_coarse if self.latticeT==48 else self.a_fine
+
+        #we return the value in MeV
+        return output_value
+    
+    #function used to convert an energy value from lattice units to MeV
+    def MeV_to_lattice(self, input_value:float|np.ndarray|gv._gvarcore.GVar) -> np.ndarray|gv._gvarcore.GVar:
+        """
+        Function used to convert an energy value from MeV to lattice units
+        
+        Input:
+            - input_value: the value (float, array, gvar variable) that represents energy(ies) in MeV
+        
+        Output:
+            - output_value: the input converted in lattice units
+        """
+
+        #we divide the input by hbar c
+        output_value = input_value / self.hbarc
+
+        #then we multiply by the lattice spacing #TO DO: add proper determination of coarse and fine lattice
+        output_value *= self.a_coarse if self.latticeT==48 else self.a_fine
+
+        #we return the value in lattice units
+        return output_value
+
+    #function used to re-initialize all the operator dependant class variables
+    def re_initialize_T_variables(self) -> None:
+        """
+        Function that needs to be called after a change in the list of the source-sink separations T to be sure that all the T_list dependant variables are correctly re-initialized
+        
+        Input:
+            - None
+        
+        Output:
+            - None (all the relevant class variables get re-initialized)
+        """
+
+        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
+        self.M_from_S_fit  = None
+        self.x_from_S_fit  = None
+        self.M_from_S_diff = None
+        self.x_from_S_diff = None
+
+    #function used to re-initialize all the operator dependant class variables
+    def re_initialize_operator_variables(self) -> None:
+        """
+        Function that needs to be called after a change in the list of the selected operators to be sure that all the operator dependant variables are correctly re-initialized
+        
+        Input:
+            - None
+        
+        Output:
+            - None (all the relevant class variables get re-initialized)
+        """
+
+        #we reset the list of the kinematic factors (shape = (Nop,))
+        self.Klist = None
+
+        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
+        self.M_from_S_fit  = None
+        self.x_from_S_fit  = None
+        self.M_from_S_diff = None
+        self.x_from_S_diff = None
+
+    #function used to display the selected operators inside a jupyter notebook
+    def display_operators(self) -> None:
+        """
+        Function used to display into a notebook each of the selected operators.
+        
+        Input:
+            - None
+        
+        Output:
+            - None (the operators in the list of selected operators are shown in the notebook)
+        """
+
+        for op in self.selected_op:
+            op.display()
 
 
+
+    ## Work in Progress Methods (stuff still in development)
+    #
+    # ...
+
+
+
+        
 
 
 
