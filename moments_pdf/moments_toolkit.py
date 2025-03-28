@@ -116,6 +116,56 @@ class moments_toolkit(bulding_block):
     default_svdcut: float|None  = None
     default_maxiter: int = 10_000
 
+    ## Renormalization constants
+
+    #vector current renormalization factor
+    Z_coarse_V = gv.gvar(0.9094,0.0036)
+    Z_fine_V   = gv.gvar(0.9438,0.0001)
+
+    #vector, irrep (3,1)
+    Z_coarse_V_3_1 = ( gv.gvar(1.0736, 0.0142) + gv.gvar(0, 0.0202) ) * Z_coarse_V
+    Z_fine_V_3_1   = ( gv.gvar(1.0925, 0.0052) + gv.gvar(0, 0.0137) ) * Z_fine_V
+
+    #vector, irrep (3,1)
+    Z_coarse_V_6_3 = ( gv.gvar(1.0232, 0.0036) + gv.gvar(0, 0.0063) ) * Z_coarse_V_3_1
+    Z_fine_V_6_3   = ( gv.gvar(1.0167, 0.0029) + gv.gvar(0, 0.0027) ) * Z_fine_V_3_1
+
+    #axial, irrep (3,4)
+    Z_coarse_A_3_4 = ( gv.gvar(1.0883, 0.0113) + gv.gvar(0, 0.0316) ) * Z_coarse_V
+    Z_fine_A_3_4   = ( gv.gvar(1.1009, 0.0051) + gv.gvar(0, 0.0192) ) * Z_fine_V
+
+    #axial, irrep (6,4)
+    Z_coarse_A_6_4 = ( gv.gvar(1.0058, 0.0028) + gv.gvar(0, 0.0050) ) * Z_coarse_A_3_4
+    Z_fine_A_6_4   = ( gv.gvar(1.0074, 0.0040) + gv.gvar(0, 0.0016) ) * Z_fine_A_3_4
+
+    #tensor, irrep (8,1)
+    Z_coarse_T_8_1 = ( gv.gvar(1.0906, 0.0165) + gv.gvar(0, 0.0191) ) * Z_coarse_V
+    Z_fine_T_8_1   = ( gv.gvar(1.1105, 0.0056) + gv.gvar(0, 0.0104) ) * Z_fine_V
+
+    #tensor, irrep (8,2)
+    Z_coarse_T_8_2 = ( gv.gvar(1.0034, 0.0035) + gv.gvar(0, 0.0038) ) * Z_coarse_T_8_1
+    Z_fine_T_8_2   = ( gv.gvar(1.0016, 0.0134) + gv.gvar(0, 0.0019) ) * Z_fine_T_8_1
+
+    #dictionary with all the relevant renormalization factor for the coarse lattice (with keys in the format (gamma structure, label of the irrep) )
+    renormalization_coarse = {
+        ("V", (3,1) ) : Z_coarse_V_3_1,
+        ("V", (6,3) ) : Z_coarse_V_6_3,
+        ("A", (3,4) ) : Z_coarse_A_3_4,
+        ("A", (6,4) ) : Z_coarse_A_6_4,
+        ("T", (8,1) ) : Z_coarse_T_8_1,
+        ("T", (8,2) ) : Z_coarse_T_8_2
+    }
+
+    #dictionary with all the relevant renormalization factor for the fine lattice (with keys in the format (gamma structure, label of the irrep) )
+    renormalization_fine = {
+        ("V", (3,1) ) : Z_fine_V_3_1,
+        ("V", (6,3) ) : Z_fine_V_6_3,
+        ("A", (3,4) ) : Z_fine_A_3_4,
+        ("A", (6,4) ) : Z_fine_A_6_4,
+        ("T", (8,1) ) : Z_fine_T_8_1,
+        ("T", (8,2) ) : Z_fine_T_8_2
+    }
+
                         
 
 
