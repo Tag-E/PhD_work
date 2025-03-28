@@ -211,6 +211,10 @@ class moments_toolkit(bulding_block):
         self.M_from_S_diff: np.ndarray[gv._gvarcore.GVar] | None = None
         self.x_from_S_diff: np.ndarray[gv._gvarcore.GVar] | None = None
 
+        #we initialize the matrix element(M) and the moments(x) array (from the R extraction)
+        self.M_from_R:  np.ndarray[gv._gvarcore.GVar] | None = None #shape = (Nop,)
+        self.x_from_R:  np.ndarray[gv._gvarcore.GVar] | None = None
+
         #we initialize the parameters we have to specify in the fit
         self.central_value_fit:            bool = self.default_central_value_fit
         self.central_value_fit_correlated: bool = self.default_central_value_fit_correlated
@@ -1186,6 +1190,38 @@ class moments_toolkit(bulding_block):
         else:
             raise ValueError(f"The variable method can only assume values in the list ['fit', 'finite differences'], however method={method} was specified.")
 
+    #function used to obtain a value of the matrix element from the fit of the ratios
+    def get_M_from_R(self, isospin:str|None=None, moments:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+        """
+        Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
+
+        Input:
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
+            - moments: bool, if True the moments are returned (i.e. matrix elements normalized to the kinematic factors)
+            - force_computation: bool, if True the matrix element is computed again even though it could have been fetched from a class variable
+        
+        Output:
+            - matrix_elemets: np.ndarray of gvar variables, with shape (Nop,) containing the values of the matrix elements (or moments) 
+        """
+
+        #we check if we have to do the computation
+        if self.M_from_R is None or force_computation==True:
+            
+            #we do the fit of the ratios
+            fit_state_list =  self.fit_ratio(prior="guess", verbose=False, show=False, save=False)
+
+            #we construct the matrix elements from the final parameter estimate available for each fit state (one for each operator)
+            self.M_from_R = np.array( [ gv.gvar( fit_state.model_average()["est"]["A00"], fit_state.model_average()["err"]["A00"] )  for fit_state in fit_state_list ] )
+
+            #we take the list with the kinematic factors
+            Klist = self.get_Klist()
+
+            #we obtain the array with the moments by normalizing that with the matrix elements
+            self.x_from_R = np.array( [ M/Klist[iop] for iop,M in enumerate(self.M_from_R) ] )
+
+        #after computing it we return the matrix element (or moment) array
+        return self.x_from_R if moments==True else self.M_from_R
+    
 
 
     ## Plotter Methods (methods used to make the relevant plots of the data stored in the class)
@@ -1887,6 +1923,9 @@ class moments_toolkit(bulding_block):
             if verbose:
                 print("\nPlotting the fit of the ratios for each operator ...\n")
 
+            #we compute the values of M from S we are going to use later (one for each operator)
+            M_from_S_list = self.get_M_from_S(method="finite differences", moments=True) #TO DO: check differences between the two methods finite difference and fit
+
             #we loop over the operators
             for iop, op in enumerate(self.selected_op):
 
@@ -1968,7 +2007,7 @@ class moments_toolkit(bulding_block):
                 #we then plot also the horizontal line with the matrix element from S (we use as T the max T in the chosen ones)
 
                 #we get first the average matrix element
-                mat_ele_avg = average_moments_over_T( self.get_M_from_S(method="finite differences", moments=True)[iop], chi2=1 )[0]
+                mat_ele_avg = average_moments_over_T( M_from_S_list[iop], chi2=1 )[0]
 
                 #we the central value of the matrixc element and the 1sigma region around it
                 plt.hlines(mat_ele_avg.mean,-T/2+1,T/2-1,linestyle="solid", color="orange")
@@ -2057,6 +2096,8 @@ class moments_toolkit(bulding_block):
         self.x_from_S_fit  = None
         self.M_from_S_diff = None
         self.x_from_S_diff = None
+        self.M_from_R = None #shape = (Nop,) --> but we loop over T to find them
+        self.x_from_R = None
 
     #function used to re-initialize all the operator dependant class variables
     def re_initialize_operator_variables(self) -> None:
@@ -2078,6 +2119,8 @@ class moments_toolkit(bulding_block):
         self.x_from_S_fit  = None
         self.M_from_S_diff = None
         self.x_from_S_diff = None
+        self.M_from_R = None #shape = (Nop,)
+        self.x_from_R = None
 
     #function used to display the selected operators inside a jupyter notebook
     def display_operators(self) -> None:
