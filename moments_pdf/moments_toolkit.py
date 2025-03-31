@@ -1108,7 +1108,7 @@ class moments_toolkit(bulding_block):
         return Smean, Sstd
 
     #function used to extract the matrix elements from the summed ratios
-    def get_M_from_S(self, method:str="fit", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], isospin:str|None=None, moments:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+    def get_M_from_S(self, method:str="fit", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], isospin:str|None=None, moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
 
@@ -1118,6 +1118,7 @@ class moments_toolkit(bulding_block):
             - delta_list: list of delta that we want to use in the analysis (only used if method == "finite differences")
             - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - moments: bool, if True the moments are returned (i.e. matrix elements normalized to the kinematic factors)
+            - renormalize: bool, if True the final results (either matrix elements or moments) are renormalized according to the appropiate renormalization factor
             - force_computation: bool, if True the matrix element is computed again even though it could have been fetched from a class variable
         
         Output:
@@ -1235,8 +1236,8 @@ class moments_toolkit(bulding_block):
                         self.M_from_S_fit[iop,iTstart] = gv.gvar(fit_state.model_average()["est"]["m"],fit_state.model_average()["err"]["m"]) if len(fit_state.model_average())>0 else gv.gvar(0,0)
                         self.x_from_S_fit[iop,iTstart] = self.M_from_S_fit[iop,iTstart] / Klist[iop]
 
-            #after computing it we return the matrix element (or moment) array
-            return self.x_from_S_fit if moments==True else self.M_from_S_fit
+            #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
+            return np.einsum("ij,i->ij", self.x_from_S_fit if moments==True else self.M_from_S_fit, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
 
         #finite differences calculation
         elif method=="finite differences":
@@ -1265,21 +1266,22 @@ class moments_toolkit(bulding_block):
                     self.M_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std)
                     self.x_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std) / Klist[iop]
 
-            #after computing it we return the matrix element (or moment) array
-            return self.x_from_S_diff if moments==True else self.M_from_S_diff
+            #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
+            return  np.einsum("ij,i->ij", self.x_from_S_diff if moments==True else self.M_from_S_diff, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
 
         #raise an error if something else is specified
         else:
             raise ValueError(f"The variable method can only assume values in the list ['fit', 'finite differences'], however method={method} was specified.")
 
-    #function used to obtain a value of the matrix element from the fit of the ratios
-    def get_M_from_R(self, isospin:str|None=None, moments:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+    #function used to obtain a value of the matrix element from the fit of the ratios #TO DO: have a look at where to use isospin here
+    def get_M_from_R(self, isospin:str|None=None, moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
 
         Input:
             - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - moments: bool, if True the moments are returned (i.e. matrix elements normalized to the kinematic factors)
+            - renormalize: bool, if True the final results (either matrix elements or moments) are renormalized according to the appropiate renormalization factor
             - force_computation: bool, if True the matrix element is computed again even though it could have been fetched from a class variable
         
         Output:
@@ -1301,8 +1303,8 @@ class moments_toolkit(bulding_block):
             #we obtain the array with the moments by normalizing that with the matrix elements
             self.x_from_R = np.array( [ M/Klist[iop] for iop,M in enumerate(self.M_from_R) ] )
 
-        #after computing it we return the matrix element (or moment) array
-        return self.x_from_R if moments==True else self.M_from_R
+        #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
+        return ( self.x_from_R if moments==True else self.M_from_R ) * ( self.get_Zlist() if renormalize==True else 1.0 )
     
 
 
@@ -2067,7 +2069,7 @@ class moments_toolkit(bulding_block):
                         fit_ordinate_array = np.array( [ gv.gvar( fitresult.eval( abscissa )["est"], fitresult.eval( abscissa )["err"] ) for fitresult in fit_state] )
 
                         #then we average them using as weights the AIC (same criterion used to average the parameters) #TO DO: check whether this is legit
-                        fit_ordinate = np.average(fit_ordinate_array, axis=0, weights=weights_from_fitstate(fit_state))
+                        fit_ordinate = np.average(fit_ordinate_array, axis=0, weights=weights_from_fitstate(fit_state)) #TO DO: do this average using different abscissa intervals for different fits
 
                         #from the ordinate obtained from the best fit result we construct arrays with the mean value and the +-1 sigma region
                         ordinate_mean = np.array( [ordinate.mean for ordinate in fit_ordinate] )
