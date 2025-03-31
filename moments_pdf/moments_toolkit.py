@@ -239,6 +239,8 @@ class moments_toolkit(bulding_block):
         self.resampling = jackknife
         self.resamples_array = jackknife_resamples
         self.resampling_type = "jackknife"
+        self.Nres = self.nconf                      #the standard jackknife has nconf resamples, ...
+        self.sample_per_resamples = self.nconf - 1  #... each containing nconf-1 configurations
 
 
         ## We initialize to None some variables that will be later accessed using getter methods
@@ -552,18 +554,20 @@ class moments_toolkit(bulding_block):
             #the number of bins and the first and last configuration are set
             self.resampling = partial( jackknife, binsize=binsize, first_conf=first_conf, last_conf=last_conf )
             self.resamples_array = partial( jackknife_resamples, binsize=binsize, first_conf=first_conf, last_conf=last_conf )
-            self.resampling_type = "jackknife" 
+            self.resampling_type = "jackknife"
+            self.Nres = int((last_conf-first_conf)/binsize) if last_conf is not None else self.nconf 
+            self.sample_per_resamples = last_conf-first_conf-binsize if last_conf is not None else self.nconf-1
 
         #... or the bootstrap
         elif resampling == "bootstrap":
 
             #we adjust the input to the standard values if we have to
-            Nres = Nres if Nres is not None else self.nconf * 2
-            sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else self.nconf
+            self.Nres = Nres if Nres is not None else self.nconf * 2
+            self.sample_per_resamples = sample_per_resamples if sample_per_resamples is not None else self.nconf
 
             #the number of resamples and the samples per resamples are set 
-            self.resampling = partial( bootstrap, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=False )
-            self.resamples_array = partial( bootstrap_resamples, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=False ) #new_resamples=False so that the configurations are drawn randomly only once
+            self.resampling = partial( bootstrap, Nres=self.Nres, sample_per_resamples=self.sample_per_resamples, new_resamples=False )
+            self.resamples_array = partial( bootstrap_resamples, Nres=self.Nres, sample_per_resamples=self.sample_per_resamples, new_resamples=False ) #new_resamples=False so that the configurations are drawn randomly only once
             self.resampling_type = "bootstrap" 
 
         #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized
@@ -1696,8 +1700,8 @@ class moments_toolkit(bulding_block):
             #we then loop over the starting times
             for i_tstart, t_start in enumerate(t_start_list):
 
-                #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = self.resampling(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1)
+                #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use 
+                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = self.resampling(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1) #TO DO: change the variables' names here since also bootstrap can be used
                 p2corr_resamples_plat = self.resamples_array(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), res_axis_list=0)
 
                 #we handle the prior determination of the parameters
@@ -1917,11 +1921,11 @@ class moments_toolkit(bulding_block):
                 fit_result = self.fit(
                         abscissa = abscissa,
                         ordinate_est = np.mean( Ratio_ror, axis = 0 ),
-                        ordinate_std = np.std ( Ratio_ror, axis = 0 ),
-                        ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                        ordinate_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std( Ratio_ror, axis = 0 ), #TO DO: extract ordinate directly from resampling, such that the prefactor here is already included
+                        ordinate_cov = (self.Nres-1 if self.resampling_type=="jackknife" else 1.0) * np.cov( Ratio_ror, rowvar = False ),
                         resample_ordinate_est = Ratio_ror,
-                        resample_ordinate_std = np.std ( Ratio_ror, axis = 0 ),
-                        resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                        resample_ordinate_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std( Ratio_ror, axis = 0 ),
+                        resample_ordinate_cov = (self.Nres-1 if self.resampling_type=="jackknife" else 1.0) * np.cov( Ratio_ror, rowvar = False ),
                         resample_type = "bst" if self.resampling_type=="bootstrap" else "jkn",
                         model = model,
                         prior=flat_prior if prior=="flat" else guess_prior,
@@ -1973,11 +1977,11 @@ class moments_toolkit(bulding_block):
                             fit_result = self.fit(
                                                 abscissa = abscissa,
                                                 ordinate_est = np.mean( Ratio_ror, axis = 0 ),
-                                                ordinate_std = np.std ( Ratio_ror, axis = 0 ),
-                                                ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                                                ordinate_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std( Ratio_ror, axis = 0 ), #TO DO: extract ordinate directly from resampling, such that the prefactor here is already included
+                                                ordinate_cov = (self.Nres-1 if self.resampling_type=="jackknife" else 1.0) * np.cov( Ratio_ror, rowvar = False ),
                                                 resample_ordinate_est = Ratio_ror,
-                                                resample_ordinate_std = np.std ( Ratio_ror, axis = 0 ),
-                                                resample_ordinate_cov = np.cov ( Ratio_ror, rowvar = False ),
+                                                resample_ordinate_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std( Ratio_ror, axis = 0 ),
+                                                resample_ordinate_cov = (self.Nres-1 if self.resampling_type=="jackknife" else 1.0) * np.cov( Ratio_ror, rowvar = False ),
                                                 resample_type = "bst" if self.resampling_type=="bootstrap" else "jkn",
                                                 model = model,
                                                 prior=flat_prior if prior=="flat" else guess_prior,
