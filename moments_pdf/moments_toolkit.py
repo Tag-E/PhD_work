@@ -881,6 +881,35 @@ class moments_toolkit(bulding_block):
         #we return the three components of the momentum
         return Px, Py, Pz
 
+    #function used to get the list with the renormalization factors associated to each of the selected operator
+    def get_Zlist(self) -> list[gv._gvarcore.GVar]:
+        """
+        Function used to obtain the list with all the numerical values of the renormalization factors associated to the selected operators.
+        
+        Input
+            - None (the renormalization factors are known a priori and they only depend on the choice of the lattice - coarse: T=48, fine: T=64)
+            
+        Output:
+            - Zlist: the list with the renormalization factors (as gvar variables), shape = (Nop,)
+        """
+
+        #we check whether we have to do fetch again the kinematic factors
+        if self.Zlist is None:
+
+            #depending on the lattice size (coarse or fine lattice) we have to look at a different dictionary storing all the renormalization values
+            renormalization_dict = self.renormalization_coarse if self.latticeT==48 else self.renormalization_fine
+
+            #we create the list containing the kinematic factor for each operator
+            try:
+                self.Zlist = [ renormalization_dict[(op.X,op.irrep)] for op in self.selected_op]
+
+            #if one of the selected operator has no definite irrep, or if the renormalization factor for its irrep is not know, we raise an error
+            except KeyError:
+                raise KeyError("The renormalization factor for at least one of the chosen operators is not known, please choose different operators if renormalized results are needed.")
+    
+        #we return a the list with the renormalization factors
+        return self.Zlist 
+
 
 
     ## Advanced Getter Methods (methods that return parameters stored in the class, but that require a computation being made each time the method is called)
@@ -1010,35 +1039,6 @@ class moments_toolkit(bulding_block):
 
         #we return a the list with the kinematic factors
         return self.Klist 
-
-    #function used to get the list with the renormalization factors associated to each of the selected operator
-    def get_Zlist(self) -> list[gv._gvarcore.GVar]:
-        """
-        Function used to obtain the list with all the numerical values of the renormalization factors associated to the selected operators.
-        
-        Input
-            - None (the renormalization factors are known a priori and they only depend on the choice of the lattice - coarse: T=48, fine: T=64)
-            
-        Output:
-            - Zlist: the list with the renormalization factors (as gvar variables), shape = (Nop,)
-        """
-
-        #we check whether we have to do fetch again the kinematic factors
-        if self.Zlist is None:
-
-            #depending on the lattice size (coarse or fine lattice) we have to look at a different dictionary storing all the renormalization values
-            renormalization_dict = self.renormalization_coarse if self.latticeT==48 else self.renormalization_fine
-
-            #we create the list containing the kinematic factor for each operator
-            try:
-                self.Zlist = [ renormalization_dict[(op.X,op.irrep)] for op in self.selected_op]
-
-            #if one of the selected operator has no definite irrep, or if the renormalization factor for its irrep is not know, we raise an error
-            except KeyError:
-                raise KeyError("The renormalization factor for at least one of the chosen operators is not known, please choose different operators if renormalized results are needed.")
-    
-        #we return a the list with the renormalization factors
-        return self.Zlist 
 
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
