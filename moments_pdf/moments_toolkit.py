@@ -1782,12 +1782,12 @@ class moments_toolkit(bulding_block):
         return fit_state
 
     #function used to perform the fit of the ratios of the 3p and 2p correlators (so that the value of the matrix element can be extracted)
-    def fit_ratio(self, prior:str="guess",
+    def fit_ratio(self, prior:str="guess", chi2_threshold=5.0,
                   verbose:bool=False, show:bool=False, save:bool=False,
                   figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> list[CA.FitState]:
         """
         Input:
-            - prior: str, either "guess" or "flat, depending if one wants to use a flat prior or a large prior centered around an initial guess known a priori
+            - prior: str, either "guess" or "flat", depending if one wants to use a flat prior or a large prior centered around an initial guess known a priori
             - figsize: tuple[int,int], size of the matplotlib figure
             - fontsize_x: int, size of the font of the x label
             - fontsize_y: int, size of the font of the y label
@@ -1853,8 +1853,8 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.chosen_T_list):
                 
                 #we find how much data points we have to cut and store the detail about the cut (and the number of remaining points) into dictionaries
-                cut = plateau_search_symm(Rmean[iop,iT,:T+1],Rcov[iop,iT,:T+1,:T+1],only_sig=True, chi2_treshold=5.0)
-                cut_dict_list[iop][T] = cut
+                cut = plateau_search_symm(Rmean[iop,iT,1:T+1-1],Rcov[iop,iT,1:T+1-1,1:T+1-1],only_sig=True, chi2_treshold=chi2_threshold)
+                cut_dict_list[iop][T] = cut if cut is None else (cut[0]+1,cut[1]+1) #+1 because of the endpoint we removed on the line above
                 N_points_dict_list[iop][T] = cut[1]-cut[0] if cut is not None else 0
 
 
@@ -2681,12 +2681,12 @@ class SymmetricRatioModel:
         
         # The excited state at source 
         if self.number_states_source == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,10*dE_mean)) #gv.log(gv.gvar(1, 100))
+            prior["log(dE1(0))"] = gv.log(gv.gvar(2*dE_mean,10*dE_mean)) #gv.log(gv.gvar(1, 100))
             prior["A01"]    = sign*gv.gvar(1,100) 
 
         # The excited state at sink
         if self.number_states_sink == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,10*dE_mean)) #gv.log(gv.gvar(1, 100))
+            prior["log(dE1(0))"] = gv.log(gv.gvar(2*dE_mean,10*dE_mean)) #gv.log(gv.gvar(1, 100))
             prior["A01"]    = sign*gv.gvar(1,100) 
 
         # The excited states at source and sink 
@@ -2713,12 +2713,12 @@ class SymmetricRatioModel:
         
         # The excited state at source 
         if self.number_states_source == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean))
+            prior["log(dE1(0))"] = gv.log(gv.gvar(2*dE_mean,dE_mean))
             prior["A01"]    =sign*gv.gvar(1e-2,1)
 
         # The excited state at sink
         if self.number_states_sink == 2:
-            prior["log(dE1(0))"] = gv.log(gv.gvar(dE_mean,dE_mean))
+            prior["log(dE1(0))"] = gv.log(gv.gvar(2*dE_mean,dE_mean))
             prior["A01"]    = sign*gv.gvar(1e-2,1)
 
         # The excited states at source and sink 
