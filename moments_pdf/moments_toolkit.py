@@ -2274,6 +2274,53 @@ class moments_toolkit(bulding_block):
         #we return nothing
         return None
 
+    #function used to select the 1 derivative operators used in the paper
+    def focus_paper_operators(self, verbose:bool=False) -> None:
+        """
+        Function used to focus the analysis the one derivative operators studyied in the reference paper,
+        i.e the list of the selected operator will coincide after the function call with the list of the 
+        operators chosen in the paper.
+        
+        Input:
+            - None (the operators are hardcoded in the function)
+            
+        Output:
+            - None (the operators are selected)
+        """
+
+        #we take the operators of the paper
+        opV1 = 1/6 * self.get_operator(2)
+        opV2 = 1/(3 * np.sqrt(2)) * (self.get_operator(2) - self.get_operator(3))
+        opV3 = 1/np.sqrt(2) * self.get_operator(14)
+
+        opA1 = 1/np.sqrt(2) * self.get_operator(28)
+        opA2 = 1/np.sqrt(2) * self.get_operator(32)
+
+        opT1 = self.get_operator(74) + 1/2 * self.get_operator(78)
+        opT2 = self.get_operator(78)
+        opT3 =  1/6 * ( -3 * self.get_operator(83) + 2 * self.get_operator(87) + 3* self.get_operator(91) + self.get_operator(95) )
+        opT4 = 1/2 * ( self.get_operator(83) + 2 * self.get_operator(87) -2* self.get_operator(91) )
+
+        #we empty the list of the selected operators
+        self.deselect_operator()
+
+        #we append the operators
+        self.append_operator(opV1)
+        self.append_operator(opV2)
+        self.append_operator(opV3)
+        self.append_operator(opA1)
+        self.append_operator(opA2)
+        self.append_operator(opT1)
+        self.append_operator(opT2)
+        self.append_operator(opT3)
+        self.append_operator(opT4)
+
+        #info print
+        if verbose:
+            print("\nThe one derivate operators used in the paper have been selected for the analysis.\n")
+
+        return None
+        
 
 
     ## Work in Progress Methods (stuff still in development)
