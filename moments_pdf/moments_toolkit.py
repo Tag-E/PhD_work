@@ -1957,8 +1957,8 @@ class moments_toolkit(bulding_block):
                         #for the shortest T, if there are no points, we do not include more
                         if i==0 and Npoints!=0: continue
 
-                        #instead for bigger values of T we expand the number of points (if they're not already too much)
-                        if (i==0 and Npoints==0) or (Npoints < list(N_points_dict.values())[i-1] and Npoints <T):
+                        #instead for bigger values of T we expand the number of points (if they're not already too much) #TO DO: the -1 down here implement also in the first Npoints search
+                        if (i==0 and Npoints==0) or (Npoints < list(N_points_dict.values())[i-1] and Npoints <T-1):
                             
                             #if there are already some points we add the next two ones on the edges
                             if Npoints!=0:
