@@ -918,7 +918,7 @@ class moments_toolkit(bulding_block):
 
     ## Advanced Getter Methods (methods that return parameters stored in the class, but that require a computation being made each time the method is called)
 
-    #function used to obtain the ground state energy from the fit to the two point function
+    #function used to obtain the ground state energy from the fit to the two point function #TO DO: store fit state inside class
     def get_E(self, force_fit:bool=False,  units:str="lattice") -> gv._gvarcore.GVar:
         """
         Function returning the gvar variable with the ground state energy obtained from the fit to the two point correlator
@@ -2227,6 +2227,52 @@ class moments_toolkit(bulding_block):
 
         for op in self.selected_op:
             op.display()
+
+    #function used to perform once all the lengthy computations and to store the result for future reference
+    def pre_do_computations(self, verbose:bool=False) -> None:
+        """
+        Function performing calls to all the time consuming routines of the class. In this way the final result
+        will be computed and can be later accessed without waiting times.
+        
+        Input:
+            - verbose: bool, if True informative output is shown while the function is being executed
+        
+        Output:
+            - None (the results computed after the various methods are called get stored in class attributes)
+        """
+
+        #info print
+        if verbose:
+            print("\nPerforming the two-point correlator fit to compute E, m, and the kinematic factors, ...\n")
+
+        #we do the fit once to compute energy and mass
+        _ = self.get_E()
+        _ = self.get_m()
+        _ = self.get_Klist()
+
+        #info print
+        if verbose:
+            print("\nPerforming the two-point correlator fit to compute dE, ...\n") #TO DO: put the deltaE determination in the above list, i.e. store fit state as a class variable
+
+        #we do the fit once to compute energy and mass
+        _ = self.get_dE()
+
+        #info print
+        if verbose:
+            print("\nComputing matrix elements and moments from the summed ratios ...\n") 
+
+        #we do the fit once to compute energy and mass
+        _ = self.get_M_from_S()
+
+        #info print
+        if verbose:
+            print("\nComputing matrix elements and moments from the 2 state fit of the ratios ...\n") 
+
+        #we do the fit once to compute energy and mass
+        _ = self.get_M_from_R()
+
+        #we return nothing
+        return None
 
 
 
