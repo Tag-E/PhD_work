@@ -2274,7 +2274,7 @@ class moments_toolkit(bulding_block):
         #we return nothing
         return None
 
-    #function used to select the 1 derivative operators used in the paper
+    #function used to select the 1 derivative operators used in the paper #TO DO: add control on dimensionality of operators (check also if that control is needed)
     def focus_paper_operators(self, verbose:bool=False) -> None:
         """
         Function used to focus the analysis the one derivative operators studyied in the reference paper,
@@ -2282,7 +2282,7 @@ class moments_toolkit(bulding_block):
         operators chosen in the paper.
         
         Input:
-            - None (the operators are hardcoded in the function)
+            - verbose: bool, if True info are printed to screen after the function is called
             
         Output:
             - None (the operators are selected)
@@ -2319,8 +2319,31 @@ class moments_toolkit(bulding_block):
         if verbose:
             print("\nThe one derivate operators used in the paper have been selected for the analysis.\n")
 
-        return None
+    
+    #function used to deselect all the operators having zero kinematical factor
+    def remove_zeroK_operators(self, verbose:bool=False) -> None:
+        """
+        Function used to remove from the analysis all the operators having a zero kinematical factor.
         
+        Input:
+            - verbose: bool, if True info are printed to screen after the function is called
+            
+        Output:
+            - None (the operators having zero kinematical factors gets removed from the list)
+        """
+
+        #we first compute the list of the kinematic factor for each of the selected operator
+        Klist = self.get_Klist()
+
+        #we then asses which operators to remove by looking whether they have a 0 kinematic factor or not
+        eliminate_op = [op for op,kin in zip(self.selected_op,Klist) if np.abs( kin.mean ) == 0]
+
+        #we then deselect all the operators with 0 kinematic factor
+        for op in eliminate_op:
+            self.deselect_operator(op)
+
+        if verbose:
+            print("\nDeselected all the operators with kinematic factor equal to 0. The analysis can now be carried on assuming a non zero kinematical factor for each operator.\n")
 
 
     ## Work in Progress Methods (stuff still in development)
