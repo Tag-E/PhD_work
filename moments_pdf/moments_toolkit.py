@@ -1365,8 +1365,11 @@ class moments_toolkit(bulding_block):
         #we loop over the moments obtained from the summed ratios method and we append them to the list
         for x_list,x_ren_list,op,Z in zip(x_from_S,x_from_S_ren,self.selected_op,self.get_Zlist()):
 
-            #we loop over the time values
-            for x,x_ren,T in zip(x_list,x_ren_list,self.chosen_T_list):
+            #we compute the starting point of the plateau in T
+            _, iTmin = average_moments_over_T(x_ren_list, chi2=1.0)
+
+            #we loop over the source sink separation values bigger (or equal) than the minimum T
+            for x,x_ren,T in zip(x_list[iTmin:], x_ren_list[iTmin:], self.chosen_T_list[iTmin:]):
 
                 #if for the given time the moment is non zero we append the result to the list
                 if x!=0:
@@ -2675,7 +2678,7 @@ def make_fitplot_2pcorr(fit_result:CA.FitResult, correlator:gv._gvarcore.GVar ,a
 
 
 #auxiliary function used to average values of the moments over various values of T
-def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.0) -> gv._gvarcore.GVar:
+def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.0) -> tuple[gv._gvarcore.GVar, int]:
     """
     Function used to average the moments over different source sink separations, as in eq 14 of the reference paper
     
