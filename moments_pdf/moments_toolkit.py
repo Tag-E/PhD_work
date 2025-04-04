@@ -1853,8 +1853,8 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.chosen_T_list):
                 
                 #we find how much data points we have to cut and store the detail about the cut (and the number of remaining points) into dictionaries
-                cut = plateau_search_symm(Rmean[iop,iT,1:T+1-1],Rcov[iop,iT,1:T+1-1,1:T+1-1],only_sig=True, chi2_treshold=chi2_threshold)
-                cut_dict_list[iop][T] = cut if cut is None else (cut[0]+1,cut[1]+1) #+1 because of the endpoint we removed on the line above
+                cut = plateau_search_symm(Rmean[iop,iT,2:T+1-2],Rcov[iop,iT,2:T+1-2,2:T+1-2],only_sig=True, chi2_treshold=chi2_threshold)
+                cut_dict_list[iop][T] = cut if cut is None else (cut[0]+2,cut[1]+2) #+2 because of the endpoint we removed on the line above
                 N_points_dict_list[iop][T] = cut[1]-cut[0] if cut is not None else 0
 
 
