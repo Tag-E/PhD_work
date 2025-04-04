@@ -59,6 +59,7 @@ from utilities import bootstrap, bootstrap_resamples #to perform a statistical a
 from utilities import plateau_search #function used to search for the plateau region of a 1D array
 from utilities import plateau_search_symm #function used to search for the plateau region of a 1D array around its mid point
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
+from moments_result import moments_result #dataclass used to store the information related to the results of the moments extracted from the data analysis
 
 
 
@@ -285,6 +286,9 @@ class moments_toolkit(bulding_block):
                            resample_fit=self.resample_fit, resample_fit_correlated=self.resample_fit_correlated,
                            resample_fit_resample_prior=self.resample_fit_resample_prior,
                            svdcut=self.svdcut, maxiter=self.maxiter)                                                                 # <- args for lsqfit
+        
+        #list with the values of the moment resulting from the data analysis
+        self.result_moments_list : list[moments_result] | None = None
 
         ## We build the list of all the available operators
 
@@ -1310,6 +1314,77 @@ class moments_toolkit(bulding_block):
         #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
         return ( self.x_from_R if moments==True else self.M_from_R ) * ( self.get_Zlist() if renormalize==True else 1.0 )
     
+    #function used to extract all the results using the data analysis routines available in the class
+    def extract_result(self, verbose:bool=False) -> list[moments_result]: 
+        """
+        Function returning a list with all the results that can be extracted from the given class instance.
+        
+        Input:
+            - verbose: bool, if True info print are shown
+            
+        Output:
+            - result_list: a list with all the instances of the moments result that can be extracted from the class
+        """
+
+
+        # We first compute the result
+
+        #info print
+        if verbose:
+            print("\nDoing all the computations needed to have all the results obtainable from this class instance:\n")
+
+        #we call the function performing all the computations so that we can then access immediately all the information needed to build the results
+        self.pre_do_computations(verbose=verbose)
+
+        #we collect the moments from the summed ratio method
+        x_from_S = self.get_M_from_S(method="finite differences", moments=True, renormalize=False)
+        x_from_S_ren = self.get_M_from_S(method="finite differences", moments=True, renormalize=True)
+
+        #we collect the moments from the fit ratio method
+        x_from_R = self.get_M_from_R(moments=True, renormalize=False)
+        x_from_R_ren = self.get_M_from_R(moments=True, renormalize=True)
+
+
+        # We now put all the results into a list and then return them
+
+        #info print
+        if verbose:
+            print("\nAll computations done, putting all the results into one list ...\n")
+
+        #we reinitialize the list with all the results
+        self.result_moments_list = []
+
+        #we loop over the moments obtained from two state fit of the ratio and we append them to the list
+        for x,x_ren,op,Z in zip(x_from_R,x_from_R_ren,self.selected_op,self.get_Zlist()):
+
+            #we construct the correct class instance and append it to the list
+            self.result_moments_list.append( moments_result(value=x, renormalized_value=x_ren,
+                                                            operator=op, P=self.get_P(), method=2, T=None,
+                                                            Z=Z, X=op.X, a=self.a_coarse if self.latticeT==48 else self.a_fine, latticeT=self.latticeT) )
+            
+        #we loop over the moments obtained from the summed ratios method and we append them to the list
+        for x_list,x_ren_list,op,Z in zip(x_from_S,x_from_S_ren,self.selected_op,self.get_Zlist()):
+
+            #we loop over the time values
+            for x,x_ren,T in zip(x_list,x_ren_list,self.chosen_T_list):
+
+                #if for the given time the moment is non zero we append the result to the list
+                if x!=0:
+                    self.result_moments_list.append( moments_result(value=x, renormalized_value=x_ren,
+                                                                    operator=op, P=self.get_P(), method=1, T=T,
+                                                                    Z=Z, X=op.X, a=self.a_coarse if self.latticeT==48 else self.a_fine, latticeT=self.latticeT) )
+
+
+        # We return the results
+
+        #print info
+        if verbose:
+            print("\nResults prepared and successfully returned!\n")
+
+        #we return the list with the results
+        return self.result_moments_list
+
+        
 
 
     ## Plotter Methods (methods used to make the relevant plots of the data stored in the class)
@@ -2318,7 +2393,6 @@ class moments_toolkit(bulding_block):
         #info print
         if verbose:
             print("\nThe one derivate operators used in the paper have been selected for the analysis.\n")
-
     
     #function used to deselect all the operators having zero kinematical factor
     def remove_zeroK_operators(self, verbose:bool=False) -> None:
