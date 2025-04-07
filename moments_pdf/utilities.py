@@ -43,7 +43,7 @@ import itertools as it #for fancy iterations (groupby: used to asses the equalit
 ## Data Analysis Specific Routines ##
 
 #function implementing the jackknife analysis
-def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int|None]=0, time_axis:int|None=None, binsize:int=1,first_conf:int=0,last_conf:int|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]:
+def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int|None]=0, time_axis:int|None=None, binsize:int=1,first_conf:int=0,last_conf:int|None=None, resamples_available: None|np.ndarray = None) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]:
     """
     Function implemeneting the Jackknife mean and std estimation. The input array(s) has to match the input required by the observable function. If a list of array is given then also a list of
     jackknife axis and time axis has to be given.
@@ -56,6 +56,7 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
         - binsize: binning of the jackknife procedure
         - first_conf: index of the first configuration taken into account while performing the jackknife procedure
         - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
+        - resamples_available: None by default, it can be setted to be the value of the already computed resamples array, such that the resampling re-computation is avoided (shape of the resamples should be (Nres,) + output_shape)
 
     Output:
         - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
@@ -72,37 +73,45 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
         in_array_list = [in_array_list]
         res_axis_list = [res_axis_list]
 
-    #we make some input control and modifications on the axis array
-    for i,axis in enumerate(res_axis_list[:]):
+    # #we make some input control and modifications on the axis array
+    # for i,axis in enumerate(res_axis_list[:]):
 
-        #the number of dimension for the i_th array is
-        ndim = in_array_list[i].ndim
+    #     #the number of dimension for the i_th array is
+    #     ndim = in_array_list[i].ndim
 
-        #we check that axis is in the right range
-        if axis >= ndim or axis<-ndim:
-            raise ValueError(f"The input array has shape {in_array_list[i].shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={res_axis_list} were given.")
+    #     #we check that axis is in the right range
+    #     if axis >= ndim or axis<-ndim:
+    #         raise ValueError(f"The input array has shape {in_array_list[i].shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={res_axis_list} were given.")
         
-        #we cast each axis to a positive number
-        res_axis_list[i] = (axis + ndim) % ndim
+    #     #we cast each axis to a positive number
+    #     res_axis_list[i] = (axis + ndim) % ndim
 
-    #we set last conf to its default value
-    if last_conf is None:
-        last_conf = np.shape(in_array_list[0])[res_axis_list[0]]
-
-
-    ## Step 1: creation of the jackknife resamples
-
-    #we create a jack resample for each input array in the input list
-    jack_resamples_list = [ np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=res_axis_list[i]) for iconf in range(first_conf,last_conf,binsize)] ) for i,in_array in enumerate(in_array_list)] #shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
-
-    #the number of resamples is len(jack_resmaples_list[0]) or also: nresamp = int((last_conf-first_conf)/binsize)
-    nresamp = np.shape(jack_resamples_list[0])[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
+    # #we set last conf to its default value
+    # if last_conf is None:
+    #     last_conf = np.shape(in_array_list[0])[res_axis_list[0]]
 
 
-    ## Step 2: for each resample we compute the observable of interest
+    # ## Step 1: creation of the jackknife resamples
 
-    #we use the resampled input array to compute the observable we want, and we have nresamp of them
-    obs_resamp = np.asarray( [observable( *[jack_resamples[i] for jack_resamples in jack_resamples_list] ) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + output_shape
+    # #we create a jack resample for each input array in the input list
+    # jack_resamples_list = [ np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=res_axis_list[i]) for iconf in range(first_conf,last_conf,binsize)] ) for i,in_array in enumerate(in_array_list)] #shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
+
+    # #the number of resamples is len(jack_resmaples_list[0]) or also: nresamp = int((last_conf-first_conf)/binsize)
+    # nresamp = np.shape(jack_resamples_list[0])[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
+
+
+    # ## Step 2: for each resample we compute the observable of interest
+
+    # #we use the resampled input array to compute the observable we want, and we have nresamp of them
+    # obs_resamp = np.asarray( [observable( *[jack_resamples[i] for jack_resamples in jack_resamples_list] ) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + output_shape
+
+    ##  Step 1 and 2: creation of resamples and computation of the specified observable for each resample
+
+    #we just have to call the routine for the boostrap resampling (or we use the resamples already available)
+    obs_resamp = resamples_available if resamples_available is not None else jackknife_resamples(in_array_list=in_array_list, observable=observable, res_axis_list=res_axis_list, binsize=binsize, first_conf=first_conf, last_conf=last_conf) #shape = (nresamp,) + output_shape
+ 
+    #we can now read the number of resamples from the first axis of the resamples array
+    nresamp = np.shape(obs_resamp)[0] #the 0th axis  is the resample axis (and it has leght nconf-1  in the standard case with binsize=1, firstconf=0, lastconf=Nconf)
 
 
     ## Step 3: we compute the observable also on the whole dataset
@@ -180,7 +189,7 @@ def jackknife_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
         - last_conf: index of the last configuration taken into account while performing the jackknife procedure (if not specified then the last available configuration is used)
 
     Output:
-        - list with [mean, std, cov] where mean and std are np array with same the same shape as the input one minus the jackknife dimension, and the cov has one extra time dimension (the new time dimension is now the last one)
+        - jackknife_resamples: shape = (nresamp,) + output_shape, where nresamp = int((last_conf-first_conf)/binsize) and output_shape is the shape of the observable function output
     """
 
     #we make a check on the input to asses that the number of input_array is consistent with the number of jackknife axes
@@ -308,7 +317,7 @@ def bootstrap_resamples(in_array_list: np.ndarray|list[np.ndarray], observable: 
     return obs_resamp
 
 #function that generates the bootstap resampled of the given array along a specified axis
-def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None, new_resamples:bool=True, time_axis:int|None=-1) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap 
+def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[], Any], res_axis_list:int|list[int], Nres:int, sample_per_resamples:int|None=None, new_resamples:bool=True, time_axis:int|None=-1, resamples_available: None|np.ndarray = None) -> tuple[np.ndarray,np.ndarray,np.ndarray|None]: #TO DO: move the bts axis to the last position, then use a faster algorithm to do the bootstrap 
     """
     Function performing the bootstrap resampling (sample with replacement) of the input array along a given axis
     (obtained with (not so) minimal modifications of the code given in: https://stackoverflow.com/a/53236272)
@@ -321,6 +330,7 @@ def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
         - sample_per_resamples: int, the number of samples (configurations) that each resamples has
         - new_resamples: bool, if True the the configurations in each resamples are drawn randomly again, if False the configuration drawn randomly during the last execution are used
         - time_axis: int, the axis on the output array (i.e. after observable is applyied!!) over to which look for the autocorrelation, (if None the covariance matrix is not computed)
+        - resamples_available: None by default, it can be setted to be the value of the already computed resamples array, such that the resampling re-computation is avoided (shape of the resamples should be (Nres,) + output_shape)
     
     Output:
         - mean, std, covmat: mean, standard deviation and covariance matrix of the observable of interest, computed with the bootstrap procedure, the shape is the output one of the observable function for
@@ -345,8 +355,8 @@ def bootstrap(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
 
     ##  Step 1 and 2: creation of resamples and computation of the specified observable for each resample
 
-    #we just have to call the routine for the boostrap resampling
-    obs_resamp = bootstrap_resamples(in_array_list=in_array_list, observable=observable, res_axis_list=res_axis_list, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=new_resamples) #shape = (nresamp,) + output_shape
+    #we just have to call the routine for the boostrap resampling (or we use the resamples already available)
+    obs_resamp = resamples_available if resamples_available is not None else bootstrap_resamples(in_array_list=in_array_list, observable=observable, res_axis_list=res_axis_list, Nres=Nres, sample_per_resamples=sample_per_resamples, new_resamples=new_resamples) #shape = (nresamp,) + output_shape
 
 
     ## Step 3: we compute the observable also on the whole dataset
