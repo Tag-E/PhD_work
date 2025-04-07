@@ -596,25 +596,33 @@ class moments_toolkit(bulding_block):
         self.S_resamples = None #shape = (Nres, Nop, NT)
 
 
-    #method used to select the default value of the isospin used by default by the other methods #TO DO: add isospin variables re-initialization
-    def set_isospin(self, isospin:str) -> None:
+    #method used to select the default value of the isospin used by default by the other methods
+    def set_isospin(self, isospin:str, verbose:bool=False) -> None:
         """
         Function used to change the default value of the isospin (by default it is set to "U-D" by the init method)
         
         Input:
             - isospin: str, either 'U', 'D', 'U-D' or 'U+D', the default value of isospin that will be used by all the method calls if no other isospin value is specified
+            - verbose: bool, if True an info print will be given along the function call
         
         Output:
             - None (the default value of the isospin stored in the class gets updated)
         """
         
         #input control
-        if isospin not in self.isospin_list:
+        if isospin not in self.isospin_list or isospin is not None:
             raise ValueError(f"The isospin value must be one in the list {self.isospin_list}, but instead {isospin} was chosen.")
         
         #if the input is ok we change the default value of the isospin (the one that will be used by the other methods if the isospin parameter is not specified when calling them)
         else:
             self.isospin = isospin
+
+        #we re-initialize the variables depending on the isospin choice
+        self.re_initialize_isospin_variables()
+
+        #info print:
+        if verbose:
+            print(f"\nAvailable choices for the isospin: {self.isospin_list}\nChosen isospin: {self.isospin}\n")
 
     #function used to deselect some source-sink separation values T from the analysis
     def remove_T(self, *args: int, verbose:bool=False) -> None:
@@ -1063,12 +1071,11 @@ class moments_toolkit(bulding_block):
         return self.Klist 
 
     #function used to get the resamples of the ratios R
-    def get_R_resamples(self, isospin:str|None=None, force_computation:bool=False) -> np.ndarray:
+    def get_R_resamples(self, force_computation:bool=False) -> np.ndarray:
         """
         Function used to get the resamples of the ratios R according to the resampling technique specified in the class instance.
         
         Input:
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - force_computation: bool, if True the resamples are computed again even though they could have been fetched from a class variable
         
         Output:
@@ -1076,13 +1083,10 @@ class moments_toolkit(bulding_block):
         """        
 
         #we check whether we have to do the computation or not
-        if self.R_resamples is None or force_computation==True or self.get_R_resamples_isospin != isospin:
-
-            #we update the value of isospin stored in the class
-            self.get_R_resamples_isospin = isospin
+        if self.R_resamples is None or force_computation==True:
 
             #We first take the 3 point and 2 point correlators needed to compute the ratio
-            p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+            p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
             p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
             #the shape of the ratio is given by (nop, nT, maxT+1), i.e.
@@ -1101,13 +1105,12 @@ class moments_toolkit(bulding_block):
         return self.R_resamples
 
     #function used to get the resamples of the summed ratios S
-    def get_S_resamples(self, tskip: int, isospin:str|None=None, force_computation:bool=False) -> np.ndarray:
+    def get_S_resamples(self, tskip: int, force_computation:bool=False) -> np.ndarray:
         """
         Function used to get the resamples of the summed ratios S according to the resampling technique specified in the class instance.
 
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - force_computation: bool, if True the resamples are computed again even though they could have been fetched from a class variable
 
         Output:
@@ -1115,14 +1118,13 @@ class moments_toolkit(bulding_block):
         """
 
         #we check whether we have to do the computation or not
-        if self.S_resamples is None or force_computation==True or self.get_S_resamples_tskip != tskip or self.get_S_resamples_tskip != isospin:
+        if self.S_resamples is None or force_computation==True or self.get_S_resamples_tskip != tskip:
 
-            #we update the value of tskip and isospin stored in the class
+            #we update the value of tskip stored in the class
             self.get_S_resamples_tskip = tskip
-            self.get_S_resamples_tskip = isospin
 
             #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
-            p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+            p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
             p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
             #the shape of the ratio is given by (nop, nT), i.e.
@@ -1142,10 +1144,10 @@ class moments_toolkit(bulding_block):
 
 
     #function used to compute the ratio R(T,tau)
-    def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
+            - None (all the information required to get the ratios is alreday store inside the class)
 
         Output:
             - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
@@ -1154,7 +1156,7 @@ class moments_toolkit(bulding_block):
         """
 
         #We first take the 3 point and 2 point correlators needed to compute the ratio
-        p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+        p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
         p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
         #the shape of the ratio is given by (nop, nT, maxT+1), i.e.
@@ -1166,7 +1168,7 @@ class moments_toolkit(bulding_block):
         Rcovmat = np.zeros(shape=R_shape + (R_shape[-1],), dtype=float)
 
         #we get the resamples of the ratios
-        R_resamples = self.get_R_resamples(isospin=isospin, force_computation=False) #shape = (Nres, nop, nT, maxT+1)
+        R_resamples = self.get_R_resamples(force_computation=False) #shape = (Nres, nop, nT, maxT+1)
 
         #we loop over all the T values we have
         for iT,T in enumerate(self.chosen_T_list):
@@ -1178,13 +1180,12 @@ class moments_toolkit(bulding_block):
         return Rmean, Rstd, Rcovmat
 
     #function used to to compute the sum of ratios S
-    def get_S(self, tskip: int, isospin:str|None=None) -> tuple[np.ndarray, np.ndarray]:
+    def get_S(self, tskip: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
 
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
-            - isospin: either 'U', 'D', 'U-D' or 'U+D'
 
         Output:
             - Smean: the mean resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
@@ -1192,7 +1193,7 @@ class moments_toolkit(bulding_block):
         """
 
         #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
-        p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+        p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
         p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
         #the shape of the ratio is given by (nop, nT), i.e.
@@ -1203,7 +1204,7 @@ class moments_toolkit(bulding_block):
         Sstd = np.zeros(shape=S_shape, dtype=float)
 
         #we get the resamples of the summed ratios
-        S_resamples = self.get_S_resamples(tskip=tskip, isospin=isospin, force_computation=False) #shape = (Nres, nop, nT)
+        S_resamples = self.get_S_resamples(tskip=tskip, force_computation=False) #shape = (Nres, nop, nT)
 
         #we loop over all the T values we have
         for iT,T in enumerate(self.chosen_T_list):
@@ -1215,7 +1216,7 @@ class moments_toolkit(bulding_block):
         return Smean, Sstd
 
     #function used to extract the matrix elements from the summed ratios
-    def get_M_from_S(self, method:str="fit", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], isospin:str|None=None, moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+    def get_M_from_S(self, method:str="fit", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
 
@@ -1223,7 +1224,6 @@ class moments_toolkit(bulding_block):
             - method: str, either "fit or "finite differences", is the method that will be used to extract the matrix element from the summed ratios
             - tskip_list: list of tau skip we want to use in the analysis
             - delta_list: list of delta that we want to use in the analysis (only used if method == "finite differences")
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - moments: bool, if True the moments are returned (i.e. matrix elements normalized to the kinematic factors)
             - renormalize: bool, if True the final results (either matrix elements or moments) are renormalized according to the appropiate renormalization factor
             - force_computation: bool, if True the matrix element is computed again even though it could have been fetched from a class variable
@@ -1248,7 +1248,7 @@ class moments_toolkit(bulding_block):
 
                 #for each tskip we compute S
                 for itskip,tskip in enumerate(tskip_list): #TO DO: pythonize this for loop (after changing the output format of the get_S function)
-                    Smean, Sstd = self.get_S(tskip=tskip, isospin=isospin)
+                    Smean, Sstd = self.get_S(tskip=tskip)
                     Smean_array[itskip] = Smean
                     Sstd_array[itskip] = Sstd
 
@@ -1354,7 +1354,7 @@ class moments_toolkit(bulding_block):
                 
                 #we first take the correlators we need to compute everything
                 p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
-                p3corr = self.get_p3corr(isospin=isospin) #shape = (Nop, Nconf, NT, maxT+1)
+                p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
 
                 #we also take the list of kinematic factors
                 Klist = self.get_Klist()
@@ -1380,13 +1380,12 @@ class moments_toolkit(bulding_block):
         else:
             raise ValueError(f"The variable method can only assume values in the list ['fit', 'finite differences'], however method={method} was specified.")
 
-    #function used to obtain a value of the matrix element from the fit of the ratios #TO DO: have a look at where to use isospin here
-    def get_M_from_R(self, isospin:str|None=None, moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+    #function used to obtain a value of the matrix element from the fit of the ratios 
+    def get_M_from_R(self, moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
 
         Input:
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - moments: bool, if True the moments are returned (i.e. matrix elements normalized to the kinematic factors)
             - renormalize: bool, if True the final results (either matrix elements or moments) are renormalized according to the appropiate renormalization factor
             - force_computation: bool, if True the matrix element is computed again even though it could have been fetched from a class variable
@@ -1492,12 +1491,11 @@ class moments_toolkit(bulding_block):
     ## Plotter Methods (methods used to make the relevant plots of the data stored in the class)
 
     #function used to plot the ratio R for all the selected operators
-    def plot_R(self, isospin:str|None=None, show:bool=True, save:bool=False, figname:str='plotR',
+    def plot_R(self, show:bool=True, save:bool=False, figname:str='plotR',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
                rescale=False) -> list[tuple[Figure, Any]]:
         """
         Input:
-            - isospin: either 'U', 'D', 'U-D' or 'U+D
             - show: bool, if True the plot with R is shown
             - save: bool, if True the plot is saved to .png
             - figname: the name prefix of the .png files (one for each of the selected operators)
@@ -1517,7 +1515,7 @@ class moments_toolkit(bulding_block):
 
         
         #we first fetch R using the dedicate method
-        Rmean, Rstd, Rcovmat = self.get_R(isospin=isospin)
+        Rmean, Rstd, Rcovmat = self.get_R()
 
         #wewe instantiate the output list where we will store all the figure and axes
         fig_ax_list:list[tuple[Figure, Any]]  = []
@@ -1598,12 +1596,11 @@ class moments_toolkit(bulding_block):
         return fig_ax_list
     
     #function used to plot S
-    def plot_S(self, tskip:int, isospin:str|None=None, show:bool=True, save:bool=True, figname:str='plotS',
+    def plot_S(self, tskip:int, show:bool=True, save:bool=True, figname:str='plotS',
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,) -> tuple[Figure, Any]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
-            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
             - show: bool, if True plots are shown to screen
             - save: bool, if True plots are saved to .png files
 
@@ -1613,7 +1610,7 @@ class moments_toolkit(bulding_block):
 
         #first thing first we compute S with the fiven t skip 
         #S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
-        Smean, Sstd = self.get_S(tskip=tskip, isospin=isospin)  #shapes =  (Nop, NT), (Nop, NT)
+        Smean, Sstd = self.get_S(tskip=tskip)  #shapes =  (Nop, NT), (Nop, NT)
 
         ## we then remove from the plot all the value of S that are 0 (because the given T is too small compared ti tau skip)
 
@@ -2348,7 +2345,7 @@ class moments_toolkit(bulding_block):
         #we return the value in lattice units
         return output_value
 
-    #function used to re-initialize all the operator dependant class variables
+    #function used to re-initialize all the operator dependent class variables
     def re_initialize_T_variables(self) -> None:
         """
         Function that needs to be called after a change in the list of the source-sink separations T to be sure that all the T_list dependant variables are correctly re-initialized
@@ -2372,7 +2369,7 @@ class moments_toolkit(bulding_block):
         self.M_from_R = None #shape = (Nop,) --> but we loop over T to find them
         self.x_from_R = None
 
-    #function used to re-initialize all the operator dependant class variables
+    #function used to re-initialize all the operator dependent class variables
     def re_initialize_operator_variables(self) -> None:
         """
         Function that needs to be called after a change in the list of the selected operators to be sure that all the operator dependant variables are correctly re-initialized
@@ -2401,6 +2398,31 @@ class moments_toolkit(bulding_block):
         self.x_from_S_diff = None
         self.M_from_R = None #shape = (Nop,)
         self.x_from_R = None
+
+    #function used to re-initialize all the isospin choice dependent class variables
+    def re_initialize_isospin_variables(self) -> None:
+        """
+        Function that needs to be called after a change in the choice of the isospin to be sure that all the isospin dependent variables are correctly re-initialized
+        
+        Input:
+            - None
+        
+        Output:
+            - None (all the relevant class variables get re-initialized)
+        """
+
+        #we reset the arrays with the resamples
+        self.R_resamples = None #shape = (Nres, Nop, NT, maxT+1)
+        self.S_resamples = None #shape = (Nres, Nop, NT)
+
+        #we reset the array with the matrix elements and moments (shape = (Nop, NT))
+        self.M_from_S_fit  = None
+        self.x_from_S_fit  = None
+        self.M_from_S_diff = None
+        self.x_from_S_diff = None
+        self.M_from_R = None #shape = (Nop,)
+        self.x_from_R = None
+
 
     #function used to display the selected operators inside a jupyter notebook
     def display_operators(self) -> None:
