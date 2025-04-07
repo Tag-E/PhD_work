@@ -247,6 +247,9 @@ class moments_toolkit(bulding_block):
         #we initialize the value of the ground state energy
         self.E0: gv._gvarcore.GVar | None = None
 
+        #we initialize the value of the ground state energy for each resample
+        self.E0_resamples: np.ndarray[float] | None = None #shape = (Nres,)
+
         #we initialize the value of the energy difference between first excited and ground state
         self.dE: gv._gvarcore.GVar | None = None
 
@@ -255,6 +258,9 @@ class moments_toolkit(bulding_block):
 
         #we initialize the list with the kinematic factors of all the selected operators - shape = (Nop,)
         self.Klist: list[gv._gvarcore.GVar] | None = None
+
+        #we initialize the array with the resmaples of the kinematic factors - shape = (Nres, Nop)
+        self.K_resamples: np.ndarray[float] | None = None #shape = (Nres, Nop)
 
         #we initialize the list with the renormalization factors of all the selected operators - shape = (Nop,)
         self.Zlist: list[gv._gvarcore.GVar] | None = None
@@ -580,9 +586,11 @@ class moments_toolkit(bulding_block):
 
         #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized
         self.E0 = None
+        self.E0_resamples = None
         self.dE = None
         self.m = None
         self.Klist= None
+        self.K_resamples = None
         self.M_from_S_fit = None 
         self.x_from_S_fit = None
         self.M_from_S_diff= None
@@ -793,9 +801,11 @@ class moments_toolkit(bulding_block):
         
         #we re-initialize all the variables depending on the fit results
         self.E0 = None
+        self.E0_resamples = None
         self.dE = None
         self.m = None
         self.Klist= None
+        self.K_resamples = None
         self.M_from_S_fit = None 
         self.x_from_S_fit = None
         self.M_from_S_diff= None
@@ -965,7 +975,7 @@ class moments_toolkit(bulding_block):
         if self.E0 is None or force_fit==True:
 
             #first we perform the fit with the main method
-            fit2p = self.fit_2pcorr(show=False, save=False, fit_doubt_factor=3) #TO DO: adjust resamples, i.e. check whether resample fit can be True
+            fit2p = self.fit_2pcorr(show=False, save=False, fit_doubt_factor=3)
 
             #then we grep the parameters from the models average
             results = fit2p.model_average()
@@ -978,6 +988,33 @@ class moments_toolkit(bulding_block):
 
         #then we return a gv variable containing mean and std of the best estimate of the ground state energy
         return E0
+    
+    #function used to obtain the resamples of the ground state energy from the fit to the two point function #TO DO: store fit state inside class #TO DO: add check that resamples fit was done
+    def get_E_resamples(self, force_fit:bool=False) -> np.ndarray[float]:
+        """
+        Function returning the numpy array containing the resamples of the ground state energy obtained from the fit to the two point correlator
+        
+        Input:
+            - force_fit: bool, if True the fit is performed again even though the value of the energy could have been fetched from the class
+            
+        Output:
+            - E0_resamples: numpy array with the values the ground state energy (in lattice units) for each resamples
+        """
+
+        #we check whether we can avoid doing the fit
+        if self.E0_resamples is None or force_fit==True:
+
+            #first we perform the fit with the main method
+            fit2p = self.fit_2pcorr(show=False, save=False, fit_doubt_factor=3)
+
+            #then we grep the parameters from the models average
+            results = fit2p.model_average()
+
+            #we update the value of the resamples of the ground state energy stored in the class
+            self.E0_resamples = results["res"]["E0"]
+
+        #then we return the numpy array with the ground state energy for each resample
+        return self.E0_resamples
     
     #function used to obtain the energy difference between the the first excited state and the ground state, from the fit to the two point function
     def get_dE(self, force_fit:bool=False,  units:str="lattice") -> gv._gvarcore.GVar:
@@ -1043,13 +1080,13 @@ class moments_toolkit(bulding_block):
         #then we return a gv variable containing mean and std of the best estimate for the mass
         return m
 
-    #function used to get the list with the kinenatic factors associated to each of the selected operator
+    #function used to get the list with the kinenatic factors associated to each of the selected operator #TO DO: add check that resamples fit was done
     def get_Klist(self, force_computation: bool=False, force_fit: bool=False) -> list[gv._gvarcore.GVar]:
         """
         Function used to obtain the list with all the numerical values of the kinematic factors associated to the selected operators
         
         Input
-            - force_computation: bool, if True the K factorsa are computed again even though they could have been fetched from a class variable
+            - force_computation: bool, if True the K factors are computed again even though they could have been fetched from a class variable
             - force_fit: bool, if True the fit of the 2 point correlator is performed again even though the value of the energy  and the mass could have been fetched from the class
             
         Output:
@@ -1063,12 +1100,48 @@ class moments_toolkit(bulding_block):
             m = self.get_m(force_fit=force_fit)
             E0 = self.get_E() #(force fit not required here because the value of E0 gets updated by the call to get_m )
             p1, p2, p3 = self.get_P()
+            
 
             #we create the list containing the kinematic factor for each operator
             self.Klist = [op.evaluate_K_gvar(m_value=m, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3) for op in self.selected_op]
 
         #we return a the list with the kinematic factors
         return self.Klist 
+
+    #function used to get the list with the resamples of the kinenatic factors associated to each of the selected operator
+    def get_K_resamples(self, force_computation: bool=False, force_fit: bool=False) -> np.ndarray[float]:
+        """
+        Function used to obtain the array with all the numerical values of the resamples of the kinematic factors associated to the selected operators
+        
+        Input
+            - force_computation: bool, if True the K factors are computed again even though they could have been fetched from a class variable
+            - force_fit: bool, if True the fit of the 2 point correlator is performed again even though the value of the energy  and the mass could have been fetched from the class
+            
+        Output:
+            - K_resamples: the array with the kinematic factor, shape = (Nres, Nop), dtype=float
+        """
+
+        #we check whether we have to do the computation
+        if self.K_resamples is None or force_computation==True:
+
+            #we first fetch the quantities we need to evaluate the kinematic factors (energy, mass and momentum)
+            E_resamples = self.get_E_resamples(force_fit=force_fit) #shape = (Nres,)
+            m_resamples = np.sqrt( E_resamples**2 - self.P_vec @ self.P_vec ) # m = sqrt( E^2 - p^2 )
+            p1, p2, p3 = self.get_P()
+            p1, p2, p3 = p1.mean, p2.mean, p3.mean
+
+            #we create the array containing the kinematic factor for each operator
+            self.K_resamples = np.zeros(shape=(self.Nres, self.Nop), dtype=float) #shape = (Nres, Nop)
+
+            #we loop over all the selected operators and over the resamples
+            for iop,op in enumerate(self.selected_op):
+                for ires, (E,m) in enumerate(zip(E_resamples, m_resamples)):
+
+                    #we compute the kinematic factor for the iop operator and for the ires resample
+                    self.K_resamples[ires,iop] = op.evaluate_K_real(m_value=m, E_value=E, p1_value=p1, p2_value=p2, p3_value=p3)
+
+        #we return the array with all the kinematic factors
+        return self.K_resamples
 
     #function used to get the resamples of the ratios R
     def get_R_resamples(self, force_computation:bool=False) -> np.ndarray:
@@ -2376,6 +2449,9 @@ class moments_toolkit(bulding_block):
 
         #we reset the list of the kinematic factors (shape = (Nop,))
         self.Klist = None
+
+        #we reset the reesamples of the kinematic factors (shape = (Nres, Nop))
+        self.K_resamples = None
 
         #we reset the list of the renormalization factors (shape = (Nop,))
         self.Zlist = None
