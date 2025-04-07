@@ -261,6 +261,10 @@ class moments_toolkit(bulding_block):
         #we initialize the list with the renormalization factors of all the selected operators - shape = (Nop,)
         self.Zlist: list[gv._gvarcore.GVar] | None = None
 
+        #we initialize the array containing the resamples of the ratios and of the summed ratios
+        self.R_resamples: np.ndarray[float] | None = None #shape = (Nres, Nop, NT, maxT+1)
+        self.S_resamples: np.ndarray[float] | None = None #shapee = (Nres, Nop, NT)
+
         #we initialize the matrix element(M) and the moments(x) array (from the S extraction) with the various methods (fit and finite difference)
         self.M_from_S_fit:  np.ndarray[gv._gvarcore.GVar] | None = None #shape = (Nop,NT) --> with zero as padding for the values of T not allowed
         self.x_from_S_fit:  np.ndarray[gv._gvarcore.GVar] | None = None
@@ -583,6 +587,14 @@ class moments_toolkit(bulding_block):
         self.x_from_S_fit = None
         self.M_from_S_diff= None
         self.x_from_S_diff= None
+        self.M_from_R = None
+        self.x_from_R = None
+        self.result_moments_list = None
+
+        #we reset the arrays with the resamples
+        self.R_resamples = None #shape = (Nres, Nop, NT, maxT+1)
+        self.S_resamples = None #shape = (Nres, Nop, NT)
+
 
     #method used to select the default value of the isospin used by default by the other methods #TO DO: add isospin variables re-initialization
     def set_isospin(self, isospin:str) -> None:
@@ -780,6 +792,8 @@ class moments_toolkit(bulding_block):
         self.x_from_S_fit = None
         self.M_from_S_diff= None
         self.x_from_S_diff= None
+        self.M_from_R = None
+        self.x_from_R = None
 
 
 
@@ -854,7 +868,7 @@ class moments_toolkit(bulding_block):
                 if op.p3corr_is_real:
                     p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).real          
                 else:  
-                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          #the last axis of R is padded with zeros
+                    p3_corr[iop,:,iT,:T+1] = self.operatorBB(T,isospin, op).imag          #the last axis of R is padded with zeros (of p3_corr so hence also of R)
 
         #we return the 3 point correlators
         return p3_corr
@@ -1048,6 +1062,85 @@ class moments_toolkit(bulding_block):
         #we return a the list with the kinematic factors
         return self.Klist 
 
+    #function used to get the resamples of the ratios R
+    def get_R_resamples(self, isospin:str|None=None, force_computation:bool=False) -> np.ndarray:
+        """
+        Function used to get the resamples of the ratios R according to the resampling technique specified in the class instance.
+        
+        Input:
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
+            - force_computation: bool, if True the resamples are computed again even though they could have been fetched from a class variable
+        
+        Output:
+            - R_resamples: the resamples of the ratios R, shape = (Nres, nop, nT, maxT+1), dtype=float
+        """        
+
+        #we check whether we have to do the computation or not
+        if self.R_resamples is None or force_computation==True or self.get_R_resamples_isospin != isospin:
+
+            #we update the value of isospin stored in the class
+            self.get_R_resamples_isospin = isospin
+
+            #We first take the 3 point and 2 point correlators needed to compute the ratio
+            p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+            p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+
+            #the shape of the ratio is given by (nop, nT, maxT+1), i.e.
+            R_shape = p3_corr[:,0,:,:].shape
+
+            #we instantiate the output resamples ratio (shape = (Nres, nop, nT, maxT+1))
+            self.R_resamples = np.zeros(shape=(self.Nres,)+R_shape, dtype=float) 
+
+            #we loop over all the T values we have
+            for iT,T in enumerate(self.chosen_T_list):
+
+                #we perform the jackknife or bootstrap resampling (the observable being the ratio we want to compute)
+                self.R_resamples[:,:,iT,:] = self.resamples_array([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0])
+
+        #we return the ratios resampled according to either jackknife or bootstrap
+        return self.R_resamples
+
+    #function used to get the resamples of the summed ratios S
+    def get_S_resamples(self, tskip: int, isospin:str|None=None, force_computation:bool=False) -> np.ndarray:
+        """
+        Function used to get the resamples of the summed ratios S according to the resampling technique specified in the class instance.
+
+        Input:
+            - tskip = tau_skip = gap in time when performing the sum of ratios
+            - isospin: str, either 'U', 'D', 'U-D' or 'U+D'
+            - force_computation: bool, if True the resamples are computed again even though they could have been fetched from a class variable
+
+        Output:
+            - S_resamples: the resamples of the summed ratios S, shape = (Nres, nop, nT), dtype=float
+        """
+
+        #we check whether we have to do the computation or not
+        if self.S_resamples is None or force_computation==True or self.get_S_resamples_tskip != tskip or self.get_S_resamples_tskip != isospin:
+
+            #we update the value of tskip and isospin stored in the class
+            self.get_S_resamples_tskip = tskip
+            self.get_S_resamples_tskip = isospin
+
+            #We first take the 3 point and 2 point correlators needed to compute the ratio and consequently the Summed ratios S
+            p3_corr = self.get_p3corr(isospin=isospin) #shape = (nop, nconf, nT, maxT+1)
+            p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+
+            #the shape of the ratio is given by (nop, nT), i.e.
+            S_shape =  (self.Nop, self.nT)
+
+            #we instantiate the resamples of the summed ratios -> shape = (Nres, nop, nT)
+            self.S_resamples = np.zeros(shape=(self.Nres,)+S_shape, dtype=float) 
+
+            #we loop over all the T values we have
+            for iT,T in enumerate(self.chosen_T_list):
+                
+                #we compute S using the jackknife algorithm
+                self.S_resamples[:,:,iT] = self.resamples_array( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0] )
+
+        #we return the resamples of the summed ratios S
+        return self.S_resamples
+
+
     #function used to compute the ratio R(T,tau)
     def get_R(self, isospin:str|None=None) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
@@ -1072,11 +1165,14 @@ class moments_toolkit(bulding_block):
         Rstd = np.zeros(shape=R_shape, dtype=float)
         Rcovmat = np.zeros(shape=R_shape + (R_shape[-1],), dtype=float)
 
+        #we get the resamples of the ratios
+        R_resamples = self.get_R_resamples(isospin=isospin, force_computation=False) #shape = (Nres, nop, nT, maxT+1)
+
         #we loop over all the T values we have
         for iT,T in enumerate(self.chosen_T_list):
 
             #we perform the jackknife analysis (the observable being the ratio we want to compute)
-            Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = self.resampling([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0], time_axis=-1)
+            Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = self.resampling([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0], time_axis=-1, resamples_available=R_resamples[:,:,iT,:])
 
         #we return the ratios just computed and the results of the jackknife analysis
         return Rmean, Rstd, Rcovmat
@@ -1106,11 +1202,14 @@ class moments_toolkit(bulding_block):
         Smean = np.zeros(shape=S_shape, dtype=float) 
         Sstd = np.zeros(shape=S_shape, dtype=float)
 
+        #we get the resamples of the summed ratios
+        S_resamples = self.get_S_resamples(tskip=tskip, isospin=isospin, force_computation=False) #shape = (Nres, nop, nT)
+
         #we loop over all the T values we have
         for iT,T in enumerate(self.chosen_T_list):
             
             #we compute S using the jackknife algorithm
-            Smean[:,iT], Sstd[:,iT], _ = self.resampling( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0], time_axis=None )
+            Smean[:,iT], Sstd[:,iT], _ = self.resampling( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0], time_axis=None, resamples_available=S_resamples[:,:,iT] )
 
         #we return S
         return Smean, Sstd
@@ -1899,8 +1998,11 @@ class moments_toolkit(bulding_block):
         ## We construct the bootstrap or jackknife resamples of the ratios
         
         #first we get the 2 and 3 points correlators
-        p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
-        p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+        #p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
+        #p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
+
+        #we obtain the resamples of the ratio
+        Ratios_resamples_array = self.get_R_resamples() #shape = (Nres, nop, nT, maxT+1)
 
         #we construct the resamples of the ratio for each value of T
 
@@ -1913,7 +2015,8 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.chosen_T_list):
 
                 #we perform the jackknife or bootstrap analysis (the observable being the ratio we want to compute)
-                Ratios_resamples_list[iop][T] = self.resamples_array([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0])[:,:T+1]
+                #Ratios_resamples_list[iop][T] = self.resamples_array([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0])[:,:T+1]
+                Ratios_resamples_list[iop][T] = Ratios_resamples_array[:,iop,iT,:T+1] #shape = (Nres, T+1) --> i.e. we removed the padding along the last axis
 
         
         ## We search for the plateau regions
@@ -2257,6 +2360,10 @@ class moments_toolkit(bulding_block):
             - None (all the relevant class variables get re-initialized)
         """
 
+        #we reset the arrays with the resamples
+        self.R_resamples = None #shape = (Nres, Nop, NT, maxT+1)
+        self.S_resamples = None #shape = (Nres, Nop, NT)
+
         #we reset the array with the matrix elements and moments (shape = (Nop, NT))
         self.M_from_S_fit  = None
         self.x_from_S_fit  = None
@@ -2282,6 +2389,10 @@ class moments_toolkit(bulding_block):
 
         #we reset the list of the renormalization factors (shape = (Nop,))
         self.Zlist = None
+
+        #we reset the arrays with the resamples
+        self.R_resamples = None #shape = (Nres, Nop, NT, maxT+1)
+        self.S_resamples = None #shape = (Nres, Nop, NT)
 
         #we reset the array with the matrix elements and moments (shape = (Nop, NT))
         self.M_from_S_fit  = None

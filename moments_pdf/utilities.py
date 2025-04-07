@@ -73,37 +73,6 @@ def jackknife(in_array_list: np.ndarray|list[np.ndarray], observable: Callable[[
         in_array_list = [in_array_list]
         res_axis_list = [res_axis_list]
 
-    # #we make some input control and modifications on the axis array
-    # for i,axis in enumerate(res_axis_list[:]):
-
-    #     #the number of dimension for the i_th array is
-    #     ndim = in_array_list[i].ndim
-
-    #     #we check that axis is in the right range
-    #     if axis >= ndim or axis<-ndim:
-    #         raise ValueError(f"The input array has shape {in_array_list[i].shape}, so axis can take values in the range {-ndim}, ..., {ndim}, extremes included, but axis={res_axis_list} were given.")
-        
-    #     #we cast each axis to a positive number
-    #     res_axis_list[i] = (axis + ndim) % ndim
-
-    # #we set last conf to its default value
-    # if last_conf is None:
-    #     last_conf = np.shape(in_array_list[0])[res_axis_list[0]]
-
-
-    # ## Step 1: creation of the jackknife resamples
-
-    # #we create a jack resample for each input array in the input list
-    # jack_resamples_list = [ np.asarray( [np.delete(in_array, list(range(iconf,min(iconf+binsize,last_conf))) ,axis=res_axis_list[i]) for iconf in range(first_conf,last_conf,binsize)] ) for i,in_array in enumerate(in_array_list)] #shape = (nresamp,) + shape(in_array) (with nconf -> nconf-binsize)
-
-    # #the number of resamples is len(jack_resmaples_list[0]) or also: nresamp = int((last_conf-first_conf)/binsize)
-    # nresamp = np.shape(jack_resamples_list[0])[0] #the 0th axis now is the resample axis, (and axis has nconf-1 conf in the standard case (binsize=1 ecc.) )
-
-
-    # ## Step 2: for each resample we compute the observable of interest
-
-    # #we use the resampled input array to compute the observable we want, and we have nresamp of them
-    # obs_resamp = np.asarray( [observable( *[jack_resamples[i] for jack_resamples in jack_resamples_list] ) for i in range(nresamp) ] )                                                                          #shape = (nresamp,) + output_shape
 
     ##  Step 1 and 2: creation of resamples and computation of the specified observable for each resample
 
