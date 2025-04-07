@@ -105,9 +105,6 @@ class moments_toolkit(bulding_block):
 
     ## default values of some class attributes
 
-    #isospin
-    default_isospin: str = 'U-D'
-
     #resampling technique specifics
     default_central_value_fit:            bool = True
     default_central_value_fit_correlated: bool = True
@@ -234,12 +231,13 @@ class moments_toolkit(bulding_block):
         self.nT = len(self.chosen_T_list)
 
         #we initialize the default value of the isospin
-        self.isospin = self.default_isospin
+        self.isospin = 'U-D'
 
         #we initialize the resampling technique used in the analysis to be the jackknife
         self.resampling = jackknife
         self.resamples_array = jackknife_resamples
         self.resampling_type = "jackknife"
+        self.resample_type = "jkn" #(short name for the resampling type used for the fit)
         self.Nres = self.nconf                      #the standard jackknife has nconf resamples, ...
         self.sample_per_resamples = self.nconf - 1  #... each containing nconf-1 configurations
 
@@ -563,6 +561,7 @@ class moments_toolkit(bulding_block):
             self.resampling = partial( jackknife, binsize=binsize, first_conf=first_conf, last_conf=last_conf )
             self.resamples_array = partial( jackknife_resamples, binsize=binsize, first_conf=first_conf, last_conf=last_conf )
             self.resampling_type = "jackknife"
+            self.resample_type = "jkn" # <- for the fit function
             self.Nres = int((last_conf-first_conf)/binsize) if last_conf is not None else self.nconf 
             self.sample_per_resamples = last_conf-first_conf-binsize if last_conf is not None else self.nconf-1
 
@@ -576,7 +575,8 @@ class moments_toolkit(bulding_block):
             #the number of resamples and the samples per resamples are set 
             self.resampling = partial( bootstrap, Nres=self.Nres, sample_per_resamples=self.sample_per_resamples, new_resamples=False )
             self.resamples_array = partial( bootstrap_resamples, Nres=self.Nres, sample_per_resamples=self.sample_per_resamples, new_resamples=False ) #new_resamples=False so that the configurations are drawn randomly only once
-            self.resampling_type = "bootstrap" 
+            self.resampling_type = "bootstrap"
+            self.resample_type = "bst" # <- for the fit function 
 
         #the variable relying on some estimation through the jackknife or bootstrap resampling technique are re-initialized
         self.E0 = None
@@ -787,7 +787,7 @@ class moments_toolkit(bulding_block):
         #we update the fit function used in the analysis
         self.fit = partial(CA.fit,
                            central_value_fit=self.central_value_fit, central_value_fit_correlated=self.central_value_fit_correlated, # <- args for fit strategy
-                           resample_fit=self.resample_fit, resample_fit_correlated=self.resample_fit_correlated, 
+                           resample_fit=self.resample_fit, resample_fit_correlated=self.resample_fit_correlated,
                            resample_fit_resample_prior=self.resample_fit_resample_prior,
                            svdcut=self.svdcut, maxiter=self.maxiter)                                                                 # <- args for lsqfit
         
@@ -1324,7 +1324,7 @@ class moments_toolkit(bulding_block):
                                     resample_fit_correlated      = False,
                                     
                                     resample_fit_resample_prior  = False,
-                                    resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
+                                    resample_type               = self.resample_type,
 
                                     # args for lsqfit:
                                     model   = lambda x,p: p["m"]*x+p["q"],
@@ -1753,8 +1753,9 @@ class moments_toolkit(bulding_block):
         #we first take the 2point corr
         p2corr = self.get_p2corr() #shape = (nconf, latticeT)
 
-        #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use
-        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = self.resampling(p2corr, lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1)
+        #first we determine the gauge avg of the 2p corr using the jackknife or the bootstrap and we store it for a later use
+        p2corr_resamples = self.resamples_array(p2corr, lambda x: np.mean( x, axis=0), res_axis_list=0) #shape = (nres, latticeT)
+        p2corr_jack, p2corr_jack_std, p2corr_jack_cov = self.resampling(p2corr, lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1, resamples_available=p2corr_resamples) #shape = (latticeT,)
 
         #then we use the jackknife to compute a value of the effective mass (mean, std and cov)
         meff_raw, meff_std_raw, meff_covmat_raw = self.resampling(p2corr, effective_mass_formula, res_axis_list=0, time_axis=-1) #these values of the effective mass are "raw" because they still contain <=0 values (and also padding from the effective mass function)
@@ -1867,16 +1868,11 @@ class moments_toolkit(bulding_block):
         #we instanatiate the states of the fits we want to do
         fit_state = CA.FitState()
 
-
         #we now loop over the free parameters of the fit (the number of states and the starting time of the fit)
         for i_state, nstates in enumerate(nstates_list):
 
             #we then loop over the starting times
             for i_tstart, t_start in enumerate(t_start_list):
-
-                #first we determine the gauge avg of the 2p corr using the jackknife and we store it for a later use 
-                p2corr_jack_plat, p2corr_jack_plat_std, p2corr_jack_plat_cov = self.resampling(p2corr[:,t_start:t_end], lambda x: np.mean(x, axis=0), res_axis_list=0, time_axis=-1) #TO DO: change the variables' names here since also bootstrap can be used
-                p2corr_resamples_plat = self.resamples_array(p2corr[:,t_start:t_end], lambda x: np.mean( x, axis=0), res_axis_list=0)
 
                 #we handle the prior determination of the parameters
 
@@ -1900,8 +1896,6 @@ class moments_toolkit(bulding_block):
                     prior[f"log(dE1)"]= np.log(dE1)
 
                     #the amplitude of the term corresponding to the first excited state we extract by all the other information we have using the functional form of the correlator
-                    #t_probe = t_start
-                    #A1 = (p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*E0) ) * np.exp( t_probe * ( dE1 + E0) )
                     A1_list = []
                     for t_probe in np.arange(t_start,t_end):
                         A1_list.append((p2corr_jack[t_probe] - prior["A0"] * np.exp(-t_probe*E0) ) * np.exp( t_probe * ( dE1 + E0) ))
@@ -1915,16 +1909,15 @@ class moments_toolkit(bulding_block):
 
                     abscissa                = np.arange(t_start,t_end),
                     
-                    ordinate_est            = p2corr_jack_plat, 
-                    ordinate_std            =  p2corr_jack_plat_std, 
-                    ordinate_cov            =   p2corr_jack_plat_cov, 
+                    ordinate_est            = p2corr_jack[t_start:t_end], 
+                    ordinate_std            =  p2corr_jack_std[t_start:t_end], 
+                    ordinate_cov            =   np.ascontiguousarray( p2corr_jack_cov[t_start:t_end,t_start:t_end] ), #as contiguos is needed to have a matrix that is an adjacent block of memory
                     
-                    resample_ordinate_est   = p2corr_resamples_plat,
-                    resample_ordinate_std   = p2corr_jack_plat_std, 
-                    resample_ordinate_cov   = p2corr_jack_plat_cov,
+                    resample_ordinate_est   = p2corr_resamples[:,t_start:t_end],
+                    resample_ordinate_std   = p2corr_jack_std[t_start:t_end], 
+                    resample_ordinate_cov   = np.ascontiguousarray( p2corr_jack_cov[t_start:t_end,t_start:t_end] ),
 
-                    # fit strategy, default: only uncorrelated central value fit:
-                    resample_type               = "bst" if self.resampling_type=="bootstrap" else "jkn", #"jkn",                  #TO DO: update this param as soon as the class gets corrected
+                    resample_type = self.resample_type,
 
                     # args for lsqfit:
                     model   = SumOrderedExponentials(nstates),
@@ -1939,7 +1932,7 @@ class moments_toolkit(bulding_block):
                 if show or save:
 
                     #first we compute the 2p correlator in the region of interest
-                    Corr = gv.gvar(p2corr_jack_plat, p2corr_jack_plat_std )
+                    Corr = gv.gvar(p2corr_jack[t_start:t_end], p2corr_jack_std[t_start:t_end] )
 
                     #we plot the fit
                     make_fitplot_2pcorr(fit_result=fit_result,correlator=Corr, ax=axs[i_tstart,i_state], nstates=nstates, Ngrad=15)
@@ -2104,7 +2097,7 @@ class moments_toolkit(bulding_block):
                         resample_ordinate_est = Ratio_ror,
                         resample_ordinate_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std( Ratio_ror, axis = 0 ),
                         resample_ordinate_cov = (self.Nres-1 if self.resampling_type=="jackknife" else 1.0) * np.cov( Ratio_ror, rowvar = False ),
-                        resample_type = "bst" if self.resampling_type=="bootstrap" else "jkn",
+                        resample_type = self.resample_type,
                         model = model,
                         prior=flat_prior if prior=="flat" else guess_prior,
                         )
@@ -2160,7 +2153,7 @@ class moments_toolkit(bulding_block):
                                                 resample_ordinate_est = Ratio_ror,
                                                 resample_ordinate_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std( Ratio_ror, axis = 0 ),
                                                 resample_ordinate_cov = (self.Nres-1 if self.resampling_type=="jackknife" else 1.0) * np.cov( Ratio_ror, rowvar = False ),
-                                                resample_type = "bst" if self.resampling_type=="bootstrap" else "jkn",
+                                                resample_type =self.resample_type,
                                                 model = model,
                                                 prior=flat_prior if prior=="flat" else guess_prior,
                                                 )
