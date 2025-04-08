@@ -1432,6 +1432,9 @@ class moments_toolkit(bulding_block):
                 #we also take the list of kinematic factors
                 Klist = self.get_Klist()
 
+                #we get the resamples of the kinematic factors
+                K_resamples = self.get_K_resamples() #shape = (Nres, Nop)
+
                 #we fill the output arrays with zeros
                 self.M_from_S_diff = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
                 self.x_from_S_diff = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
@@ -1439,12 +1442,24 @@ class moments_toolkit(bulding_block):
                 #we fill the output array using the formula for the matrix element from S
                 for iop in range(self.Nop):
 
+                    #we get the resamples
+                    mat_ele_resamples = self.resamples_array([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), res_axis_list=[0,0])
+
                     #we compute mean and std of the matrix element using the jackknife #TO DO: check whether the resampling function can be called once and not for each operator
-                    mat_ele, mat_ele_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), res_axis_list=[0,0], time_axis=None)
+                    mat_ele, mat_ele_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list), res_axis_list=[0,0], time_axis=None, resamples_available=mat_ele_resamples)
 
                     #we put them into a gvar variable and store it into the array
                     self.M_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std)
-                    self.x_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std) / Klist[iop]
+
+                    #we compute the moment of the resamples 
+                    moment_resamples = np.swapaxes( np.array( [ mat_ele_resamples[:,iT] / K_resamples[:,iop]  for iT in range(self.nT) ] ) , 0, 1) #shape = (Nres,)
+
+                    #we get a mean and std for the moments by completing the resampling analysis - Achtung: the observable is different here - TO DO: add a class method that can be used as class function to directly generate moment resamples
+                    moment, moment_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list) / np.mean(K_resamples[:,iop]), res_axis_list=[0,0], time_axis=None, resamples_available=moment_resamples)
+
+
+                    #self.x_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std) / Klist[iop]
+                    self.x_from_S_diff[iop] = gv.gvar(moment,moment_std)
 
             #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
             return  np.einsum("ij,i->ij", self.x_from_S_diff if moments==True else self.M_from_S_diff, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
