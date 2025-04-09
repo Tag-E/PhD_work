@@ -530,6 +530,7 @@ class moments_toolkit(bulding_block):
         string += f" - Max Iterations: {self.maxiter}\n\n"
 
         string += f"Resampling Technique: {self.resampling_type}\n"
+        string += f"Number of resamples: {self.Nres}\n"
 
         #we return the string
         return string
@@ -1333,8 +1334,14 @@ class moments_toolkit(bulding_block):
                     Smean_array[itskip] = Smean
                     Sstd_array[itskip] = Sstd
 
-                #we also take the list of kinematic factors
-                Klist = self.get_Klist()
+                #we compute the array with the resamples of the summed ratios
+                S_resamples_array = np.array([self.get_S_resamples(tskip=tskip, force_computation=False) for tskip in tskip_list]) #shape = (len(tskip_list), Nres, nop, nT)
+
+                #we also take the list of kinematic factors #CHECK HERE ON K RENROMALIZATION ................................................
+                #Klist = self.get_Klist()
+
+                #we obtain the kinematic factors used to normalize the matrix elements (either a list of Nop gvar or an array of shape (Nres, Nop) filled with float values)
+                K_normalizations = self.get_Klist() if self.resample_fit==False else self.get_K_resamples() # shape = (Nop,) or (Nres, Nop) depending if the resample fit is enabled or not
 
                 #We now acutally do the fit
 
@@ -1370,6 +1377,9 @@ class moments_toolkit(bulding_block):
                                 ordinate = Smean_array[itskip,iop,iTstart:iTend+1]
                                 ordinate_err = Sstd_array[itskip,iop,iTstart:iTend+1]
 
+                                #we determine the resample_ordinate
+                                resamples_ordinate = S_resamples_array[itskip,:,iop,iTstart:iTend+1]
+
                                 #we determine the prior
 
                                 #we instantiate the prior dict
@@ -1393,15 +1403,15 @@ class moments_toolkit(bulding_block):
                                     ordinate_std            =  ordinate_err, 
                                     ordinate_cov            =   None, 
                                     
-                                    resample_ordinate_est   = None,
-                                    resample_ordinate_std   = None, 
+                                    resample_ordinate_est   = resamples_ordinate,
+                                    resample_ordinate_std   = ordinate_err, 
                                     resample_ordinate_cov   = None,
 
                                     # fit strategy, default: only uncorrelated central value fit:
                                     central_value_fit            = True,
                                     central_value_fit_correlated = False,
 
-                                    resample_fit                 = False,
+                                    resample_fit                 = self.resample_fit,
                                     resample_fit_correlated      = False,
                                     
                                     resample_fit_resample_prior  = False,
@@ -1422,7 +1432,28 @@ class moments_toolkit(bulding_block):
 
                         #we compute the matrix elements using the fit model average (we pad with 0 +- 0 if the fit was not possible)
                         self.M_from_S_fit[iop,iTstart] = gv.gvar(fit_state.model_average()["est"]["m"],fit_state.model_average()["err"]["m"]) if len(fit_state.model_average())>0 else gv.gvar(0,0)
-                        self.x_from_S_fit[iop,iTstart] = self.M_from_S_fit[iop,iTstart] / Klist[iop]
+
+                        #we now construct the moments in two different ways depending whether the resamples of the kinematic factor are available or not
+
+                        #case 1, we don't have the resmaples for the kineamtic factor but only their mean value and std for each operator
+                        if self.resample_fit == False:
+                            self.x_from_S_fit[iop,iTstart] = self.M_from_S_fit[iop,iTstart] / K_normalizations[iop]
+                        
+                        #case 2, we have the resmaples for the kinematic factors
+                        elif self.resample_fit == True:
+
+                            #we first take the resamples of the matrix elements
+                            M_from_S_resamples = fit_state.model_average()["res"]["m"] if len(fit_state.model_average())>0 else np.zeros(shape=(self.Nres,), dtype=float) #shape = (Nres,)
+
+                            #we compute the resamples of the moments
+                            moment_resamples = M_from_S_resamples / K_normalizations[:,iop] #shape = (Nres,)
+
+                            #we compute the mean and std of the moments (the bias is not accounter here as it is in the resampling function)
+                            moment = np.mean(moment_resamples)
+                            moment_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std(moment_resamples)
+
+                            #we put them into a gvar variable and store it into the array
+                            self.x_from_S_fit[iop,iTstart] = gv.gvar(moment,moment_std)
 
             #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
             return np.einsum("ij,i->ij", self.x_from_S_fit if moments==True else self.M_from_S_fit, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
@@ -1456,7 +1487,7 @@ class moments_toolkit(bulding_block):
                     #we put them into a gvar variable and store it into the array
                     self.M_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std)
 
-                    #we now construct the moments in two different way depeding on whether we have the resamples or not
+                    #we now construct the moments in two different way depending on whether we have the resamples or not
 
                     #if we don't have the resamples we just divide the matrix element by the kinematic factor (available as gaussian variable)
                     if self.resample_fit == False:
