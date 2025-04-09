@@ -1533,13 +1533,35 @@ class moments_toolkit(bulding_block):
             fit_state_list =  self.fit_ratio(prior="guess", verbose=False, show=False, save=False)
 
             #we construct the matrix elements from the final parameter estimate available for each fit state (one for each operator)
-            self.M_from_R = np.array( [ gv.gvar( fit_state.model_average()["est"]["A00"], fit_state.model_average()["err"]["A00"] )  for fit_state in fit_state_list ] )
+            self.M_from_R = np.array( [ gv.gvar( fit_state.model_average()["est"]["A00"], fit_state.model_average()["err"]["A00"] )  for fit_state in fit_state_list ] ) #shape = (Nop,)
 
-            #we take the list with the kinematic factors
-            Klist = self.get_Klist()
+            #the moment we then estimate in two different ways depending on whether the resamples of the kinematic factors are available or not
 
-            #we obtain the array with the moments by normalizing that with the matrix elements
-            self.x_from_R = np.array( [ M/Klist[iop] for iop,M in enumerate(self.M_from_R) ] )
+            #case 1, we don't have the resamples for the kineamtic factor but only their mean value and std for each operator
+            if self.resample_fit == False:
+
+                #we take the list with the kinematic factors
+                Klist = self.get_Klist()
+
+                #we obtain the array with the moments by normalizing that with the matrix elements
+                self.x_from_R = np.array( [ M/Klist[iop] for iop,M in enumerate(self.M_from_R) ] )
+
+            #case 2, we have the resamples for the kinematic factors, and so also of the matrix elements
+            if self.resample_fit == True:
+
+                #we take the resamples of the matrix elements
+                M_resamples = np.array( [ fit_state.model_average()["res"]["A00"] for fit_state in fit_state_list ] ) #shape = (Nop,Nres)
+                
+                #we take the resamples of the kinematic factor
+                K_resamples = self.get_K_resamples(force_computation=False, force_fit=False) #shape = (Nres, Nop)
+
+                #we compute the resamples of the moments (swap needed to put Nres as first axis)
+                x_resamples = np.array( [ M_resamples[iop,:] / K_resamples[:,iop] for iop in range(self.Nop) ] ) #shape = (Nop, Nres)
+
+                #we compute the mean and std of the moments (the bias is not accounter here as it is in the resampling function), we put them into a gvar variable and store it into the array (with shape (Nop,))
+                self.x_from_R = np.array( [ gv.gvar( np.mean(x_resamples[iop,:]), (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std(x_resamples[iop,:]) ) for iop in range(self.Nop) ] ) #shape = (Nop,)
+
+                
 
         #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
         return ( self.x_from_R if moments==True else self.M_from_R ) * ( self.get_Zlist() if renormalize==True else 1.0 )
