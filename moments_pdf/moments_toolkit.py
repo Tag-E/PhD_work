@@ -1703,17 +1703,11 @@ class moments_toolkit(bulding_block):
                 r = ratio[1:-1]
                 r_err = ratio_err[1:-1]
 
-                #we put R into a gvar variable
-                r_gvar = gv.gvar(r,r_err)
+                #we rescale to the kinematic factor if the user asks for it
+                r /= K_list[iop].mean if (rescale==True and K_list[iop]!=0) else 1
+                r_err /= np.abs(K_list[iop].mean) if (rescale==True and K_list[iop]!=0) else 1
 
-                #we rescale to the kfactor #TO DO: check the kinematics factors
-                r_gvar /= K_list[iop] if (rescale==True and K_list[iop]!=0) else 1
-
-                #we recast everything into np array
-                r = np.asarray( [c.mean for c in r_gvar])
-                r_err = np.asarray( [c.sdev for c in r_gvar])
-
-                ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2, linestyle='',label=f"T{T}")
+                ax.errorbar(times, r ,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2, linestyle='',label=f"T{T}")
                 ax.legend()
 
                 ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
@@ -1779,7 +1773,7 @@ class moments_toolkit(bulding_block):
         fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
 
         #we loop over the operators
-        for iop, (op,kin) in enumerate(zip(self.selected_op, K_list)):
+        for iop, (op, kin) in enumerate(zip(self.selected_op, K_list)):
 
             #depending on the X structure of the operator we decide in which of the three plots to put it
             plot_index = self.X_list.index(op.X)
@@ -1787,18 +1781,8 @@ class moments_toolkit(bulding_block):
             #we only plot if the kin factor is not 0
             if kin!=0:
 
-                #we put S into a gvar var
-                S_gvar = gv.gvar(Smean[iop],Sstd[iop])
-
-                #we normalize to the kin factor
-                S_gvar /= kin
-
-                #we recast into np array
-                Smean[iop] = np.asarray( [c.mean for c in S_gvar] )
-                Sstd[iop] = np.asarray( [c.sdev for c in S_gvar] )
-
                 #then we plot it
-                ax[plot_index].errorbar(T_plot, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
+                ax[plot_index].errorbar(T_plot, Smean[iop]/kin.mean, yerr=Sstd[iop]/np.abs(kin.mean), marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
 
 
         #we set the title, xlabel and legend for each subplot
