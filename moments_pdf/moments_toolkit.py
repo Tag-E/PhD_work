@@ -1671,6 +1671,9 @@ class moments_toolkit(bulding_block):
         #we first fetch R using the dedicate method
         Rmean, Rstd, Rcovmat = self.get_R()
 
+        #we obtain the list with all the kinematic factors
+        K_list = self.get_Klist()
+
         #wewe instantiate the output list where we will store all the figure and axes
         fig_ax_list:list[tuple[Figure, Any]]  = []
 
@@ -1704,39 +1707,18 @@ class moments_toolkit(bulding_block):
                 r_gvar = gv.gvar(r,r_err)
 
                 #we rescale to the kfactor #TO DO: check the kinematics factors
-                if rescale:
-
-                    #we take mass and energy of g.s.
-                    E0 = self.get_E()
-                    mass = self.get_m()
-                    
-
-                    #we set the momentum to its value
-                    p1 = gv.gvar(self.P_vec[0], 0)
-                    p2 = gv.gvar(self.P_vec[1] ,0)
-                    p3 = gv.gvar(self.P_vec[2] ,0)
-
-                    #we compute the kinematic factor
-                    kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
-
-                    #ratio /= kin if kin!=0 else 1
-                    
-                    r_gvar /= kin if kin!=0 else 1
+                r_gvar /= K_list[iop] if (rescale==True and K_list[iop]!=0) else 1
 
                 #we recast everything into np array
                 r = np.asarray( [c.mean for c in r_gvar])
                 r_err = np.asarray( [c.sdev for c in r_gvar])
 
-                #_=plt.plot(times,r,marker = 'o', linewidth = 0.3, linestyle='dashed',label=i)
-                #ax.errorbar(times, r,yerr=ratio_err, marker = 'o', linewidth = 0.3, linestyle='dashed',label=f"T{T}")
                 ax.errorbar(times, r,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2, linestyle='',label=f"T{T}")
                 ax.legend()
 
                 ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
                 ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
                 ax.set_ylabel('R', fontsize=fontsize_y)
-
-                #ax.grid()
 
             #we save the plot if the user asks for it
             if save:
@@ -1763,8 +1745,10 @@ class moments_toolkit(bulding_block):
         """
 
         #first thing first we compute S with the fiven t skip 
-        #S, Smean, Sstd = self.get_S(tskip=tskip) #shapes = (Nop, Nconf, NT), (Nop, NT), (Nop, NT)
         Smean, Sstd = self.get_S(tskip=tskip)  #shapes =  (Nop, NT), (Nop, NT)
+
+        #we obtain the list of the kinematic factors
+        K_list = self.get_Klist() #shape = (Nop,)
 
         ## we then remove from the plot all the value of S that are 0 (because the given T is too small compared ti tau skip)
 
@@ -1794,25 +1778,11 @@ class moments_toolkit(bulding_block):
         #we instantiate the figure
         fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
 
-        #we cycle on the markers
-        #marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
-
         #we loop over the operators
-        for iop, op in enumerate(self.selected_op):
+        for iop, (op,kin) in enumerate(zip(self.selected_op, K_list)):
 
             #depending on the X structure of the operator we decide in which of the three plots to put it
             plot_index = self.X_list.index(op.X)
-
-
-            #we take mass and energy of g.s.
-            E0 = self.get_E()
-            mass = self.get_m()
-
-            #we set the momentum to its value
-            p1,p2,p3 = self.get_P()
-
-            #we compute the kinematic factor
-            kin = op.evaluate_K_gvar(m_value=mass, E_value=E0, p1_value=p1, p2_value=p2, p3_value=p3)
 
             #we only plot if the kin factor is not 0
             if kin!=0:
@@ -1831,12 +1801,13 @@ class moments_toolkit(bulding_block):
                 ax[plot_index].errorbar(T_plot, Smean[iop],yerr=Sstd[iop], marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
 
 
-        #we set the title of the plot
+        #we set the title, xlabel and legend for each subplot
         for i,X in enumerate(self.X_list):
             ax[i].set_title(X)
             ax[i].set_xlabel('T/a')
             ax[i].legend()
 
+        #we set the y axis label (in common for all the subplots)
         ax[0].set_ylabel(r'$\bar{S}(T, t_{skip}=$' +str(tskip) +r'$)$')
 
 
