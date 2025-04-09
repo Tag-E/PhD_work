@@ -208,8 +208,8 @@ def systematic_final_result(moments_result_dict:dict[list[moments_result]]) -> d
     #we then loop over the keys ( = (X,latticeT) ) and values (= list of moments) of the input dictionary
     for key, value in moments_result_dict.items():
 
-        #we compute the systematic uncertainty as a weighted standard deviation
-        systematic_dict[key] = np.average( [ (moment.renormalized_value.mean-result_dict[key].mean)**2 for moment in value], weights=weights_dict[key] ) 
+        #we compute the systematic variance as a weighted variance, then we take the sqrt to get the systematic uncertainty
+        systematic_dict[key] = np.sqrt( np.average( [ (moment.renormalized_value.mean-result_dict[key].mean)**2 for moment in value], weights=weights_dict[key] ) )
 
     #we return the dictionary with the systematic uncertainties
     return systematic_dict
