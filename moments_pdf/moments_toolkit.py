@@ -1001,6 +1001,10 @@ class moments_toolkit(bulding_block):
             - E0_resamples: numpy array with the values the ground state energy (in lattice units) for each resamples
         """
 
+        #we raise an error if the user asks for the resamples whitout enabling a resample fit first
+        if self.resample_fit == False:
+            raise RuntimeError("\nAchtung: the resample fit has to be enabled in order to compute the resamples of the ground state energy factors. One can do that with the set_fit_parms method.\n")
+
         #we check whether we can avoid doing the fit
         if self.E0_resamples is None or force_fit==True:
 
@@ -1120,6 +1124,10 @@ class moments_toolkit(bulding_block):
         Output:
             - K_resamples: the array with the kinematic factor, shape = (Nres, Nop), dtype=float
         """
+
+        #we raise an error if the user asks for the resamples whitout enabling a resample fit first
+        if self.resample_fit == False:
+            raise RuntimeError("\nAchtung: the resample fit has to be enabled in order to compute the resamples of the kinematic factors. One can do that with the set_fit_parms method.\n")
 
         #we check whether we have to do the computation
         if self.K_resamples is None or force_computation==True:
@@ -1429,11 +1437,8 @@ class moments_toolkit(bulding_block):
                 p2corr = self.get_p2corr() #shape = (Nconf, latticeT)
                 p3corr = self.get_p3corr() #shape = (Nop, Nconf, NT, maxT+1)
 
-                #we also take the list of kinematic factors
-                Klist = self.get_Klist()
-
-                #we get the resamples of the kinematic factors
-                K_resamples = self.get_K_resamples() #shape = (Nres, Nop)
+                #we obtain the kinematic factors used to normalize the matrix elements (either a list of Nop gvar or an array of shape (Nres, Nop) filled with float values)
+                K_normalizations = self.get_Klist() if self.resample_fit==False else self.get_K_resamples() # shape = (Nop,) or (Nres, Nop) depending if the resample fit is enabled or not
 
                 #we fill the output arrays with zeros
                 self.M_from_S_diff = np.zeros(shape=(self.Nop, self.nT), dtype=object ) #shape = (Nop, nT)
@@ -1451,15 +1456,23 @@ class moments_toolkit(bulding_block):
                     #we put them into a gvar variable and store it into the array
                     self.M_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std)
 
-                    #we compute the moment of the resamples 
-                    moment_resamples = np.swapaxes( np.array( [ mat_ele_resamples[:,iT] / K_resamples[:,iop]  for iT in range(self.nT) ] ) , 0, 1) #shape = (Nres,)
+                    #we now construct the moments in two different way depeding on whether we have the resamples or not
 
-                    #we get a mean and std for the moments by completing the resampling analysis - Achtung: the observable is different here - TO DO: add a class method that can be used as class function to directly generate moment resamples
-                    moment, moment_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list) / np.mean(K_resamples[:,iop]), res_axis_list=[0,0], time_axis=None, resamples_available=moment_resamples)
+                    #if we don't have the resamples we just divide the matrix element by the kinematic factor (available as gaussian variable)
+                    if self.resample_fit == False:
+                        self.x_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std) / K_normalizations[iop]
 
+                    #if instead we have the resamples for the kinematic factors we obtain the resamples of the moments and from them a mean and std
+                    elif self.resample_fit == True:
 
-                    #self.x_from_S_diff[iop] = gv.gvar(mat_ele,mat_ele_std) / Klist[iop]
-                    self.x_from_S_diff[iop] = gv.gvar(moment,moment_std)
+                        #we compute the moment of the resamples (the swap is needed to put Nres as first axis)
+                        moment_resamples = np.swapaxes( np.array( [ mat_ele_resamples[:,iT] / K_normalizations[:,iop]  for iT in range(self.nT) ] ) , 0, 1) #shape = (Nres, NavailableT)
+
+                        #we get a mean and std for the moments by completing the resampling analysis - Achtung: the observable is different here - TO DO: add a class method that can be used as class function to directly generate moment resamples
+                        moment, moment_std, _ = self.resampling([p3corr[iop],p2corr], observable = lambda x,y: MatEle_from_slope_formula(p3_corr=x, p2_corr=y, T_list=self.chosen_T_list, delta_list=delta_list, tskip_list=tskip_list) / np.mean(K_normalizations[:,iop]), res_axis_list=[0,0], time_axis=None, resamples_available=moment_resamples)
+
+                        #we put them into a gvar variable and store it into the array
+                        self.x_from_S_diff[iop] = gv.gvar(moment,moment_std)
 
             #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
             return  np.einsum("ij,i->ij", self.x_from_S_diff if moments==True else self.M_from_S_diff, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
