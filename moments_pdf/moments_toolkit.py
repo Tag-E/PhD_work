@@ -164,6 +164,25 @@ class moments_toolkit(bulding_block):
         ("T", (8,2) ) : Z_fine_T_8_2
     }
 
+    ## Additional shared variables
+
+    #dictionary with the colors used in the plots (one color for each value of the source sink separation T)
+    colors_Tdict = {
+        3: "silver",
+        4: "mediumpurple",
+        5: "lightcoral",
+        6: "lightskyblue",
+        7: "yellowgreen",
+        8: "gold",
+        10: "navy",
+        12: "sienna",
+        13: "hotpink",
+        16: "darkolivegreen"
+    }
+
+    #available filling styles for the markers on the plot
+    fillstyle_list = ["full", "none"]
+
                         
 
 
@@ -1644,10 +1663,10 @@ class moments_toolkit(bulding_block):
 
     ## Plotter Methods (methods used to make the relevant plots of the data stored in the class)
 
-    #function used to plot the ratio R for all the selected operators
+    #function used to plot the ratio R for all the selected operators #TO DO: add input description for all inputs
     def plot_R(self, show:bool=True, save:bool=False, figname:str='plotR',
-               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               rescale=False) -> list[tuple[Figure, Any]]:
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8, fig_ax_dict:dict[tuple[Figure, Any]]=None, linestyle:str="dotted",
+               rescale=False) -> dict[tuple[Figure, Any]]:
         """
         Input:
             - show: bool, if True the plot with R is shown
@@ -1674,21 +1693,33 @@ class moments_toolkit(bulding_block):
         #we obtain the list with all the kinematic factors
         K_list = self.get_Klist()
 
-        #wewe instantiate the output list where we will store all the figure and axes
-        fig_ax_list:list[tuple[Figure, Any]]  = []
+        #we instantiate the output dict where we will store all the figure and axes if it is not given as input
+        fig_ax_dict:dict[tuple[Figure, Any]]  = fig_ax_dict if fig_ax_dict is not None else {}
 
 
         #loop over selected operators (for each we make a plot)
         for iop,op in enumerate(self.selected_op):
-            
-            #instantiate figure
-            fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
 
-            #we add figure and axes to the output list
-            fig_ax_list.append((fig,ax))
+            #we create a new figure if the dict with all figures has not a figure for the given operator
+            if op.O not in fig_ax_dict.keys():
+
+                #instantiate figure
+                fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
+
+                ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
+                ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
+                ax.set_ylabel('R', fontsize=fontsize_y)
+            
+            #if instead the operator has already a figure in the dictionary...
+            else:
+                #...we take the figure and axes from the list
+                fig, ax = fig_ax_dict[op.O]
 
             #we cycle on the markers
-            marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ',')) 
+            marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ','))
+
+            #we choose the fill style depending on the momentum of the dataset
+            fillstyle = self.fillstyle_list[0] if self.n_P_vec@self.n_P_vec==0 else self.fillstyle_list[1]
 
             #we loop over T and each time we add a graph to the plot
             for iT, T in enumerate(self.chosen_T_list):
@@ -1707,26 +1738,27 @@ class moments_toolkit(bulding_block):
                 r /= K_list[iop].mean if (rescale==True and K_list[iop]!=0) else 1
                 r_err /= np.abs(K_list[iop].mean) if (rescale==True and K_list[iop]!=0) else 1
 
-                ax.errorbar(times, r ,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2, linestyle='',label=f"T{T}")
-                ax.legend()
+                ax.errorbar(times, r ,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2,label=f"T{T}", color=self.colors_Tdict[T], fillstyle=fillstyle, linestyle = linestyle)
+            
+            ax.legend()
 
-                ax.set_title(r"R(T,$\tau$) - Operator = ${}$".format(op),fontsize=fontsize_title)
-                ax.set_xlabel(r"$\tau$", fontsize=fontsize_x)
-                ax.set_ylabel('R', fontsize=fontsize_y)
+            #we add figure and axes to the output list
+            fig_ax_dict[op.O] = (fig,ax)
+              
 
-            #we save the plot if the user asks for it
+            #we save the plot if the user asks for it #TO DO: modify the position of the save command such that all the figures are properly saved
             if save:
                 plt.savefig(f"{self.plots_folder}/{figname}_operator{op.id}.png")
-            
-            #we show the plot if the user asks for it
-            if show:
-                plt.show()
+        
+        #we show the plot if the user asks for it
+        if show:
+            plt.show()
 
         #we return fig and ax
-        return fig_ax_list
+        return fig_ax_dict
     
-    #function used to plot S
-    def plot_S(self, tskip:int, show:bool=True, save:bool=True, figname:str='plotS',
+    #function used to plot S #TO DO: add comments about input - adjust input - adjust color palette
+    def plot_S(self, tskip:int, show:bool=True, save:bool=True, figname:str='plotS', fig_ax:tuple[Figure, Any]=None,
                figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,) -> tuple[Figure, Any]:
         """
         Input:
@@ -1769,8 +1801,13 @@ class moments_toolkit(bulding_block):
                 #we stop the loop if we find one of such values
                 break
 
-        #we instantiate the figure
-        fig, ax = plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
+        #we read the figure from input if provided, otherwise we instantiate the figure
+        fig, ax = fig_ax if fig_ax is not None else plt.subplots(nrows=1,ncols=3,figsize=figsize,sharex=False,sharey=False)
+
+        #we choose the marker, linestyle and  fill style depending on the momentum of the dataset
+        marker = "o" if self.n_P_vec@self.n_P_vec==0 else 's'
+        linestyle = "solid" if self.n_P_vec@self.n_P_vec==0 else 'dotted'
+        fillstyle = self.fillstyle_list[0] if self.n_P_vec@self.n_P_vec==0 else self.fillstyle_list[1]
 
         #we loop over the operators
         for iop, (op, kin) in enumerate(zip(self.selected_op, K_list)):
@@ -1782,7 +1819,7 @@ class moments_toolkit(bulding_block):
             if kin!=0:
 
                 #then we plot it
-                ax[plot_index].errorbar(T_plot, Smean[iop]/kin.mean, yerr=Sstd[iop]/np.abs(kin.mean), marker = 'o', markersize = markersize, linewidth = 0.3, linestyle='dashed',label=r"${}$".format(op.latex_O))
+                ax[plot_index].errorbar(T_plot, Smean[iop]/kin.mean, yerr=Sstd[iop]/np.abs(kin.mean), marker = marker, markersize = markersize,elinewidth=1, capsize=2, linewidth = 0.3, linestyle=linestyle, fillstyle=fillstyle,label=r"${}$".format(op.latex_O))
 
 
         #we set the title, xlabel and legend for each subplot
@@ -2144,7 +2181,7 @@ class moments_toolkit(bulding_block):
         T_to_use_list = self.chosen_T_list[:]
 
         #then we define the values of T that we don't want to use in the fit
-        T_to_remove_list = [1,2,3,12] #(3 has too few points, 12 is too noisy)
+        T_to_remove_list = [1,2,3,12,16] #(3 has too few points, 12 and 16 are too noisy)
 
         #we remove the values of T we don't want to use, and the related ratios
         for T_to_remove in T_to_remove_list:
@@ -2304,9 +2341,6 @@ class moments_toolkit(bulding_block):
                 #we also retrieve the correct fit state
                 fit_state = fit_state_list[iop]
 
-                #we put the colors we are going to use in a list
-                COLORS = ["red","blue","green", "orange", "purple", "brown", "pink", "black"]
-
                 #we instantiate the figure
                 plt.figure(figsize=figsize)
 
@@ -2330,7 +2364,7 @@ class moments_toolkit(bulding_block):
                         markersize=markersize,
                         capsize = 2,
                         label = f"${T=}$",
-                        color = COLORS[iT]
+                        color = self.colors_Tdict[T]
                     )
 
                     #if the given T was also involved in the fit we plot the fit result for that T
@@ -2361,14 +2395,14 @@ class moments_toolkit(bulding_block):
                         ordinate_low = np.array( [ordinate.mean - ordinate.sdev for ordinate in fit_ordinate] )
 
                         #we plot the mean value of the fit result as a continuous line
-                        plt.plot(cont_taus-T/2, ordinate_mean / ( norm_K if norm_K!=0 else 1.0), color = COLORS[iT])
+                        plt.plot(cont_taus-T/2, ordinate_mean / ( norm_K if norm_K!=0 else 1.0), color = self.colors_Tdict[T])
                         
                         #we plot the +-1sigma region around the mean value of the fit result
                         plt.fill_between(
                             cont_taus-T/2, 
                             ordinate_high / ( norm_K if norm_K!=0 else 1.0),
                             ordinate_low / ( norm_K if norm_K!=0 else 1.0),
-                            color = COLORS[iT],
+                            color = self.colors_Tdict[T],
                             alpha = 0.2
                             )
                         
