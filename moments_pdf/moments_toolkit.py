@@ -1317,7 +1317,7 @@ class moments_toolkit(bulding_block):
         return Smean, Sstd
 
     #function used to extract the matrix elements from the summed ratios
-    def get_M_from_S(self, method:str="fit", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+    def get_M_from_S(self, method:str="finite differences", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], moments:bool=False, renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
 
@@ -2124,7 +2124,7 @@ class moments_toolkit(bulding_block):
         dE_mean = self.get_dE().mean
 
         #the mean value of the matrix element as estimated from the summed ratios
-        mat_ele_list = [ average_moments_over_T( self.get_M_from_S(method="fit", moments=False)[iop], chi2=10 )[0] for iop in range(self.Nop) ]
+        mat_ele_list = [ average_moments_over_T( self.get_M_from_S(method="finite differences", moments=False)[iop], chi2=10 )[0] for iop in range(self.Nop) ]
         mat_ele_mean_list = [ mat_ele.mean for mat_ele in mat_ele_list ]
 
         #list with all the kinematic factors of the operators
