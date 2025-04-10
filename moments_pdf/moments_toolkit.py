@@ -2132,10 +2132,6 @@ class moments_toolkit(bulding_block):
 
 
         ## We construct the bootstrap or jackknife resamples of the ratios
-        
-        #first we get the 2 and 3 points correlators
-        #p3_corr = self.get_p3corr() #shape = (nop, nconf, nT, maxT+1)
-        #p2_corr = self.get_p2corr() #shape = (nconf, latticeT)
 
         #we obtain the resamples of the ratio
         Ratios_resamples_array = self.get_R_resamples() #shape = (Nres, nop, nT, maxT+1)
@@ -2151,7 +2147,6 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.chosen_T_list):
 
                 #we perform the jackknife or bootstrap analysis (the observable being the ratio we want to compute)
-                #Ratios_resamples_list[iop][T] = self.resamples_array([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0), res_axis_list=[0,0])[:,:T+1]
                 Ratios_resamples_list[iop][T] = Ratios_resamples_array[:,iop,iT,:T+1] #shape = (Nres, T+1) --> i.e. we removed the padding along the last axis
 
         
@@ -2331,6 +2326,11 @@ class moments_toolkit(bulding_block):
             #we compute the values of M from S we are going to use later (one for each operator)
             M_from_S_list = self.get_M_from_S(method="finite differences", moments=True) #TO DO: check differences between the two methods finite difference and fit
 
+            #we set marker and fill style based if the class instance refers to a 0 or non 0 momentum case
+            marker = "o" if self.n_P_vec@self.n_P_vec==0 else 's'
+            fillstyle = self.fillstyle_list[0] if self.n_P_vec@self.n_P_vec==0 else self.fillstyle_list[1]
+            
+
             #we loop over the operators
             for iop, op in enumerate(self.selected_op):
 
@@ -2361,10 +2361,12 @@ class moments_toolkit(bulding_block):
                         fmt = '',
                         linewidth=0,
                         elinewidth=1,
+                        marker=marker,
                         markersize=markersize,
                         capsize = 2,
                         label = f"${T=}$",
-                        color = self.colors_Tdict[T]
+                        color = self.colors_Tdict[T],
+                        fillstyle=fillstyle,
                     )
 
                     #if the given T was also involved in the fit we plot the fit result for that T
