@@ -49,13 +49,13 @@ opAnalyzer1 = moments_toolkit(p3fold, p2fold,
                             max_n=2 #max_n=3
                             )
 
-# fine lattice - Px = -2
+# fine lattice - Px = -1
 opAnalyzer2 = moments_toolkit(p3fold, p2fold,
                             skip3p=False, skipop=False,
                             verbose=True,
-                            fast_data_folder = "fast_data_extended_fine_px-2_q0",
+                            fast_data_folder = "fast_data_extended_fine_px-1_q0",
                             operator_folder= "operator_database",
-                            momentum='PX-2_PY0_PZ0',
+                            momentum='PX-1_PY0_PZ0',
                             insertion_momentum = 'qx0_qy0_qz0',
                             tag_2p='hspectrum',
                             max_n=2 #max_n=3
