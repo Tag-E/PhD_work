@@ -1244,11 +1244,11 @@ class moments_toolkit(bulding_block):
         return self.S_resamples
 
 
-    #function used to compute the ratio R(T,tau)
-    def get_R(self) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
+    #function used to compute the ratio R(T,tau) #TO DO: add rescale by K here
+    def get_R(self,rescale:bool=False) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
-            - None (all the information required to get the ratios is alreday store inside the class)
+            - rescale: bool, if True the ratio is rescaled by the kinematic factor K associated to the operator
 
         Output:
             - Rmean(iop,T,tau): the mean resulting from the jackknife analysis performed using as observable the ratio R, shape = (nop, nT, maxT+1)
@@ -1271,22 +1271,40 @@ class moments_toolkit(bulding_block):
         #we get the resamples of the ratios
         R_resamples = self.get_R_resamples(force_computation=False) #shape = (Nres, nop, nT, maxT+1)
 
-        #we loop over all the T values we have
-        for iT,T in enumerate(self.chosen_T_list):
+        #we get the resamples for the kinematic factor if we have them, otherwise we just take the mean value and repeat it for each resample
+        K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
 
-            #we perform the jackknife analysis (the observable being the ratio we want to compute)
-            Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = self.resampling([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0], time_axis=-1, resamples_available=R_resamples[:,:,iT,:])
+        for ires in range(self.Nres):
+            for iop in range(self.Nop):
+                R_resamples[ires,iop,:,:] = R_resamples[ires,iop,:,:] / (K_resamples[ires,iop] if rescale else 1) #we rescale the ratios by the kinematic factor
+
+        # #we loop over all the T values we have
+        # for iT,T in enumerate(self.chosen_T_list):
+
+        #     #we perform the jackknife analysis (the observable being the ratio we want to compute)
+        #     Rmean[:,iT,:], Rstd[:,iT,:], Rcovmat[:,iT,:,:] = self.resampling([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0], time_axis=-1, resamples_available=R_resamples[:,:,iT,:])
+
+        #we loop over the operators
+        for iop in range(self.Nop):
+            #we loop over the times
+            for iT,T in enumerate(self.chosen_T_list):
+
+                #we perform the jackknife analysis (the observable being the ratio we want to compute)
+                Rmean[iop,iT,:], Rstd[iop,iT,:], Rcovmat[iop,iT,:,:] = self.resampling([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0) / ( np.mean(K_resamples[:,iop]) if rescale else 1), res_axis_list=[0,0], time_axis=-1, resamples_available=R_resamples[:,iop,iT,:] )
+
+
 
         #we return the ratios just computed and the results of the jackknife analysis
         return Rmean, Rstd, Rcovmat
 
-    #function used to to compute the sum of ratios S
-    def get_S(self, tskip: int) -> tuple[np.ndarray, np.ndarray]:
+    #function used to to compute the sum of ratios S #TO DO: add rescale by K here
+    def get_S(self, tskip: int, rescale:bool=False) -> tuple[np.ndarray, np.ndarray]:
         """
         Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
 
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
+            - rescale: bool, if True the summed ratios is rescaled by the kinematic factor K associated to the operator
 
         Output:
             - Smean: the mean resulting from the jackknife analysis performed using S as observable, shape = (nop, nT)
@@ -1307,11 +1325,25 @@ class moments_toolkit(bulding_block):
         #we get the resamples of the summed ratios
         S_resamples = self.get_S_resamples(tskip=tskip, force_computation=False) #shape = (Nres, nop, nT)
 
-        #we loop over all the T values we have
-        for iT,T in enumerate(self.chosen_T_list):
+        #we get the resamples for the kinematic factor if we have them, otherwise we just take the mean value and repeat it for each resample
+        K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
+
+
+        # #we loop over all the T values we have
+        # for iT,T in enumerate(self.chosen_T_list):
             
-            #we compute S using the jackknife algorithm
-            Smean[:,iT], Sstd[:,iT], _ = self.resampling( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0], time_axis=None, resamples_available=S_resamples[:,:,iT] )
+        #     #we compute S using the jackknife algorithm
+        #     Smean[:,iT], Sstd[:,iT], _ = self.resampling( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0], time_axis=None, resamples_available=S_resamples[:,:,iT] )
+
+        #we loop over the operators
+        for iop in range(self.Nop):
+            #we loop over the times
+            for iT,T in enumerate(self.chosen_T_list):
+
+                #we compute S using the jackknife algorithm
+                Smean[iop,iT], Sstd[iop,iT], _ = self.resampling( [p3_corr[iop,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=0), T, tskip, time_axis=-1) / ( np.mean(K_resamples[:,iop]) if rescale else 1) , res_axis_list=[0,0], time_axis=None, resamples_available=S_resamples[:,iop,iT]  / (K_resamples[:,iop] if rescale else 1) )
+
+
 
         #we return S
         return Smean, Sstd
@@ -1735,8 +1767,8 @@ class moments_toolkit(bulding_block):
                 r_err = ratio_err[1:-1]
 
                 #we rescale to the kinematic factor if the user asks for it
-                r /= K_list[iop].mean if (rescale==True and K_list[iop]!=0) else 1
-                r_err /= np.abs(K_list[iop].mean) if (rescale==True and K_list[iop]!=0) else 1
+                # r /= K_list[iop].mean if (rescale==True and K_list[iop]!=0) else 1
+                # r_err /= np.abs(K_list[iop].mean) if (rescale==True and K_list[iop]!=0) else 1
 
                 ax.errorbar(times, r ,yerr=r_err, marker = next(marker), markersize = markersize, elinewidth=1, capsize=2,label=f"T{T}", color=self.colors_Tdict[T], fillstyle=fillstyle, linestyle = linestyle)
             
@@ -1778,8 +1810,10 @@ class moments_toolkit(bulding_block):
 
         ## we then remove from the plot all the value of S that are 0 (because the given T is too small compared ti tau skip)
 
-        #the treshold value that should be removed is
+        #the treshold value that should be removed is #TO DO: understand which one is the correct treshold
         T_treshold = 1 + 2*tskip #because we want to have (T+1) -2 -2tau_skip > 0
+        #T_treshold = -1 + 2*tskip #because we want to have (T+1) -2tau_skip > 0
+        #T_treshold = 2*tskip #because we want to have (T+1) -1 -2tau_skip > 0
 
         #we instantiate the times T to plot to the full list
         T_plot = self.chosen_T_list[:]
@@ -1815,11 +1849,13 @@ class moments_toolkit(bulding_block):
             #depending on the X structure of the operator we decide in which of the three plots to put it
             plot_index = self.X_list.index(op.X)
 
-            #we only plot if the kin factor is not 0
-            if kin!=0:
+            # #we only plot if the kin factor is not 0
+            # if kin!=0:
 
-                #then we plot it
-                ax[plot_index].errorbar(T_plot, Smean[iop]/kin.mean, yerr=Sstd[iop]/np.abs(kin.mean), marker = marker, markersize = markersize,elinewidth=1, capsize=2, linewidth = 0.3, linestyle=linestyle, fillstyle=fillstyle,label=r"${}$".format(op.latex_O))
+            #     #then we plot it
+            #     ax[plot_index].errorbar(T_plot, Smean[iop]/kin.mean, yerr=Sstd[iop]/np.abs(kin.mean), marker = marker, markersize = markersize,elinewidth=1, capsize=2, linewidth = 0.3, linestyle=linestyle, fillstyle=fillstyle,label=r"${}$".format(op.latex_O))
+
+            ax[plot_index].errorbar(T_plot, Smean[iop], yerr=Sstd[iop], marker = marker, markersize = markersize,elinewidth=1, capsize=2, linewidth = 0.3, linestyle=linestyle, fillstyle=fillstyle,label=r"${}$".format(op.latex_O))
 
 
         #we set the title, xlabel and legend for each subplot
@@ -2735,7 +2771,7 @@ def ratio_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T:int, gauge_axis:int=
     return C_3pt / C_2pt[T]
 
 
-#function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately)
+#function translating R to S (i.e. the array with ratios to the array where the tau dimension has been summed appropiately) #TO DO: understand which return is the correct one
 def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -> np.ndarray:
     """
     Input:
@@ -2750,6 +2786,9 @@ def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -
 
     #we implement the formula for the sum of rations in a fancy way (so that we can index the right dimension without knowing how many other dimensions there are)
     return np.sum( np.take(ratio, range(1 + tskip, T+1 -1 -tskip), axis=time_axis) , axis=time_axis) #the extra +1 and -1 are there to discard the endpoints
+    #return np.sum( np.take(ratio, range( tskip, T+1 -tskip), axis=time_axis) , axis=time_axis) #the endpoints are not discarder
+    #return np.sum( np.take(ratio, range(1 + tskip, T+1 -tskip), axis=time_axis) , axis=time_axis) #the extra +1 is there to discard the endpoint on the left
+    #return np.sum( np.take(ratio, range(tskip, T+1 -1 -tskip), axis=time_axis) , axis=time_axis) #the extra -1 is there to discard the endpoint on the right
 
 
 #function used to extract the matrix element as the slop of the summed ratio function
