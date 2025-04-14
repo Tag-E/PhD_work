@@ -112,7 +112,7 @@ class Operator:
         self.tr:str = trace_symm(cgmat) #the trace condition of the operator
         
         #reality of the 3 point correlator related to the operator
-        self.p3corr_is_real:bool = I in self.K.atoms() #according to the chosen convention, if K her is imag then the p3corr is real
+        self.p3corr_is_real:bool = ( I in self.K.atoms() ) if self.nder%2==1 else ( I not in self.K.atoms() )  #according to the chosen convention, if the number of derivatives is odd: if K is imag then the p3corr is real - if nder is even K and p3 corr instead are either both real or imag
 
         ## Then we determine latex friendly strings that can be used to print the operator and its kinematic facor
 
@@ -296,7 +296,7 @@ class Operator:
         """
         
         #the kinematic factor also with an i factor is given by
-        kin = 1j * complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))  #this 1j in front comes from the fact that mat_ele = <x> * i K (look reference paper for expalantion)
+        kin = (1j**self.nder) * complex(self.K.evalf(subs={mN:m_value, E:E_value, p1:p1_value, p2:p2_value, p3:p3_value}))  #this 1j in front comes from the fact that mat_ele = <x> * i K (look reference paper for expalantion)
 
         #we cast the kinematic factor to a real value (so that casting also correlators we can deal only with real numbers)
         if self.p3corr_is_real:
@@ -322,7 +322,7 @@ class Operator:
             """
         
         #the kinematic factor also with an i factor is given by
-        kin = I * self.K  #this I in front comes from the fact that mat_ele = <x> * i K (look reference paper for expalantion)
+        kin = I**self.nder * self.K  #this I in front comes from the fact that mat_ele = <x> * (i**n_nder) K (look reference paper for expalantion) (there is an i for each derivative)
 
         #we cast the kinematic factor to a real value (so that casting also correlators we can deal only with real numbers)
         if self.p3corr_is_real==False: #if p3 corr is imag, then we want iK.imag, and this we obtain by multiplying by -i
