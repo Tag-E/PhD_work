@@ -470,7 +470,7 @@ def Kfactor_from_diracO(operator:sym.core.add.Add) -> sym.core.mul.Mul:
     num_K =  sym.trace(  Gamma_pol @ (-I*pslash + mN*Id_4) @ operator @ (-I*pslash + mN*Id_4)  ).simplify(rational=True)
 
     #we obtain the result as numerator divided by denominator (we explicit the dispersion relation to obtain a nicer output)
-    return (num_K/den_K).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2})
+    return (num_K/den_K).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2,E**3:E*(p1**2 + p2**2 + p3**2 + mN**2)}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2,mN*(p1**2 + p2**2 + p3**2 + mN**2):mN*E**2}).simplify(rational=True)
 
 
 

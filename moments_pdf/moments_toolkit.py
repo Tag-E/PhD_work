@@ -1720,7 +1720,7 @@ class moments_toolkit(bulding_block):
 
         
         #we first fetch R using the dedicate method
-        Rmean, Rstd, Rcovmat = self.get_R()
+        Rmean, Rstd, Rcovmat = self.get_R(rescale=rescale)
 
         #we obtain the list with all the kinematic factors
         K_list = self.get_Klist()
@@ -1733,7 +1733,7 @@ class moments_toolkit(bulding_block):
         for iop,op in enumerate(self.selected_op):
 
             #we create a new figure if the dict with all figures has not a figure for the given operator
-            if op.O not in fig_ax_dict.keys():
+            if (op.O,op.X) not in fig_ax_dict.keys():
 
                 #instantiate figure
                 fig,ax = plt.subplots(nrows=1,ncols=1,figsize=figsize)
@@ -1745,7 +1745,7 @@ class moments_toolkit(bulding_block):
             #if instead the operator has already a figure in the dictionary...
             else:
                 #...we take the figure and axes from the list
-                fig, ax = fig_ax_dict[op.O]
+                fig, ax = fig_ax_dict[(op.O,op.X)]
 
             #we cycle on the markers
             marker = it.cycle(('>', 'D', '<', '+', 'o', 'v', 's', '*', '.', ','))
@@ -1775,7 +1775,7 @@ class moments_toolkit(bulding_block):
             ax.legend()
 
             #we add figure and axes to the output list
-            fig_ax_dict[op.O] = (fig,ax)
+            fig_ax_dict[(op.O,op.X)] = (fig,ax)
               
 
             #we save the plot if the user asks for it #TO DO: modify the position of the save command such that all the figures are properly saved
