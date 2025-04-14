@@ -764,7 +764,8 @@ def OperatorList_from_database(operator_database:str) -> list[Operator]:
         - operator_database: str, the path where the operator database is located
     
     Ouptut:
-        - operator_list: the list with all the operator in the database"""
+        - operator_list: the list with all the operator in the database
+    """
     
     
     #we check whether the database passed as input exists or not
@@ -791,6 +792,56 @@ def OperatorList_from_database(operator_database:str) -> list[Operator]:
 
     #we return the operator list
     return operator_list
+
+#function used to load the whole list of operators from the input dataset
+def OperatorDict_from_database(operator_database:str) -> dict[dict[list[Operator]]]:
+    """
+    Function used to load the list of with all the operators from the database where they are stored,
+    and make a dictionarym of dictionaries of lists containing the operators
+    
+    Input:
+        - operator_database: str, the path where the operator database is located
+    
+    Ouptut:
+        - operator_dict: the dict with all the operators in the database, with key structure dict[(n,X)][(irrep,block)] = list(operators)
+    """
+    
+    
+    #we check whether the database passed as input exists or not
+    if Path(operator_database).is_dir()==False:
+        raise ValueError(f"\nInput not valid: the path {operator_database} does not exist\n")
+    
+    #we instantiate the path varibale of the database
+    path = Path(operator_database).glob('**/*')
+
+    #we list the operator files
+    operator_files = [x for x in path if x.is_file()]
+
+    #we sort the files according to the operator number
+    operator_files.sort(key=lambda x: int(x.name.split("_")[1]))
+
+    #we instantiate the operator dict we will return
+    operators_dict = {}
+
+    #to construct the the operators we loop over the related files
+    for file in operator_files:
+
+        #we obtain the operator from the file (from its name)
+        op = Operator_from_file(file.as_posix())
+
+        #we append the operator to the dict
+                
+        #we first handle the creation of the keys
+        if (op.n,op.X) not in operators_dict.keys():
+            operators_dict[(op.n,op.X)] = {}
+        if ( op.irrep, op.block) not in operators_dict[(op.n,op.X)].keys():
+            operators_dict[(op.n,op.X)][op.irrep, op.block] = []
+
+        #then we apped the operator to the dict
+        operators_dict[(op.n,op.X)][op.irrep, op.block].append(op)
+
+    #we return the operator list
+    return operators_dict
 
 #function used to read one specific operator from the operator database
 def Operator_from_database(operator_id:int, operator_database:str) -> Operator:
