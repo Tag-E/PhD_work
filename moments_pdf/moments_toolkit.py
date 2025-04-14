@@ -1791,7 +1791,8 @@ class moments_toolkit(bulding_block):
     
     #function used to plot S #TO DO: add comments about input - adjust input - adjust color palette
     def plot_S(self, tskip:int, show:bool=True, save:bool=True, figname:str='plotS', fig_ax:tuple[Figure, Any]=None,
-               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,) -> tuple[Figure, Any]:
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
+               rescale:bool=False) -> tuple[Figure, Any]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
@@ -1803,7 +1804,7 @@ class moments_toolkit(bulding_block):
         """
 
         #first thing first we compute S with the fiven t skip 
-        Smean, Sstd = self.get_S(tskip=tskip)  #shapes =  (Nop, NT), (Nop, NT)
+        Smean, Sstd = self.get_S(tskip=tskip,rescale=rescale)  #shapes =  (Nop, NT), (Nop, NT)
 
         #we obtain the list of the kinematic factors
         K_list = self.get_Klist() #shape = (Nop,)
@@ -3002,6 +3003,9 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
     Output:
         - average: gvar variable with mean and std of the average moment (or matrix element)
     """
+
+    #in order to handle the case with only one operator selected we remove 1 dimensional axis (the op axis in such a case) by squeezing the array
+    in_array = np.squeeze(in_array)
 
     #first we remove the padding
     in_array = np.asarray( [ e for e in in_array if np.abs(e.mean)>0 ] )
