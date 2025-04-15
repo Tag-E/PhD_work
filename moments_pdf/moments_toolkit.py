@@ -2831,7 +2831,7 @@ def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -
 
 
 #function used to extract the matrix element as the slop of the summed ratio function
-def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2], delta_list:list[int] = [1,2,3]) -> float:
+def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2], delta_list:list[int] = [1,2,3], scheme:str="central") -> np.ndarray:
     """
     Function implementing the extraction of the matrix element as the slope of the summed ratios
     
@@ -2841,10 +2841,17 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
         - T_list: int, the lsit with the source sink separation related to the p3_corr
         - tskip_list: list with the taus to be used in the analysis
         - delta_list: list with the deltas to be used in the analysis (for the meaning of tau and delta see the reference paper) 
+        - scheme: str, either "forward", "backward" or "central", depending on the scheme of finite differences we want to use
     
     Output:
         - mat_ele_array: array, with len nT, containing the values of the matrix element obteined as the average over the possible deltas and tau skip #To DO: implement something more than a plain unweighted average
     """
+
+    ## Input control
+
+    #we check that scheme is one of the allowed values
+    if scheme not in ["forward", "backward", "central"]:
+        raise ValueError(f"Invalid value for 'scheme' parameter. Expected one of ['forward', 'backward', 'central'], got {scheme}.")
 
     ## First the calculation of the the summed ratios using the formula
 
@@ -2865,33 +2872,105 @@ def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:lis
     #we instantiate the list with the allowed matrix elements as empty
     mat_ele_array = np.zeros(shape=(len(T_list),), dtype=float) #shape = (nT,)
 
+    #we implement the extraction of the slope using three possibles schemes of finite differences
+    match scheme:
 
-    #we loop over the source-sink separations T
-    for iT, T in enumerate(T_list):
+        #case 1 we use forward differences
+        case "forward": 
 
-        #we instantiate a tmp list where we store all the matrix elements related to the given T
-        tmp_mat_ele_list = []
+            #we loop over the source-sink separations T
+            for iT, T in enumerate(T_list):
 
-        #we loop over the values of tau skip
-        for itskip,tskip in enumerate(tskip_list):
+                #we instantiate a tmp list where we store all the matrix elements related to the given T
+                tmp_mat_ele_list = []
 
-            #we skip the not allowed values
-            if np.abs( S_list[iT,itskip] ) < 10**(-18): continue
+                #we loop over the values of tau skip
+                for itskip,tskip in enumerate(tskip_list):
 
-            #we loop over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
-            for delta in delta_list:
-                
-                #a combination T,delta is allowed only if their sum is in the available Ts
-                if T + delta not in T_list: continue
+                    #we skip the not allowed values
+                    if np.abs( S_list[iT,itskip] ) < 10**(-18): continue
 
-                #we check what is the index of the T we have to consider
-                iT_plus_delta = T_list.index(T + delta)
+                    #we loop over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
+                    for delta in delta_list:
+                        
+                        #a combination T,delta is allowed only if their sum is in the available Ts
+                        if T + delta not in T_list: continue
 
-                #we compute the matrix element as the slope of the summed ratio function
-                tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT,itskip])/delta )
+                        #we check what is the index of the T we have to consider
+                        iT_plus_delta = T_list.index(T + delta)
 
-        #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
-        mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done rather than the plain unweighted average
+                        #we compute the matrix element as the slope of the summed ratio function
+                        tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT,itskip])/delta )
+
+                #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
+                mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done rather than the plain unweighted average
+
+        #case 2 we use backward differences
+        case "backward":
+
+            #we loop over the source-sink separations T
+            for iT, T in enumerate(T_list):
+
+                #we instantiate a tmp list where we store all the matrix elements related to the given T
+                tmp_mat_ele_list = []
+
+                #we loop over the values of tau skip
+                for itskip,tskip in enumerate(tskip_list):
+
+                    #we skip the not allowed values
+                    if np.abs( S_list[iT,itskip] ) < 10**(-18): continue
+
+                    #we loop over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
+                    for delta in delta_list:
+                        
+                        #a combination T,delta is allowed only if their sum is in the available Ts
+                        if T - delta not in T_list: continue
+
+                        #we check what is the index of the T we have to consider
+                        iT_minus_delta = T_list.index(T - delta)
+
+                        #we skip the not allowed values
+                        if np.abs( S_list[iT_minus_delta,itskip] ) < 10**(-18): continue
+
+                        #we compute the matrix element as the slope of the summed ratio function
+                        tmp_mat_ele_list.append( (S_list[iT,itskip] - S_list[iT_minus_delta,itskip])/delta )
+
+                #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
+                mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done rather than the plain unweighted average
+
+        #case 3 we use central differences
+        case "central":
+
+            #we loop over the source-sink separations T
+            for iT, T in enumerate(T_list):
+
+                #we instantiate a tmp list where we store all the matrix elements related to the given T
+                tmp_mat_ele_list = []
+
+                #we loop over the values of tau skip
+                for itskip,tskip in enumerate(tskip_list):
+
+                    #we skip the not allowed values
+                    if np.abs( S_list[iT,itskip] ) < 10**(-18): continue
+
+                    #we loop over the delta we want to use in the analysis (delta is the separation we use to look at the slope)
+                    for delta in delta_list:
+                        
+                        #a combination T,delta is allowed only if their sum is in the available Ts
+                        if T + delta not in T_list or T - delta not in T_list: continue
+
+                        #we check what is the index of the Ts we have to consider
+                        iT_plus_delta = T_list.index(T + delta)
+                        iT_minus_delta = T_list.index(T - delta)
+
+                        #we skip the not allowed values
+                        if np.abs( S_list[iT_minus_delta,itskip] ) < 10**(-18): continue
+
+                        #we compute the matrix element as the slope of the summed ratio function
+                        tmp_mat_ele_list.append( (S_list[iT_plus_delta,itskip] - S_list[iT_minus_delta,itskip])/(2*delta) )
+
+                #for the given T we extract a value of the matrix element, and we just take a simple unnweighted average over all the values of tskip and the allowed values of T+delta
+                mat_ele_array[iT] = np.mean(tmp_mat_ele_list) if len(tmp_mat_ele_list)!=0 else 0 #TO DO: check if something better can be done rather than the plain unweighted average
 
     #we return the array with the matrix element just computed
     return mat_ele_array
