@@ -108,8 +108,17 @@ class Operator:
         
         #symmetry properties of the operator
         self.C:int|str = C_parity(cgmat,X) #the C parity of the operator
-        self.symm:str = index_symm(cgmat) #the symmetry under index exchange of the operator
         self.tr:str = trace_symm(cgmat) #the trace condition of the operator
+        self.symm:str = index_symm(cgmat) #the symmetry under index exchange of the operator
+        if X=='T':
+            symm_12 = index_symm_2exchange(cgmat,0,1)
+            match symm_12:
+                case "Symmetric":
+                    self.symm = "[Invalid Operator]"
+                case "Mixed Symmetry":
+                    self.symm = "(to be rearranged)"
+                case "Antisymmetric":
+                    self.symm = index_symm_index_fixed(cgmat, 0,1)
         
         #reality of the 3 point correlator related to the operator
         self.p3corr_is_real:bool = ( I in self.K.atoms() ) if self.nder%2==1 else ( I not in self.K.atoms() )  #according to the chosen convention, if the number of derivatives is odd: if K is imag then the p3corr is real - if nder is even K and p3 corr instead are either both real or imag
@@ -548,7 +557,7 @@ def C_parity(cgmat: np.ndarray, X:str) -> int|str:
     return C_parity
 
 
-#function used to evaluate the symmeetry under symmetry exchange of a given operator
+#function used to evaluate the symmetry under symmetry exchange of a given operator
 def index_symm(cgmat: np.ndarray) -> str:
     """
     Input:
@@ -563,6 +572,9 @@ def index_symm(cgmat: np.ndarray) -> str:
 
     #to check the symmetry condition we have to take track of the symmetry under all permutation, so we store the symm of the previous perm in a variable
     symm_old = None
+
+    #we set by default the value of the symmetry condition we will return
+    symm_new = "Mixed Symmetry"
 
     # we loop over all the possible permutations of the indices of the operators
     for ip,p in enumerate(it.permutations(range(n))):
@@ -602,7 +614,133 @@ def index_symm(cgmat: np.ndarray) -> str:
     return symm_new
 
 
+#function used to evaluate the symmetry under symmetry exchange of a given operator where the two selected indices are exchanged
+def index_symm_2exchange(cgmat: np.ndarray, i1: int, i2: int) -> str:
+    """
+    Function used to evaluate the symmetry under symmetry exchange of a given operator under all permutations
+    of the indices where the two selected indices are exchanged (i1 and i2)
 
+    Input:
+        - cgmat: a np.array with the cg coefficients (in the remapped version) representing the operator
+        - i1, i2: ints, the two ints in the cgmat we want exchanged in every permutation
+        
+    Output:
+        - a string describing the symmetry of the operator under index exchange
+    """
+
+    #the number of indices of the operator is given by the dimensionality of the cgmat
+    n = cgmat.ndim
+
+    #to check the symmetry condition we have to take track of the symmetry under all permutation, so we store the symm of the previous perm in a variable
+    symm_old = None
+
+    #we set by default the value of the symmetry condition we will return
+    symm_new = "Mixed Symmetry"
+
+    # we loop over all the possible permutations of the indices of the operators
+    for ip,p in enumerate(it.permutations(range(n))):
+
+        #we skip the trivial permutation as it yields no information
+        if ip==0:
+            continue
+
+        #we skip all the permutations that do not exchange the two selected indices
+        if not (p[i1]==i2 and p[i2]==i1): continue
+        
+        #then we construct the permuted matrix
+
+        #we instantiate it
+        cgmat_p = np.empty(shape=np.shape(cgmat))
+
+        #we fill it according to the permutations
+        for indices in it.product(range(4),repeat=n):
+            cgmat_p[indices] = cgmat[ *[indices[p[i]] for i in range(n)] ]
+
+        #we check for a particular symmetry
+        if (cgmat==cgmat_p).all() or  (cgmat==-cgmat_p).all(): #this means either symmetric or antisymmetric...
+            if parity(p)==-1:                                  #... but we can only tell if the permutation is odd
+                if (cgmat==cgmat_p).all():
+                    symm_new="Symmetric"
+                elif (cgmat==-cgmat_p).all():
+                    symm_new="Antisymmetric"
+        else:                                                  #in every other case there is mixed symmetry
+            return "Mixed Symmetry"
+        
+        #if we are past the first iteration and the symmetry changed we conclude that it is mixed
+        if (symm_old is not None) and (symm_new!=symm_old):
+            return "Mixed Symmetry"
+        
+        #we update the values of the previous symmetry so that we can check during the next iteration (next permutations)
+        symm_old = symm_new
+
+    #if the symm was always the same we return it
+    return symm_new
+
+
+#function used to evaluate the symmetry under symmetry exchange of a given operator, with some indices kept fixed
+def index_symm_index_fixed(cgmat: np.ndarray, *kwargs:int) -> str:
+    """
+    Function used to evaluate the symmetry under symmetry exchange of a given operator under all permutations where
+    the specified indices (kwargs) are kept fixed
+
+    Input:
+        - cgmat: a np.array with the cg coefficients (in the remapped version) representing the operator
+        - kwargs: list of ints, i.e. the indices we want to keep fixed in the permutations
+        
+    Output:
+        - a string describing the symmetry of the operator under index exchange
+    """
+
+    #the number of indices of the operator is given by the dimensionality of the cgmat
+    n = cgmat.ndim
+
+    #to check the symmetry condition we have to take track of the symmetry under all permutation, so we store the symm of the previous perm in a variable
+    symm_old = None
+
+    #we set by default the value of the symmetry condition we will return
+    symm_new = "Mixed Symmetry"
+
+    #indices that need to stay fixed in the permutation
+    fixed_indices = kwargs
+
+    # we loop over all the possible permutations of the indices of the operators
+    for ip,p in enumerate(it.permutations(range(n))):
+
+        #we skip the trivial permutation as it yields no information
+        if ip==0:
+            continue
+
+        #we skip all the permutations that do not keep fixed the indices that need to stay fixed
+        if any([p[i]!=i for i in fixed_indices]): continue
+        
+        #then we construct the permuted matrix
+
+        #we instantiate it
+        cgmat_p = np.empty(shape=np.shape(cgmat))
+
+        #we fill it according to the permutations
+        for indices in it.product(range(4),repeat=n):
+            cgmat_p[indices] = cgmat[ *[indices[p[i]] for i in range(n)] ]
+
+        #we check for a particular symmetry
+        if (cgmat==cgmat_p).all() or  (cgmat==-cgmat_p).all(): #this means either symmetric or antisymmetric...
+            if parity(p)==-1:                                  #... but we can only tell if the permutation is odd
+                if (cgmat==cgmat_p).all():
+                    symm_new="Symmetric"
+                elif (cgmat==-cgmat_p).all():
+                    symm_new="Antisymmetric"
+        else:                                                  #in every other case there is mixed symmetry
+            return "Mixed Symmetry"
+        
+        #if we are past the first iteration and the symmetry changed we conclude that it is mixed
+        if (symm_old is not None) and (symm_new!=symm_old):
+            return "Mixed Symmetry"
+        
+        #we update the values of the previous symmetry so that we can check during the next iteration (next permutations)
+        symm_old = symm_new
+
+    #if the symm was always the same we return it
+    return symm_new
 
 
 #function used to remap the cg coefficients from a 4**n column to a n rank matrix of dimension 4 (with n number of tensors in the product)

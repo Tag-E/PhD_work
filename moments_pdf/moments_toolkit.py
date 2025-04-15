@@ -450,7 +450,7 @@ class moments_toolkit(bulding_block):
                 symm = symm_list[0] if all_equal(symm_list) else 'Mixed Symmetry'
 
                 #we make a subsection, putting in the title the specifics common to all operators (irrep, block and the shared symmetries)
-                subsection = Subsection(f"{irrep} Block {imul}:  Trace {tr}, {symm}, C = {C}",numbering=False)
+                subsection = Subsection(f"{irrep} Block {imul}: C = {C}, Trace {tr}, {symm} ",numbering=False)
 
                 #we instantiate the math environment where we print the operators
                 agn = Alignat(numbering=False, escape=False)
