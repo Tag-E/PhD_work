@@ -46,6 +46,7 @@ from matplotlib.figure import Figure #to use annotations for fig and ax
 from functools import partial #to specify arguments of functions
 from copy import deepcopy #to make a deepcopy of dictionaries
 from tqdm import tqdm #to loop with progress bars
+import warnings #to raise warnings to the user without doing it with a print (warnings docs: https://docs.python.org/3/library/warnings.html#module-warnings)
 
 
 
@@ -230,7 +231,7 @@ class moments_toolkit(bulding_block):
 
         #input check on the maximum number of indices
         if (type(max_n) is not int) or max_n<=1:
-            print("\nAchtung: the maximum number of indices should be at least 2 - Switching from the input value to the defualt max_n=2\n")
+            warnings.warn("\nAchtung: the maximum number of indices should be at least 2 - Switching from the input value to the defualt max_n=2\n")
             self.max_n = 2
         #if the input is ok we just store the maximum number of indices
         else:
@@ -1866,7 +1867,7 @@ class moments_toolkit(bulding_block):
             ax[i].legend()
 
         #we set the y axis label (in common for all the subplots)
-        ax[0].set_ylabel(r'$\bar{S}(T, t_{skip}=$' +str(tskip) +r'$)$')
+        ax[0].set_ylabel(r'$\bar{S}(T, \tau_{skip}=$' +str(tskip) +r'$)$')
 
 
         #we save the plot if the user asks for it
@@ -2663,19 +2664,25 @@ class moments_toolkit(bulding_block):
         #we return nothing
         return None
 
-    #function used to select the 1 derivative operators used in the paper #TO DO: add control on dimensionality of operators (check also if that control is needed)
-    def focus_paper_operators(self, verbose:bool=False) -> None:
+    #function used to select the 1 derivative operators used in the paper
+    def focus_paper_operators(self, which:str="all", verbose:bool=False) -> None:
         """
         Function used to focus the analysis the one derivative operators studyied in the reference paper,
         i.e the list of the selected operator will coincide after the function call with the list of the 
         operators chosen in the paper.
         
         Input:
+            - which: str, either "all", "vector", "axial", "tensor", or "plots", depending on which operators one wants to select
+                     (with "plots" denoting the operator appearing in Figures 2 and 3 of the reference paper 2401.05360v3)
             - verbose: bool, if True info are printed to screen after the function is called
             
         Output:
             - None (the operators are selected)
         """
+
+        #we make an input check
+        if which not in ["all", "vector", "axial", "tensor", "plots"]:
+            raise ValueError(f"Invalid value for 'which' parameter. Expected one of ['all', 'vector', 'axial', 'tensor', 'plots'], got {which}.")
 
         #we take the operators of the paper
         opV1 = 1/6 * self.get_operator(2)
@@ -2693,16 +2700,47 @@ class moments_toolkit(bulding_block):
         #we empty the list of the selected operators
         self.deselect_operator()
 
-        #we append the operators
-        self.append_operator(opV1)
-        self.append_operator(opV2)
-        self.append_operator(opV3)
-        self.append_operator(opA1)
-        self.append_operator(opA2)
-        self.append_operator(opT1)
-        self.append_operator(opT2)
-        self.append_operator(opT3)
-        self.append_operator(opT4)
+        #according to the choice of the user we select different operators (we append them to the list of selected operators that we just emptied)
+        match which:
+
+            #if "all" we select all the operators studied in the paper
+            case "all":
+                self.append_operator(opV1)
+                self.append_operator(opV2)
+                self.append_operator(opV3)
+                self.append_operator(opA1)
+                self.append_operator(opA2)
+                self.append_operator(opT1)
+                self.append_operator(opT2)
+                self.append_operator(opT3)
+                self.append_operator(opT4)
+
+            #if "vector" we select only the vector operators
+            case "vector":
+                self.append_operator(opV1)
+                self.append_operator(opV2)
+                self.append_operator(opV3)
+
+            #if "axial" we select only the axial operators
+            case "axial":
+                self.append_operator(opA1)
+                self.append_operator(opA2)
+
+            #if "tensor" we select only the tensor operators
+            case "tensor":
+                self.append_operator(opT1)
+                self.append_operator(opT2)
+                self.append_operator(opT3)
+                self.append_operator(opT4)
+
+            #if "plots" we select the operators shown in the ratio and summed ratio plots (Figures 2 and 3 of the reference paper 2401.05360v3)
+            case "plots":
+                self.append_operator(opV2)
+                self.append_operator(opV3)
+                self.append_operator(opA1)
+                self.append_operator(opA2)
+                self.append_operator(opT1)
+                self.append_operator(opT3)
 
         #info print
         if verbose:
