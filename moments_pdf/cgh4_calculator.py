@@ -1246,24 +1246,29 @@ if __name__=="__main__":
     #reading which kind of computation to do
     which = "both"
     if len(sys.argv) > 2:
-        if str(sys.argv[2]) in ["both","vector","axial"]:
+        if str(sys.argv[2]) in ["vector","axial","tensor","all"]:
             which = str(sys.argv[2])
         else:
-            print(f"\nSpecified type of computation was {sys.argv[2]} but a choice must be made between 'both','vector', 'axial'. Computation will be done with 'both'\n")
+            print(f"\nSpecified type of computation was {sys.argv[2]} but a choice must be made between 'vector', 'axial', 'tensor' or 'all'. Computation will be done with 'all'\n")
 
 
     #consequent selection of irreps to use
-    chosen_irreps = [(4,1)]
+    chosen_irreps_vector = [(4,1)]
     chosen_irreps_axial = [(4,4)]
-    while len(chosen_irreps) < n:
-        chosen_irreps.append((4,1))
+    chosen_irreps_tensor = [(6,1)]
+    while len(chosen_irreps_vector) < n:
+        chosen_irreps_vector.append((4,1))
         chosen_irreps_axial.append((4,1))
+        chosen_irreps_tensor.append((4,1))
 
 
     #cg generation
-    if which=="both" or which=="vector":
-        cg = cg_calc(*chosen_irreps, force_computation=True)
-        cg.latex_print()
-    if which=="both" or which=="axial":
+    if which=="all" or which=="vector":
+        cg_v = cg_calc(*chosen_irreps_vector, force_computation=True)
+        cg_v.latex_print()
+    if which=="all" or which=="axial":
         cg_a = cg_calc(*chosen_irreps_axial, force_computation=True)
         cg_a.latex_print()
+    if which=="all" or which=="tensor":
+        cg_t = cg_calc(*chosen_irreps_tensor, force_computation=True)
+        cg_t.latex_print()
