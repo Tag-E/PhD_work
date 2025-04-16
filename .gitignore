@@ -182,3 +182,5 @@ moments_pdf/fast_data/
 moments_pdf/test_notebooks/fast_data*
 moments_pdf/fast_data*
 moments_pdf/test_notebooks/outdated_notebooks/*pdf
+moments_pdf/test_notebooks/operator_database_alternative
+moments_pdf/operator_database_alternative
