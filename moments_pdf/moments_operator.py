@@ -769,9 +769,43 @@ def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
     #we return the remapped matrix
     return cg_remapped
 
+#function used to remap the cg coefficients from a 6 * 4**(n-2) column to a n rank matrix of dimension 4 (with n number of tensors in the product)
+def cg_remapping_T(raw_cg: np.ndarray, n: int) -> np.ndarray:
+    """
+    Function used to reshape a matrix of with the cg coefficients of a tensor operator (already rounded) into a form that can be better handled
+    
+    Input:
+        - raw_cg: column with cg coefficients, i.e. a matrix with shape (4**n,) where n is the number of indices of the operator under study
+        - n: int, the number of indices of the operator under study
+    
+    Output:
+        - cg_remapped: the matrix with cg coefficients, now with shape ((4,)**n), that is with n axis each with dimension 4
+    """
+
+    #first we instantiate the new matrix empy
+    cg_remapped = np.zeros(shape=(4,)*(n+1))
+
+    #we loop over the possible first two indices of the tensorial operators
+    for k, ij in enumerate( ["12","13","14","23","24","34"] ):
+
+        #we cast i and j to the actual ints
+        i = int(ij[0])-1
+        j = int(ij[1])-1
+
+        #then we create a list using the standard logic of the remapping for the remaining indices
+        mapping = np.asarray( [ tuple(l) for l in [str( int(np.base_repr(p,4)) +  int('1' * (n-1)) ) for p in range(4**(n-1))] ] , dtype=int) -1
+
+        #we map the old cg mat onto the new one, treating separately the first two indices and the other ones
+        for sub_i in range(4**(n-1)):
+            cg_remapped[*np.concatenate( [np.array([i,j]), mapping[sub_i]] )] = raw_cg[ 4**(n-1) * k + sub_i ]
+            cg_remapped[*np.concatenate( [np.array([j,i]), mapping[sub_i]] )] = - raw_cg[ 4**(n-1) * k + sub_i ]
+
+    #we return the remapped matrix
+    return cg_remapped
+
 
 #function used to construct the database of operators
-def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -> None:
+def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False, tensorial_antisymmetric:bool=False) -> None:
     """
     Function used to construct the database of operators up to a given number of indices
     
@@ -779,10 +813,16 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -
         - operator_folder: str, the path to the folder where the operators are going to be saved
         - max_n: int, the maximum number of indices the operators can have in the vectorial and axial case (for the tensorial case the maximum number of indices is max_n+1)
         - verbose: bool, if True ouptuts are printed to the screen
+        - tensorial_antisymmetric: bool, if True the tensorial operators are generated with antisymmetry in the first two indices;
+                                   by default the variable is set to False because it is easier to deal with the (4,1)x(4,1) rather than the (6,1)
         
     Output:
         - None (the operators are saved to file)
     """
+
+    #input check: the maximum number of indices has to be at least 2
+    if max_n<2:
+        raise ValueError("\nAchtung: the maximum number of indices must be at least 2\n")  
     
     #we create the folder if it does not exist
     Path(operator_folder).mkdir(parents=True, exist_ok=True)
@@ -807,7 +847,7 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -
             print(f"\nConstructing the operators V{n}, A{n} and T{n+1}...\n")
 
         #we loop over the X structures
-        for X in tqdm(X_list):
+        for X in tqdm(X_list, disable=not verbose):
 
             #we construct the irreps we have to use to build the operator
             chosen_irreps = []
@@ -818,11 +858,20 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -
             elif X=='A':
                 chosen_irreps.append((4,4))
             elif X=='T':
-                chosen_irreps.append((4,1))
-                chosen_irreps.append((4,1))
+                #if the user decide to generate the tensor operators antisymmetric, then 
+                if tensorial_antisymmetric:
+                    chosen_irreps.append((6,1))
+                #instead we treat the first two indices as being each in the fundamental
+                else:
+                    chosen_irreps.append((4,1))
+                    chosen_irreps.append((4,1))
 
             #all the other indices transform according to the fundamental
-            while( (len(chosen_irreps)!=n and X!='T') or (len(chosen_irreps)!=n+1 and X=='T') ): 
+            while len(chosen_irreps)!=n: 
+                chosen_irreps.append((4,1))
+            
+            #the tensor case has always one index more, this is taken into account if we use the (6,1), if instead we use the (4,1)x(4,1) we have to add one more fundamental
+            if X=='T' and tensorial_antisymmetric==False:
                 chosen_irreps.append((4,1))
 
             #we then use the cg calculator class to get the dictionary with all the cg coeff we need
@@ -833,8 +882,6 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -
 
                 #then we loop over all the blocks we have in that irrep (i.e. we do as much iteration as the multiplicity of the current irrep)
                 for imul,block in enumerate(v):
-
-                    #print(np.shape(block))
                 
                     #we round the matrix of cg coefficients (we select the number of decimal places to keep)
                     block = np.round(block,decimals=2)
@@ -843,7 +890,7 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False) -
                     for icol in range(np.shape(block)[1]):
                     
                         #we remap the column with the cg coefficient of the current operator into a matrix (best suited to do the matrix multiplications needed to compute the K factor)
-                        cg_mat = cg_remapping(block[:,icol],len(chosen_irreps))
+                        cg_mat = cg_remapping(block[:,icol],len(chosen_irreps)) if (X in ['V','A'] or tensorial_antisymmetric==False)  else cg_remapping_T(block[:,icol],len(chosen_irreps))
 
                         #we construct the operator and save it
                         Operator(cgmat=cg_mat,
