@@ -33,10 +33,15 @@ from tqdm import tqdm #for a nice view of for loops with loading bars
 import gvar as gv #to propagate gaussian uncertainties in the kinematic factor
 from sympy import lambdify #to evaluate symbolic expression with gvar variables
 from IPython.display import display, Math #to display the operator inside a notebook
+import pandas as pd #to handle dataframes, used in the irrep decomposition analysis function
 
 ##Persoal Libraries
 from cgh4_calculator import cg_calc #hand made library to compute H(4) cg coefficients
+from cgh4_calculator import rep_label_list #list with labels of the irrep = [(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(3,1),(3,2),(3,3),(3,4),(4,1),(4,2),(4,3),(4,4),(6,1),(6,2),(6,3),(6,4),(8,1),(8,2)]
+from cgh4_calculator import irrep_index #dictionary with structure irrep_label:irrep_index
+from cgh4_calculator import get_multiplicities #to compute the multiplicities appearing in a given tensor product
 from utilities import parity #function used to find the parity of a permutation (credit: https://stackoverflow.com/questions/1503072/how-to-check-if-permutations-have-same-parity)
+from utilities import all_equal #function used to assess whether all the elements of a list are equal (credit: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-equal)
 
 
 
@@ -379,6 +384,7 @@ class Operator:
 
         display(Math(self.latex_O))
 
+
 ########### Auxiliary Functions #################
 
 #function to obtain the functional form of an operator from its cgmat
@@ -411,7 +417,6 @@ def symO_from_Cgmat(cgmat:np.ndarray) -> sym.core.add.Add:
 
     #we return the symbolic expression of the operator
     return operator_symbol
-
 
 #function used to obtain the operator representation in Dirac space from its cgmat (still symbolical)
 def diracO_from_cgmat(cgmat: np.ndarray, X: str) -> sym.core.add.Add:
@@ -462,7 +467,6 @@ def diracO_from_cgmat(cgmat: np.ndarray, X: str) -> sym.core.add.Add:
     #we send back the operator just constructed (it is a matrix in Dirac space)
     return op
 
-
 #function used to construct the symbolic expression of the kinematic factor from the matrix in dirac space reprsenting the operator under study
 def Kfactor_from_diracO(operator:sym.core.add.Add) -> sym.core.mul.Mul:
     """
@@ -480,8 +484,6 @@ def Kfactor_from_diracO(operator:sym.core.add.Add) -> sym.core.mul.Mul:
 
     #we obtain the result as numerator divided by denominator (we explicit the dispersion relation to obtain a nicer output)
     return (num_K/den_K).simplify(rational=True).subs({E**2:p1**2 + p2**2 + p3**2 + mN**2,E**3:E*(p1**2 + p2**2 + p3**2 + mN**2)}).simplify(rational=True).subs({p1**2 + p2**2 + p3**2 + mN**2:E**2,mN*(p1**2 + p2**2 + p3**2 + mN**2):mN*E**2}).simplify(rational=True)
-
-
 
 #function used to check the trace condition of a cgmat
 def trace_symm(cgmat: np.ndarray) -> str:
@@ -556,7 +558,6 @@ def C_parity(cgmat: np.ndarray, X:str) -> int|str:
     #we return the C parity
     return C_parity
 
-
 #function used to evaluate the symmetry under symmetry exchange of a given operator
 def index_symm(cgmat: np.ndarray) -> str:
     """
@@ -612,7 +613,6 @@ def index_symm(cgmat: np.ndarray) -> str:
 
     #if the symm was always the same we return it
     return symm_new
-
 
 #function used to evaluate the symmetry under symmetry exchange of a given operator where the two selected indices are exchanged
 def index_symm_2exchange(cgmat: np.ndarray, i1: int, i2: int) -> str:
@@ -675,7 +675,6 @@ def index_symm_2exchange(cgmat: np.ndarray, i1: int, i2: int) -> str:
 
     #if the symm was always the same we return it
     return symm_new
-
 
 #function used to evaluate the symmetry under symmetry exchange of a given operator, with some indices kept fixed
 def index_symm_index_fixed(cgmat: np.ndarray, *kwargs:int) -> str:
@@ -742,7 +741,6 @@ def index_symm_index_fixed(cgmat: np.ndarray, *kwargs:int) -> str:
     #if the symm was always the same we return it
     return symm_new
 
-
 #function used to remap the cg coefficients from a 4**n column to a n rank matrix of dimension 4 (with n number of tensors in the product)
 def cg_remapping(raw_cg: np.ndarray, n: int) -> np.ndarray:
     """
@@ -803,7 +801,6 @@ def cg_remapping_T(raw_cg: np.ndarray, n: int) -> np.ndarray:
     #we return the remapped matrix
     return cg_remapped
 
-
 #function used to construct the database of operators
 def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False, tensorial_antisymmetric:bool=False) -> None:
     """
@@ -832,9 +829,6 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False, t
 
     #the list of indices we are going to consider is
     n_list = list(range(2,max_n+1))
-
-    #correspondance int - irrep we're going to need later
-    rep_label_list = [(1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(3,1),(3,2),(3,3),(3,4),(4,1),(4,2),(4,3),(4,4),(6,1),(6,2),(6,3),(6,4),(8,1),(8,2)]
 
     #we use a counter to keep track of the number of operators we have constructed
     iop = 1
@@ -907,7 +901,6 @@ def make_operator_database(operator_folder:str, max_n:int, verbose:bool=False, t
     #info print
     if verbose:
         print(f"\nAll operators constructed and saved in the foder {operator_folder}\n")
-
 
 #function used to load an operator from the file where it is stored
 def Operator_from_file(filename:str) -> Operator:
@@ -1061,7 +1054,6 @@ def Operator_from_database(operator_id:int, operator_database:str) -> Operator:
     #we read the operator from the file corresponding to the given id and we return it (-1 because the counting starts from 1, not 0)
     return Operator_from_file(operator_files[operator_id-1].as_posix())
 
-
 #function used to construct a latex printable expression of the operator from its symbolical O expression
 def latexO_from_diracO(operatorO: sym.core.add.Add, X:str) -> str:
     """
@@ -1121,6 +1113,93 @@ def latexO_from_diracO(operatorO: sym.core.add.Add, X:str) -> str:
     #we return the latex friednly string
     return latex_str
 
+#Function used to analyze the irreps in the decomposition of a given tensor product (X times the fundamental irrep repetead nder times)
+def decomposition_analysis(X: str, n_der: int, operator_dict:dict[dict[list[Operator]]]|None=None, verbose:bool=False) -> pd.core.frame.DataFrame:
+    """
+    Function Performing the analysis of tensor product of the kind irrep x irrep x ... x irrep (n times),
+    to asses which irrep in the decomposion is suitable to be studied without having to worry about
+    renornalization problems.
+
+    Input:
+        - X: str, either 'V', 'A' or 'T', for vector, axial or tensorial, corresponding to the first irrep in the tensor product being
+             either (4,1), (4,4) or (6,1)
+        - n_der: int, number of derivatives in the tensor product, corresponding the the number of times the irrep
+                 (4,1) appears in the tensor product (after the first irrep(s))
+        - operator_database: dictionaries containing the list of the operators, if given information on index symmetry is also provided
+        - verbose: bool, if True info are printed to screen
+    
+    Output:
+        - analysis_dataframe: pandas dataframe with all the information regarding the irreps in the decomposition
+    """
+
+    # Check the input
+    if X not in ['V', 'A', 'T']:
+        raise ValueError("X must be either 'V', 'A' or 'T")
+    if not isinstance(n_der, int) or n_der < 1:
+        raise ValueError("n_der must be a positive integer")
+    if not isinstance(verbose, bool):
+        raise ValueError("verbose must be a boolean")
+    
+    #for convenience the fundamental irrep we call V
+    V = (4,1)
+    
+    #we select the chosen starting irrep depending on X
+    starting_irrep = ((4,1),) if X=='V' else ((4,4),) if X=='A' else ((6,1),)
+
+    # Get the multiplicities of the irreps in the decomposition (and by default set to "Y" the mixing safe property)
+    available_irreps = {rep_label_list[i] : ["Y", mul, "-"] for i, mul in enumerate(get_multiplicities(*( starting_irrep + (V,) * n_der))) if mul>0}
+
+    #we put into a list the possible starting irreps
+    starting_irreps_list = [(1,1), (1,4), (4,1), (4,4), (6,1)] #= [S,P,V,A,T]
+
+    # We now loop over lower or equal dimensional irreps decomposition of the same kind
+    for i_dim in range(0,n_der):
+
+        #we loop over the insertion of gamma structures we can have
+        for initial_irrep in starting_irreps_list:
+
+            #we get the multiplicities of the irreps in the decomposition of a lower dimension
+            low_dim_irrep = get_multiplicities( *( (initial_irrep,) + (V,) * i_dim) )
+
+            #if a given irrep is also present in a lower dimensional decomposition then we set the "mixing safe" property to "N"
+            for key in available_irreps.keys():
+                if low_dim_irrep[irrep_index[key]] > 0:
+                    available_irreps[key][0] = "N"
+
+    #if the operator_database is given we look at the symmetry property of the irreps
+    if operator_dict is not None:
+
+        #we loop over the irreps in the decompostion
+        for key in available_irreps.keys():
+
+            #if the multiplicity is 1 we asses the index symmetry condition
+            if available_irreps[key][1] == 1:
+
+                #we get the list of the operators in the operator_database of the selected irrep
+                op_list = operator_dict[( n_der+1 if X in ['V','A'] else n_der+2 ,X)][key,1]
+
+                #we construct the lyst with the symmetry condition for all the given operators
+                symm_list = [op.symm for op in op_list]
+
+                #we asses the symmetry condition
+                available_irreps[key][2] = symm_list[0][0] if all_equal(symm_list) else 'Mixed'
+
+
+
+    # Create a pandas dataframe with the information
+    df = pd.DataFrame([ [k, *v] for k,v in available_irreps.items() ], index=available_irreps.keys(), columns=["Irrep", "Mixing Safe", "Multiplicity", "Symmetry"])
+
+
+    #if the operator database was not given we remove the symmetry column
+    if operator_dict is None or X=='T':
+        df = df.drop(columns=["Symmetry"])
+
+    #if verbose is True we print the dataframe to screen
+    if verbose:
+        print(f"\nAnalysis of the irreps in the tensor decomposition { ' x '.join( [ str(e) for e in ( starting_irrep + (V,) * n_der) ] ) } :\n")
+        print( "\n".join([ "|"+"|".join(row.split("|")[2:]) for row in df.to_markdown().split("\n") ]) )
+
+    return df
 
 
 ###################### Execution of the Program as Main ############################

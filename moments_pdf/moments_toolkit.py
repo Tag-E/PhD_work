@@ -61,6 +61,7 @@ from utilities import plateau_search #function used to search for the plateau re
 from utilities import plateau_search_symm #function used to search for the plateau region of a 1D array around its mid point
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 from moments_result import moments_result #dataclass used to store the information related to the results of the moments extracted from the data analysis
+from moments_operator import decomposition_analysis #to analyze the irrep appearing in a tensor product decomposition
 
 
 
@@ -2602,7 +2603,6 @@ class moments_toolkit(bulding_block):
         self.M_from_R = None #shape = (Nop,)
         self.x_from_R = None
 
-
     #function used to display the selected operators inside a jupyter notebook
     def display_operators(self) -> None:
         """
@@ -2771,6 +2771,31 @@ class moments_toolkit(bulding_block):
         if verbose:
             print("\nDeselected all the operators with kinematic factor equal to 0. The analysis can now be carried on assuming a non zero kinematical factor for each operator.\n")
 
+    #function used to analyze the irrep appearing in a given tensor product decomposition (useful when choosing operators)
+    def decomposition_analysis(self, X: str, n_der: int) -> None:
+        """
+        Function used to print to screen a table containing information regarding the irrep appearing in the tensor product decomposition
+        of the product of the irrep X with the fundamental repeated nder times. (Useful when choosing the operators to be used in the analysis)
+
+        Input:
+            - X: str, either 'V', 'A' or 'T', for vector, axial or tensorial, corresponding to the first irrep in the tensor product being
+                 either (4,1), (4,4) or (6,1)
+            - n_der: int, number of derivatives in the tensor product, corresponding the the number of times the irrep
+                 (4,1) appears in the tensor product (after the first irrep(s))
+        
+        Output:
+            - None (the table is printed to screen)
+        """
+
+        #check that the number of derivatives is not bigger than the number of derivatives in the available dataset, in that case we raise an error
+        if n_der >= self.max_n:
+            raise ValueError(f"Invalid value for 'n_der' parameter. Expected a value smaller than n={self.max_n}, got n_der={n_der}.")
+
+        #if the input is correct we just print to screen the specified table
+        _ = decomposition_analysis(X=X, n_der=n_der,operator_dict=self.operators_dict, verbose=True)
+
+        #we return
+        return None
 
     ## Work in Progress Methods (stuff still in development)
     #
