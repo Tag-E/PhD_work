@@ -1433,22 +1433,8 @@ class moments_toolkit(bulding_block):
                                 #we determine the resample_ordinate
                                 resamples_ordinate = S_resamples_array[itskip,:,iop,iTstart:iTend+1]
 
-                                #we determine the prior
-
-                                #we instantiate the prior dict
-                                prior = gv.BufferDict()
-
-                                #we get an estimate on slope and intercept
-                                slope = (ordinate[-1] - ordinate[0]) / (abscissa[-1] - abscissa[0])
-                                intercept = ordinate[0] - slope * abscissa[0]
-
-                                #we give a 100% error on the value of the slope and of the intercept
-                                prior["m"] = gv.gvar(slope,slope)
-                                prior["q"] = gv.gvar(intercept,intercept)
-
-
                                 #we do the fit
-                                fit_result = CA.fit(
+                                fit_result = CA.linear_regression(
 
                                     abscissa                = abscissa,
                                     
@@ -1467,16 +1453,10 @@ class moments_toolkit(bulding_block):
                                     resample_fit                 = self.resample_fit,
                                     resample_fit_correlated      = False,
                                     
-                                    resample_fit_resample_prior  = False,
                                     resample_type               = self.resample_type,
 
-                                    # args for lsqfit:
-                                    model   = lambda x,p: p["m"]*x+p["q"],
-                                    prior   = prior,
-                                    p0      = None,
-
-                                    svdcut  = None,
-                                    maxiter = 10_000,
+                                    has_intercept=True,
+                                    parameter_names=["m","q"]
                                 )
 
                                 #we append the fit result to the fit state
