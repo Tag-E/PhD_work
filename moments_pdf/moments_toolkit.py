@@ -252,15 +252,18 @@ class moments_toolkit(bulding_block):
         self.nT = len(self.chosen_T_list)
 
         #we initialize the default value of the isospin
-        self.isospin = 'U-D'
+        self.isospin: str = 'U-D'
 
         #we initialize the resampling technique used in the analysis to be the jackknife
         self.resampling = jackknife
         self.resamples_array = jackknife_resamples
-        self.resampling_type = "jackknife"
-        self.resample_type = "jkn" #(short name for the resampling type used for the fit)
-        self.Nres = self.nconf                      #the standard jackknife has nconf resamples, ...
-        self.sample_per_resamples = self.nconf - 1  #... each containing nconf-1 configurations
+        self.resampling_type: str = "jackknife"
+        self.resample_type: str = "jkn" #(short name for the resampling type used for the fit)
+        self.Nres: int = self.nconf                      #the standard jackknife has nconf resamples, ...
+        self.sample_per_resamples: int = self.nconf - 1  #... each containing nconf-1 configurations
+
+        #we initialize the variable used to decide whether we are looking at matrix elements (default choice) or moments (only possible if all the chosen operators have non zero kinematic factor)
+        self.moments : bool = False
 
 
         ## We initialize to None some variables that will be later accessed using getter methods
@@ -835,6 +838,41 @@ class moments_toolkit(bulding_block):
         self.M_from_R = None
         self.x_from_R = None
 
+    #function used to specify if the results should be given in terms of matrix elements or moments
+    def show_moments(self, moments:bool, verbose:bool=False) -> None:
+        """
+        Function used to specify if the results of the analysis should be given in terms of matrix elements or of moments.
+        If the results are given in terms of moments then ratios and summed ratios are rescaled by the kinematic factors.
+        An error is raised if moments==True and some of the selected operator have a 0 kinematic factor.
+
+        Input:
+            - moments: bool, if True the results are given in terms of moments, if False they are given in terms of matrix elements
+            - verbose: bool, if True info prints are given
+
+        Output:
+            - None (the relevanat variables inside the class get updated)
+        """
+
+        #if the value of self.moments is not changed the function call does nothing
+        if moments == self.moments:
+            return
+        
+        #if instead the value of self.moments needs to get updated, we first have to reset the values of some relevant class variables (the ones with the results ......) ---> TO DO: check if only those
+        self.M_from_S_fit = None #shape = (Nop,NT) --> with zero as padding for the values of T not allowed
+        self.M_from_S_diff = None
+        self.M_from_R = None #shape = (Nop,)
+
+        #we raise an error if moments is True but some of the kinematic factors are 0
+        Klist = self.get_Klist()
+        if moments==True and True in [np.abs(kin.mean)==0 for kin in Klist]:
+            raise RuntimeError("The result cannot be shown in terms of moments because operators with 0 kinematic factor have been selected. Remove them using the remove_zeroK_operators method.")
+
+        #then we change the value of self.moments
+        self.moments = moments
+
+        #info print
+        if verbose:
+            print(f"\nFrom now on the result will be showned in terms of { 'moments' if self.moments else 'matrix elements' }.\n")
 
 
     ## Getter Methods (methods used to access properly the data stored in the attributes of the class)
