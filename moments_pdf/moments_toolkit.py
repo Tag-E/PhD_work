@@ -861,6 +861,8 @@ class moments_toolkit(bulding_block):
         self.M_from_S_fit = None #shape = (Nop,NT) --> with zero as padding for the values of T not allowed
         self.M_from_S_diff = None
         self.M_from_R = None #shape = (Nop,)
+        self.R_resamples = None
+        self.S_resamples = None
 
         #we raise an error if moments is True but some of the kinematic factors are 0
         Klist = self.get_Klist()
@@ -872,7 +874,7 @@ class moments_toolkit(bulding_block):
 
         #info print
         if verbose:
-            print(f"\nFrom now on the result will be showned in terms of { 'moments' if self.moments else 'matrix elements' }.\n")
+            print(f"\nFrom now on the result will be shown in terms of { 'moments' if self.moments else 'matrix elements' }.\n")
 
 
     ## Getter Methods (methods used to access properly the data stored in the attributes of the class)
@@ -1242,6 +1244,19 @@ class moments_toolkit(bulding_block):
                 #we perform the jackknife or bootstrap resampling (the observable being the ratio we want to compute)
                 self.R_resamples[:,:,iT,:] = self.resamples_array([p3_corr[:,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=1), res_axis_list=[1,0])
 
+            #we rescale the resamples by the the kinematic factors if the results are to be in terms of moments
+            if self.moments == True:
+
+                #we get the resamples for the kinematic factor if we have them, otherwise we just take the mean value and repeat it for each resample
+                K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
+
+                #we rescale the ratios by the kinematic factor
+                for ires in range(self.Nres):
+                    for iop in range(self.Nop):
+                        self.R_resamples[ires,iop,:,:] = self.R_resamples[ires,iop,:,:] / K_resamples[ires,iop]
+
+
+
         #we return the ratios resampled according to either jackknife or bootstrap
         return self.R_resamples
 
@@ -1280,12 +1295,23 @@ class moments_toolkit(bulding_block):
                 #we compute S using the jackknife algorithm
                 self.S_resamples[:,:,iT] = self.resamples_array( [p3_corr[:,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=1), T, tskip, time_axis=-1), res_axis_list=[1,0] )
 
+            #we rescale the resamples if the results have to be in terms of moments
+            if self.moments==True:
+
+                #we first get the resamples of the kinematic factors
+                K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
+
+                #then we loop over operators and times and we correctly normalize the results
+                for iop in range(self.Nop):
+                    for iT,T in enumerate(self.chosen_T_list):
+                        self.S_resamples[:,iop,iT] = self.S_resamples[:,iop,iT]  / K_resamples[:,iop]
+
         #we return the resamples of the summed ratios S
         return self.S_resamples
 
 
     #function used to compute the ratio R(T,tau) #TO DO: add rescale by K here
-    def get_R(self,rescale:bool=False) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
+    def get_R(self) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
         """
         Input:
             - rescale: bool, if True the ratio is rescaled by the kinematic factor K associated to the operator
@@ -1311,12 +1337,15 @@ class moments_toolkit(bulding_block):
         #we get the resamples of the ratios
         R_resamples = self.get_R_resamples(force_computation=False) #shape = (Nres, nop, nT, maxT+1)
 
-        #we get the resamples for the kinematic factor if we have them, otherwise we just take the mean value and repeat it for each resample
-        K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
+        # #we get the resamples for the kinematic factor if we have them, otherwise we just take the mean value and repeat it for each resample
+        # K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
 
-        for ires in range(self.Nres):
-            for iop in range(self.Nop):
-                R_resamples[ires,iop,:,:] = R_resamples[ires,iop,:,:] / (K_resamples[ires,iop] if rescale else 1) #we rescale the ratios by the kinematic factor
+        # for ires in range(self.Nres):
+        #     for iop in range(self.Nop):
+        #         R_resamples[ires,iop,:,:] = R_resamples[ires,iop,:,:] / (K_resamples[ires,iop] if rescale else 1) #we rescale the ratios by the kinematic factor
+
+        #we get the kinematic factor
+        Klist = self.get_Klist(force_computation=False, force_fit=False)
 
         # #we loop over all the T values we have
         # for iT,T in enumerate(self.chosen_T_list):
@@ -1330,7 +1359,7 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.chosen_T_list):
 
                 #we perform the jackknife analysis (the observable being the ratio we want to compute)
-                Rmean[iop,iT,:], Rstd[iop,iT,:], Rcovmat[iop,iT,:,:] = self.resampling([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0) / ( np.mean(K_resamples[:,iop]) if rescale else 1), res_axis_list=[0,0], time_axis=-1, resamples_available=R_resamples[:,iop,iT,:] )
+                Rmean[iop,iT,:], Rstd[iop,iT,:], Rcovmat[iop,iT,:,:] = self.resampling([p3_corr[iop,:,iT,:], p2_corr], lambda x,y: ratio_formula(x,y, T=T, gauge_axis=0) / ( Klist[iop].mean if self.moments else 1), res_axis_list=[0,0], time_axis=-1, resamples_available=R_resamples[:,iop,iT,:] )
 
 
 
@@ -1338,7 +1367,7 @@ class moments_toolkit(bulding_block):
         return Rmean, Rstd, Rcovmat
 
     #function used to to compute the sum of ratios S #TO DO: add rescale by K here
-    def get_S(self, tskip: int, rescale:bool=False) -> tuple[np.ndarray, np.ndarray]:
+    def get_S(self, tskip: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Method used to obtain, using a jackknife analysis, the sum of ratios given by S(T,tskip) = sum_(t=tskip)^(T-tskip) R(T,t)
 
@@ -1366,8 +1395,10 @@ class moments_toolkit(bulding_block):
         S_resamples = self.get_S_resamples(tskip=tskip, force_computation=False) #shape = (Nres, nop, nT)
 
         #we get the resamples for the kinematic factor if we have them, otherwise we just take the mean value and repeat it for each resample
-        K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
+        #K_resamples = self.get_K_resamples(force_computation=False) if self.resample_fit else  np.swapaxes( np.array( [[K.mean for _ in range(self.Nres)] for K in self.get_Klist() ]) , 0, 1) #shape = (Nres, Nop)
 
+        #we take the list with the kinematic factors
+        Klist = self.get_Klist(force_computation=False,force_fit=False)
 
         # #we loop over all the T values we have
         # for iT,T in enumerate(self.chosen_T_list):
@@ -1381,7 +1412,7 @@ class moments_toolkit(bulding_block):
             for iT,T in enumerate(self.chosen_T_list):
 
                 #we compute S using the jackknife algorithm
-                Smean[iop,iT], Sstd[iop,iT], _ = self.resampling( [p3_corr[iop,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=0), T, tskip, time_axis=-1) / ( np.mean(K_resamples[:,iop]) if rescale else 1) , res_axis_list=[0,0], time_axis=None, resamples_available=S_resamples[:,iop,iT]  / (K_resamples[:,iop] if rescale else 1) )
+                Smean[iop,iT], Sstd[iop,iT], _ = self.resampling( [p3_corr[iop,:,iT,:], p2_corr], lambda x,y: sum_ratios_formula( ratio_formula(x,y, T=T, gauge_axis=0), T, tskip, time_axis=-1) / ( Klist[iop].mean if self.moments else 1) , res_axis_list=[0,0], time_axis=None, resamples_available=S_resamples[:,iop,iT] )# / (K_resamples[:,iop] if rescale else 1) )
 
 
 
@@ -1504,30 +1535,31 @@ class moments_toolkit(bulding_block):
                         #we compute the matrix elements using the fit model average (we pad with 0 +- 0 if the fit was not possible)
                         self.M_from_S_fit[iop,iTstart] = gv.gvar(fit_state.model_average()["est"]["m"],fit_state.model_average()["err"]["m"]) if len(fit_state.model_average())>0 else gv.gvar(0,0)
 
-                        #we now construct the moments in two different ways depending whether the resamples of the kinematic factor are available or not
+                        # #we now construct the moments in two different ways depending whether the resamples of the kinematic factor are available or not
 
-                        #case 1, we don't have the resmaples for the kineamtic factor but only their mean value and std for each operator
-                        if self.resample_fit == False:
-                            self.x_from_S_fit[iop,iTstart] = self.M_from_S_fit[iop,iTstart] / K_normalizations[iop]
+                        # #case 1, we don't have the resmaples for the kineamtic factor but only their mean value and std for each operator
+                        # if self.resample_fit == False:
+                        #     self.x_from_S_fit[iop,iTstart] = self.M_from_S_fit[iop,iTstart] / K_normalizations[iop]
                         
-                        #case 2, we have the resmaples for the kinematic factors
-                        elif self.resample_fit == True:
+                        # #case 2, we have the resmaples for the kinematic factors
+                        # elif self.resample_fit == True:
 
-                            #we first take the resamples of the matrix elements
-                            M_from_S_resamples = fit_state.model_average()["res"]["m"] if len(fit_state.model_average())>0 else np.zeros(shape=(self.Nres,), dtype=float) #shape = (Nres,)
+                        #     #we first take the resamples of the matrix elements
+                        #     M_from_S_resamples = fit_state.model_average()["res"]["m"] if len(fit_state.model_average())>0 else np.zeros(shape=(self.Nres,), dtype=float) #shape = (Nres,)
 
-                            #we compute the resamples of the moments
-                            moment_resamples = M_from_S_resamples / K_normalizations[:,iop] #shape = (Nres,)
+                        #     #we compute the resamples of the moments
+                        #     moment_resamples = M_from_S_resamples / K_normalizations[:,iop] #shape = (Nres,)
 
-                            #we compute the mean and std of the moments (the bias is not accounter here as it is in the resampling function)
-                            moment = np.mean(moment_resamples)
-                            moment_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std(moment_resamples)
+                        #     #we compute the mean and std of the moments (the bias is not accounter here as it is in the resampling function)
+                        #     moment = np.mean(moment_resamples)
+                        #     moment_std = (np.sqrt(self.Nres-1) if self.resampling_type=="jackknife" else 1.0) * np.std(moment_resamples)
 
-                            #we put them into a gvar variable and store it into the array
-                            self.x_from_S_fit[iop,iTstart] = gv.gvar(moment,moment_std)
+                        #     #we put them into a gvar variable and store it into the array
+                        #     self.x_from_S_fit[iop,iTstart] = gv.gvar(moment,moment_std)
 
             #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
-            return np.einsum("ij,i->ij", self.x_from_S_fit if moments==True else self.M_from_S_fit, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
+            #return np.einsum("ij,i->ij", self.x_from_S_fit if moments==True else self.M_from_S_fit, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
+            return np.einsum("ij,i->ij", self.M_from_S_fit, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
 
         #finite differences calculation
         elif method=="finite differences":
@@ -1577,7 +1609,7 @@ class moments_toolkit(bulding_block):
                         self.x_from_S_diff[iop] = gv.gvar(moment,moment_std)
 
             #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
-            return  np.einsum("ij,i->ij", self.x_from_S_diff if moments==True else self.M_from_S_diff, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
+            return  np.einsum("ij,i->ij", self.x_from_S_diff if self.moments==True else self.M_from_S_diff, self.get_Zlist() if renormalize==True else np.ones(shape=(self.Nop)) )
 
         #raise an error if something else is specified
         else:
@@ -1635,7 +1667,8 @@ class moments_toolkit(bulding_block):
                 
 
         #after computing it we return the matrix element (or moment) array, and we renormalize it if the user asks for it
-        return ( self.x_from_R if moments==True else self.M_from_R ) * ( self.get_Zlist() if renormalize==True else 1.0 )
+        #return ( self.x_from_R if moments==True else self.M_from_R ) * ( self.get_Zlist() if renormalize==True else 1.0 )
+        return self.M_from_R * ( self.get_Zlist() if renormalize==True else 1.0 )
     
     #function used to extract all the results using the data analysis routines available in the class
     def extract_result(self, verbose:bool=False) -> list[moments_result]: 
@@ -1717,8 +1750,7 @@ class moments_toolkit(bulding_block):
 
     #function used to plot the ratio R for all the selected operators #TO DO: add input description for all inputs
     def plot_R(self, show:bool=True, save:bool=False, figname:str='plotR',
-               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8, fig_ax_dict:dict[tuple[Figure, Any]]=None, linestyle:str="dotted",
-               rescale=False) -> dict[tuple[Figure, Any]]:
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8, fig_ax_dict:dict[tuple[Figure, Any]]=None, linestyle:str="dotted") -> dict[tuple[Figure, Any]]:
         """
         Input:
             - show: bool, if True the plot with R is shown
@@ -1740,10 +1772,10 @@ class moments_toolkit(bulding_block):
 
         
         #we first fetch R using the dedicate method
-        Rmean, Rstd, Rcovmat = self.get_R(rescale=rescale)
+        Rmean, Rstd, Rcovmat = self.get_R()
 
         #we obtain the list with all the kinematic factors
-        K_list = self.get_Klist()
+        #K_list = self.get_Klist()
 
         #we instantiate the output dict where we will store all the figure and axes if it is not given as input
         fig_ax_dict:dict[tuple[Figure, Any]]  = fig_ax_dict if fig_ax_dict is not None else {}
@@ -1811,8 +1843,7 @@ class moments_toolkit(bulding_block):
     
     #function used to plot S #TO DO: add comments about input - adjust input - adjust color palette
     def plot_S(self, tskip:int, show:bool=True, save:bool=True, figname:str='plotS', fig_ax:tuple[Figure, Any]=None,
-               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8,
-               rescale:bool=False) -> tuple[Figure, Any]:
+               figsize:tuple[int,int]=(20,8), fontsize_title:int=24, fontsize_x:int=18, fontsize_y:int=18, markersize:int=8) -> tuple[Figure, Any]:
         """
         Input:
             - tskip = tau_skip = gap in time when performing the sum of ratios
@@ -1824,10 +1855,10 @@ class moments_toolkit(bulding_block):
         """
 
         #first thing first we compute S with the fiven t skip 
-        Smean, Sstd = self.get_S(tskip=tskip,rescale=rescale)  #shapes =  (Nop, NT), (Nop, NT)
+        Smean, Sstd = self.get_S(tskip=tskip)  #shapes =  (Nop, NT), (Nop, NT)
 
         #we obtain the list of the kinematic factors
-        K_list = self.get_Klist() #shape = (Nop,)
+        #K_list = self.get_Klist() #shape = (Nop,)
 
         ## we then remove from the plot all the value of S that are 0 (because the given T is too small compared ti tau skip)
 
@@ -1865,7 +1896,8 @@ class moments_toolkit(bulding_block):
         fillstyle = self.fillstyle_list[0] if self.n_P_vec@self.n_P_vec==0 else self.fillstyle_list[1]
 
         #we loop over the operators
-        for iop, (op, kin) in enumerate(zip(self.selected_op, K_list)):
+        #for iop, (op, kin) in enumerate(zip(self.selected_op, K_list)):
+        for iop, op in enumerate(self.selected_op):
 
             #depending on the X structure of the operator we decide in which of the three plots to put it
             plot_index = self.X_list.index(op.X)
@@ -2413,8 +2445,10 @@ class moments_toolkit(bulding_block):
                     #we plot the ratios with their std
                     plt.errorbar(
                         taus - T/2,
-                        Rmean[iop][iT][1:T] / ( norm_K if norm_K!=0 else 1.0),
-                        Rstd[iop][iT][1:T] / ( np.abs(norm_K) if norm_K!=0 else 1.0),
+                        #Rmean[iop][iT][1:T] / ( norm_K if norm_K!=0 else 1.0),
+                        #Rstd[iop][iT][1:T] / ( np.abs(norm_K) if norm_K!=0 else 1.0),
+                        Rmean[iop][iT][1:T],
+                        Rstd[iop][iT][1:T],
                         fmt = '',
                         linewidth=0,
                         elinewidth=1,
@@ -2454,13 +2488,16 @@ class moments_toolkit(bulding_block):
                         ordinate_low = np.array( [ordinate.mean - ordinate.sdev for ordinate in fit_ordinate] )
 
                         #we plot the mean value of the fit result as a continuous line
-                        plt.plot(cont_taus-T/2, ordinate_mean / ( norm_K if norm_K!=0 else 1.0), color = self.colors_Tdict[T])
+                        #plt.plot(cont_taus-T/2, ordinate_mean / ( norm_K if norm_K!=0 else 1.0), color = self.colors_Tdict[T])
+                        plt.plot(cont_taus-T/2, ordinate_mean, color = self.colors_Tdict[T])
                         
                         #we plot the +-1sigma region around the mean value of the fit result
                         plt.fill_between(
                             cont_taus-T/2, 
-                            ordinate_high / ( norm_K if norm_K!=0 else 1.0),
-                            ordinate_low / ( norm_K if norm_K!=0 else 1.0),
+                            #ordinate_high / ( norm_K if norm_K!=0 else 1.0),
+                            #ordinate_low / ( norm_K if norm_K!=0 else 1.0),
+                            ordinate_high ,
+                            ordinate_low ,
                             color = self.colors_Tdict[T],
                             alpha = 0.2
                             )
