@@ -166,6 +166,35 @@ class moments_toolkit(bulding_block):
         ("T", (8,2) ) : Z_fine_T_8_2
     }
 
+    ## Moments Reference Results from the paper (https://doi.org/10.1103/PhysRevD.109.074508)
+
+    #vector - coarse
+    x_V_coarse : gv._gvarcore.GVar  = gv.gvar(0.192, 0.008)
+    x_V_coarse_systematic : float = 0.020
+    #vector - fine
+    x_V_fine : gv._gvarcore.GVar  = gv.gvar(0.203, 0.009)
+    x_V_fine_systematic : float = 0.012
+    #vector - continuum
+    x_V_continuum : gv._gvarcore.GVar  = gv.gvar(0.200, 0.017)
+
+    #axial - coarse
+    x_A_coarse : gv._gvarcore.GVar  = gv.gvar(0.212, 0.005)
+    x_A_coarse_systematic : float = 0.021
+    #axial - fine
+    x_A_fine : gv._gvarcore.GVar  = gv.gvar(0.213, 0.009)
+    x_A_fine_systematic : float = 0.007
+    #axial - continuum
+    x_A_continuum : gv._gvarcore.GVar  = gv.gvar(0.213, 0.016)
+
+    #transversity - coarse
+    x_T_coarse : gv._gvarcore.GVar  = gv.gvar(0.235, 0.006)
+    x_T_coarse_systematic : float = 0.025
+    #transversity - fine
+    x_T_fine : gv._gvarcore.GVar  = gv.gvar(0.210, 0.010)
+    x_T_fine_systematic : float = 0.018
+    #transversity - continuum
+    x_T_continuum : gv._gvarcore.GVar  = gv.gvar(0.219, 0.021)
+
     ## Additional shared variables
 
     #dictionary with the colors used in the plots (one color for each value of the source sink separation T)
@@ -624,7 +653,6 @@ class moments_toolkit(bulding_block):
         self.R_resamples = None #shape = (Nres, Nop, NT, maxT+1)
         self.S_resamples = None #shape = (Nres, Nop, NT)
 
-
     #method used to select the default value of the isospin used by default by the other methods
     def set_isospin(self, isospin:str, verbose:bool=False) -> None:
         """
@@ -743,6 +771,9 @@ class moments_toolkit(bulding_block):
 
         #we re-initialize all the variables depending on the list selected_op
         self.re_initialize_operator_variables()
+
+        #we set the class to show results in terms of matrix elements again (because it may be that the newly added operator has a 0 kinematic factor)
+        self.moments = False
         
         #we return None
         return None
@@ -2680,11 +2711,12 @@ class moments_toolkit(bulding_block):
             print("\nThe one derivate operators used in the paper have been selected for the analysis.\n")
     
     #function used to deselect all the operators having zero kinematical factor
-    def remove_zeroK_operators(self, verbose:bool=False) -> None:
+    def remove_zeroK_operators(self, moments:bool=True, verbose:bool=False) -> None:
         """
         Function used to remove from the analysis all the operators having a zero kinematical factor.
         
         Input:
+            - moments: bool, if True once the zero K operators are removed the class is automatically set to show results in terms of moments
             - verbose: bool, if True info are printed to screen after the function is called
             
         Output:
@@ -2701,8 +2733,14 @@ class moments_toolkit(bulding_block):
         for op in eliminate_op:
             self.deselect_operator(op)
 
+        #info print
         if verbose:
             print("\nDeselected all the operators with kinematic factor equal to 0. The analysis can now be carried on assuming a non zero kinematical factor for each operator.\n")
+
+        #if moments is set to True we also set the analysis to show results in terms of moments
+        if moments:
+            self.show_moments(True, verbose=verbose)
+
 
     #function used to analyze the irrep appearing in a given tensor product decomposition (useful when choosing operators)
     def decomposition_analysis(self, X: str, n_der: int) -> None:
