@@ -195,6 +195,26 @@ class moments_toolkit(bulding_block):
     #transversity - continuum
     x_T_continuum : gv._gvarcore.GVar  = gv.gvar(0.219, 0.021)
 
+    #we put the values of the moments into a reference dictionary (that can be used for comparison later) - key:value = (dirac struct, latticeT):gvar variable with the moment
+    reference_moments_dict = {
+        ("V", 48) : x_V_coarse,
+        ("A", 48) : x_A_coarse,
+        ("T", 48) : x_T_coarse,
+        ("V", 64) : x_V_fine,
+        ("A", 64) : x_A_fine,
+        ("T", 64) : x_T_fine
+    }
+
+    #we do the same thing with the related systematics - key:value = (dirac struct, latticeT):float value of the systematic uncertainty
+    reference_systematics_dict = {
+        ("V", 48) : x_V_coarse_systematic,
+        ("A", 48) : x_A_coarse_systematic,
+        ("T", 48) : x_T_coarse_systematic,
+        ("V", 64) : x_V_fine_systematic,
+        ("A", 64) : x_A_fine_systematic,
+        ("T", 64) : x_T_fine_systematic
+    }
+
     ## Additional shared variables
 
     #dictionary with the colors used in the plots (one color for each value of the source sink separation T)
