@@ -272,6 +272,23 @@ class Operator:
         #we return the division of the operator by the coefficient
         return new_op
     
+    #we overload the minus sign in front of an operator
+    def __neg__(self) -> Self:
+        """
+        Overload of the minus in front of an operator
+        """
+
+        #we instantiate the new operator (only cgmat, K and O change)
+        new_op = Operator(cgmat=self.cgmat * (-1),
+                          id = self.id,
+                          X = self.X,
+                          irrep = self.irrep,
+                          block = self.block,
+                          index_block = self.index_block,
+                          )
+        
+        #we return the operator with its matrix of cg coeffients with a minus sign in front
+        return new_op
     
     #function used to evaluate the kinematic factor of the operator
     def evaluate_K(self, m_value:float, E_value:float, p1_value:float ,p2_value:float, p3_value:float) -> complex:
