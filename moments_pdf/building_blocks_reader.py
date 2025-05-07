@@ -112,6 +112,7 @@ class bulding_block:
                  p3_folder:str, p2_folder: str,
                  tag_3p:str='bb', hadron:str='proton_3', tag_2p:str='hspectrum',
                  insertion_momentum:str='qx0_qy0_qz0', momentum:str='PX0_PY0_PZ0',
+                 smearing_index:int = 0,
                  fast_data_folder:str='fast_data', force_reading:bool=False,
                  T_no_read_list:list[int]=[], skip3p:bool=False, 
                  maxConf:int|None=None, verbose:bool=False) -> None:
@@ -127,6 +128,7 @@ class bulding_block:
             - insertion_momentum: str, the momentum of the operator inserted in the 3 point correlator
             - momentum: str, the momentum of the hadron
             - tag_2p: tag of the 2-points correlator
+            - smearing_index: int, index of the chose smearing in the list of available ones, default is 0 (i.e. the first smaring type is chosen)
             - fast_data_folder: str, the path to the folder where the dataset gets saved in a reduced format suitable for fast access
             - force_reading: bool, if True the correlators will be read from the complete dataset even if a fast access dataset is available
             - T_no_read_list: list of the times T (hence 3 point correlators) for which the reading can be avoided
@@ -213,33 +215,52 @@ class bulding_block:
             #id of the given configuration (this is equal to firstconf)
             cfgid = list(h5f.keys())[0]
 
-            #we store all the keys of the nested dictionaries structure of the h5 file
+            ## We now do three things
+            #  1) we store all the keys of the nested dictionaries structure of the h5 file
+            #  2) we choose a default values for the different keys we want to be specified at reading time (for the other keys instead we loop over and read them)
+            #  3) we raise an error if the chosen key is not available
+
+            #tag of 3p corr
             self.tag_list = list(h5f[cfgid])
-            self.smearing_list = list(h5f[cfgid][self.tag_list[0]])
-            self.mass_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]])
-            self.hadron_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]])
-            self.qcontent_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]])
-            self.momentum_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]])
-            self.displacement_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]])
-            self.dstructure_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]])
-            self.insmomementum_list = list(h5f[cfgid][self.tag_list[0]][self.smearing_list[0]][self.mass_list[0]][self.hadron_list[0]][self.qcontent_list[0]][self.momentum_list[0]][self.displacement_list[0]][self.dstructure_list[0]])
+            self.tag_3p = tag_3p if tag_3p in self.tag_list else None
+            if self.tag_3p is None: raise ValueError(f"The chosen value for tag_3p is not allowed, please choose one value from the following list: {self.tag_list}")
+
+            #smearing both for 3p and 2p corr
+            self.smearing_list = list(h5f[cfgid][self.tag_3p])
+            self.smearing = self.smearing_list[smearing_index]
+
+            #quark mass, same for 3p and 2p
+            self.mass_list = list(h5f[cfgid][self.tag_3p][self.smearing])
+            self.mass = self.mass_list[0]
+            
+            #hadron, same for 2p and 3p
+            self.hadron_list = list(h5f[cfgid][self.tag_3p][self.smearing][self.mass])
+            self.hadron = hadron if hadron in self.hadron_list else None
+            if self.hadron is None: raise ValueError(f"The chosen value for hadron is not allowed, please choose one value from the following list: {self.hadron_list}")
+
+            #quark content
+            self.qcontent_list = list(h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron])
+
+            #momentum
+            self.momentum_list = list(h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][self.qcontent_list[0]])
+            self.momentum = [mom for mom in self.momentum_list if mom.startswith(momentum)][0] if len([mom for mom in self.momentum_list if mom.startswith(momentum)])>0 else None
+            if self.momentum is None: raise ValueError(f"The chosen value for momentum is not allowed, please choose one value from the following list: {self.momentum_list}")
+
+            #displacement
+            self.displacement_list = list(h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][self.qcontent_list[0]][self.momentum])
+
+            #diract structure
+            self.dstructure_list = list(h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][self.qcontent_list[0]][self.momentum][self.displacement_list[0]])
+
+            #insertion momentum
+            self.insmomentum_list = list(h5f[cfgid][self.tag_3p][self.smearing][self.mass][self.hadron][self.qcontent_list[0]][self.momentum][self.displacement_list[0]][self.dstructure_list[0]])
+            self.insmomentum = insertion_momentum if insertion_momentum in self.insmomentum_list else None
+            if self.insmomentum is None: raise ValueError(f"The chosen value for insertion_momentum is not allowed, please choose one value from the following list: {self.insmomentum_list}")
 
 
-        #we update the momentum list by stripping the T from the string
+        #we update the momentum list and the momentum by stripping the T from the string
         self.momentum_list = [mom.split('_T')[0] for mom in self.momentum_list]
-
-        #we choose a default values for the different keys we want to be specified at reading time (for the other keys instead we loop over and read them)
-        self.tag_3p = tag_3p if tag_3p in self.tag_list else None
-        self.smearing = self.smearing_list[0]
-        self.mass = self.mass_list[0]
-        self.hadron = hadron if hadron in self.hadron_list else None
-        self.momentum = [mom for mom in self.momentum_list if mom.startswith(momentum)][0] if len([mom for mom in self.momentum_list if mom.startswith(momentum)])>0 else None  #we take the 0 forward momentum as default
-        self.insmomentum = insertion_momentum if insertion_momentum in self.insmomementum_list else None #same for the insertion momentum (this is the only choice available for every other key choice)
-
-        #we perform an input control on the input parameter and raise an error if not everything is ok
-        if None in [self.tag_3p,self.hadron, self.momentum, self.insmomentum]:
-            error_index = [self.tag_3p,self.hadron, self.momentum, self.insmomentum].index(None)
-            raise ValueError(f"The chosen value for {['tag_3p','hadron','momentum','insertion_momentum'][error_index]} is not allowed, please chose one value from the following list: {[self.tag_list,self.hadron_list,self.momentum_list,self.insmomementum_list][error_index]}")
+        self.momentum = self.momentum.split('_T')[0]
 
         #we store the dimensionality of the dimension we have not fixed and that we want to read
         self.nquarks = len(self.qcontent_list)
@@ -265,16 +286,14 @@ class bulding_block:
 
             #we store the list of available tags
             self.tag2p_list = list(h5f[cfgid])
+            self.tag_2p = tag_2p if tag_2p in self.tag2p_list else None
+            if self.tag_2p is None: raise ValueError(f"The chosen value for tag_2p is not allowed, please chose a value from the following list: {self.tag2p_list}")
+
+            #for the momentum we choose the same as the 3p correlator
+            self.momentum_2p = self.momentum
 
             #we store the time extent of the 2 point correlator we have
-            self.latticeT = len(h5f[cfgid][self.tag2p_list[0]][self.smearing][self.mass][self.hadron][self.momentum]) #momentum is in the right format to read the 2 point correlator
-        
-        #we store the tag and the momentum used for the two point correlators
-        self.tag_2p = tag_2p if tag_2p in self.tag2p_list else None
-        self.momentum_2p = self.momentum
-
-        #we perform an input check on the chosen 2point tag and raise an error if not everything is ok
-        if self.tag_2p is None: raise ValueError(f"The chosen value for tag_2p is not allowed, please chose a value from the following list: {self.tag2p_list}")
+            self.latticeT = len(h5f[cfgid][self.tag_2p][self.smearing][self.mass][self.hadron][self.momentum_2p]) #momentum is in the right format to read the 2 point correlator
 
 
         ## We perform an extra check on the ids of the configuration to be sure that they are the same for the 2 point and the 3 point correlators
@@ -475,7 +494,7 @@ class bulding_block:
         print(f"momentum_list: {self.momentum_list}")
         print(f"displacement_list: {self.displacement_list}")
         print(f"dstructure_list: {self.dstructure_list}")
-        print(f"insmomementum_list: {self.insmomementum_list}")
+        print(f"insmomentum_list: {self.insmomentum_list}")
         print(f"tag2p_list: {self.tag2p_list}")
 
         #additional warning message for the user
@@ -504,7 +523,7 @@ class bulding_block:
 
         #auxiliary lists
         keys = [tag_3p,smearing,mass,hadron,momentum,insmomentum,tag2p]
-        keys_list = [self.tag_list, self.smearing_list, self.mass_list, self.hadron_list, self.momentum_list, self.insmomementum_list,self.tag2p_list]
+        keys_list = [self.tag_list, self.smearing_list, self.mass_list, self.hadron_list, self.momentum_list, self.insmomentum_list,self.tag2p_list]
         keys_name = ['tag_3p','smearing','mass','hadron','momentum','insmomentum', 'tag_2p']
 
         #flag used to signal an update in the keys
