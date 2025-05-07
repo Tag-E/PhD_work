@@ -749,6 +749,9 @@ class moments_toolkit(bulding_block):
         #we re-initialize all the variables depending on the list selected_op
         self.re_initialize_operator_variables()
 
+        #we set the class to show results in terms of matrix elements again (because it may be that the newly added operator has a 0 kinematic factor)
+        self.moments = False
+
     #function used to append an operator (not necessarily one in the catalogue) to the list of selected operators
     def append_operator(self, new_operator: Operator) -> None:
         """
@@ -3105,13 +3108,14 @@ def make_fitplot_2pcorr(fit_result:CA.FitResult, correlator:gv._gvarcore.GVar ,a
 
 
 #auxiliary function used to average values of the moments over various values of T
-def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.0) -> tuple[gv._gvarcore.GVar, int]:
+def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.0, T_index_to_previous_list:bool=True) -> tuple[gv._gvarcore.GVar, int]:
     """
     Function used to average the moments over different source sink separations, as in eq 14 of the reference paper
     
     Input:
         - in_array: 1D np array of gvar variables, shape = (Ntimes,), either moments or matrix elements that needs to be averaged
         - chi2: value of the chi2 used as treshold for the average determination
+        - T_index_to_previous_list: bool, by default is True and the given index refers to the list with the padding still included
     
     Output:
         - average: gvar variable with mean and std of the average moment (or matrix element)
@@ -3120,15 +3124,15 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
     #in order to handle the case with only one operator selected we remove 1 dimensional axis (the op axis in such a case) by squeezing the array
     in_array = np.squeeze(in_array)
 
+    #since we are interested also on the original indices of the non zero elements we store them before removing the zero values
+    non_zero_T_indexList = [ i for i,e in enumerate(in_array) if np.abs(e.mean)>0 ]
+
     #first we remove the padding
     in_array = np.asarray( [ e for e in in_array if np.abs(e.mean)>0 ] )
 
-    #since we are interested also on the original indices of the non zero elements we store them
-    non_zero_T_indexList = [ i for i,e in enumerate(in_array) if np.abs(e.mean)>0 ]
-
     #if there is only one non zero element we just return it
     if len(in_array)==1: 
-        return in_array[0], non_zero_T_indexList[0]
+        return in_array[0], non_zero_T_indexList[0] if T_index_to_previous_list==True else 0
 
     #then we grep the mean and std from the gvar variables
     mean_array = np.asarray( [ e.mean for e in in_array ] )
@@ -3145,10 +3149,10 @@ def average_moments_over_T(in_array:np.ndarray[gv._gvarcore.GVar], chi2:float=1.
 
         #if the chi2 is smaller than the treshold then we return the array
         if np.sum( ((mean_array[iTmin:] - avg.mean)/std_array[iTmin:])**2 ) / len(in_array[iTmin:]) < chi2: 
-            return avg, non_zero_T_indexList[iTmin]
+            return avg, non_zero_T_indexList[iTmin] if T_index_to_previous_list==True else iTmin
 
     #if the chi2 is never smaller than the treshold we just return the last value
-    return avg, non_zero_T_indexList[iTmin]
+    return avg, non_zero_T_indexList[iTmin] if T_index_to_previous_list==True else iTmin
 
 
 #auxiliary function used to prepare abscissa and ordinate for the ratio fit
