@@ -62,6 +62,7 @@ from utilities import plateau_search_symm #function used to search for the plate
 import correlatoranalyser as CA #to perform proper fits (Marcel's library: https://github.com/Marcel-Rodekamp/CorrelatorAnalyser)
 from moments_result import moments_result #dataclass used to store the information related to the results of the moments extracted from the data analysis
 from moments_operator import decomposition_analysis #to analyze the irrep appearing in a tensor product decomposition
+from moments_result import dict_from_results_list, moment_final_result, systematic_final_result #to construct the combined version of all the results
 
 
 
@@ -1441,7 +1442,7 @@ class moments_toolkit(bulding_block):
         #we return S
         return Smean, Sstd
 
-    #function used to extract the matrix elements from the summed ratios
+    #function used to extract the matrix elements from the summed ratios # TO DO: make the scheme option class wise (check for results re-initialization if scheme change) (or remove scheme option)
     def get_M_from_S(self, method:str="finite differences", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], scheme:str='forward', renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
@@ -3238,7 +3239,127 @@ def weights_from_fitstate(fitstate:CA.FitState) -> np.ndarray:
     #we normalize the weight and we return them
     return weights/np.sum(weights)
 
+#function used to print the results (moments + stat uncertainty + sys uncertainty) in a pretty way
+def result_to_str(moment_gvar:gv._gvarcore.GVar, moment_sys:float) -> str:
+    """
+    Function used to produce a pretty printing for the final results of the given moment,
+    given their mean value and their statistical and systematic uncertainties.
+    
+    Input:
+        - moment_gvar: gvar variable with the mean value and the statistical uncertainty
+        - moment_sys: float, the systematic uncertainty of the moment
+    
+    Output:
+        - result: str, the string with the pretty printing of the moment final result (the format is mean(stat)(sys) )
+    """
 
+    #we convert the mean value + statistical uncertainty to a string
+    result_with_statistical = str(moment_gvar)
+
+    #we do the same thing for mean value + systematic uncertainty
+    result_with_systematic = str( gv.gvar(float(str(moment_gvar).split('(')[0]) ,moment_sys ) )
+
+    #we then check which one between the systematic and the statistical uncertinties is bigger by computing the digits difference between rounded mean values
+    digit_difference = len(result_with_statistical.split('(')[0]) - len(result_with_systematic.split('(')[0]) 
+
+    #depending on the digit difference we trat systematic and statistical uncertainties in a different way
+
+    #case in which the systematic is one digit smaller (i.e. the first non zero digit appears one decimal position later w.r.t the statistical uncertainty)
+    if digit_difference < 0:
+
+        #we take the mean value in its most rounded version
+        value = result_with_statistical.split('(')[0]
+
+        #and we take directly the statistical uncertainty
+        sig_stat = '(' + result_with_statistical.split('(')[1]
+
+        #depending how much more smaller the systematic is we construct it different ways
+
+        #for just one digit difference we take only the first digit of the systematic
+        if digit_difference == -1:
+            sig_sys = '(0' + result_with_systematic.split('(')[1][0] + ')'
+
+        #for bigger differences we take no digits
+        else:
+            sig_sys = '(00)'
+
+    #case in which the statistical sigma is one digit smaller
+    elif digit_difference > 0:
+
+        #we take the mean value in its most rounded version
+        value = result_with_systematic.split('(')[0]
+
+        #and we take directly the systematic uncertainty
+        sig_sys = '(' + result_with_systematic.split('(')[1]
+
+        #depending how much more smaller the statistical sigma is we construct it different ways
+
+        #for just one digit difference we take only the first digit of the stat sygma
+        if digit_difference == 1:
+            sig_stat = '(0' + result_with_statistical.split('(')[1][0] + ')'
+
+        #for bigger differences we take no digits
+        else:
+            sig_stat = '(00)'
+
+    #case in which the two uncertainties are of the same order of magnitude
+    else:
+        #here eveyrthing has already the correct amount of digit, so we just read them
+        value = result_with_statistical.split('(')[0]
+        sig_stat = '(' + result_with_statistical.split('(')[1]
+        sig_sys = '(' + result_with_systematic.split('(')[1]
+
+    #we return the pretty printing 
+    return value+sig_stat+sig_sys
+
+#function used to check the results obtained from a list of datasets against their reference values
+def check_results(datasets_list:list[moments_toolkit], reference_moments:dict[gv._gvarcore.GVar], reference_systematics:dict[float]) -> None:
+    """
+    Function used to check the results (moments with their uncertainties) against the related reference values
+    
+    Input:
+        - datasets_list: list of moments_toolkit class instances from which the results can be extracted
+        - reference_moments: dictionary of gvar variables containing the reference values of the moments,
+                             the structure of the dict is key:value = (dirac structure, latticeT):moment value
+        - reference_systematics: dictionary containing the values of the systematic uncertainties,
+                                 the structure of the dict is key:value = (dirac structure, latticeT):uncertainty
+    
+    Output:
+        - None (the results are printed on the screen)                    
+    """
+
+    #we extract the result from each moments toolkit class instance and we put them in a list
+    result_list = [dataset_analizer.extract_result(verbose=False) for dataset_analizer in datasets_list]
+
+    #we collapse the list of lists with results into one single list containing all the results
+    total_result_list = []
+    for result in result_list:
+        total_result_list += result
+
+    #we translate the list with all the results into an equivalent dictionary (keys being (dirac structure, latticeT) )
+    total_result_dict = dict_from_results_list(total_result_list)
+
+    #from the above dictionary we obtain two dictionaries with the same keys, containing respectively moments and systematics
+    result_moments = moment_final_result(total_result_dict)
+    result_systematic = systematic_final_result(total_result_dict)
+
+    #headline print
+    print("\nResult Summary\n")
+    
+    #we now loop over all the keys and for each we do a comparison
+    for key in total_result_dict.keys():
+
+        #for each key in the dataset (pair of lattice size and dirac structure) we print the results
+        print(f"\n{key}\n")
+
+        #we print first our result
+        print(f"\t- result: {result_to_str(result_moments[key],result_systematic[key])}\n")
+
+        #we print then the reference value
+        print(f"\t- reference: {result_to_str(reference_moments[key], reference_systematics[key])}\n")
+
+        #we print the difference between the two, with the statistical sigma propagated and the systematic one added in quadrature
+        print(f"\t- difference: {result_to_str(result_moments[key]-reference_moments[key], np.sqrt(result_systematic[key]**2+reference_systematics[key]**2) )}\n")
 
 
 ######################## Auxiliary Classes ##########################
