@@ -87,7 +87,7 @@ opAnalyzer_coarse_2DER = moments_toolkit(p3fold, p2fold,
 p3fold = os.environ['mount_point_path_newdataset'] + "64c64/binned20250502_hmz370_BMW_3.5_64c64_ml-0.05294_mh-0.006_connected_himom/3PointCorrelation/"
 p2fold = os.environ['mount_point_path_newdataset'] + "64c64/binned20250502_hmz370_BMW_3.5_64c64_ml-0.05294_mh-0.006_connected_himom/2PointCorrelation/"
 
-# coarse lattice - P = -2
+# fine lattice - P = -2
 opAnalyzer_fine_2DER = moments_toolkit(p3fold, p2fold,
                                             skip3p=False, skipop=False,
                                             verbose=True,
