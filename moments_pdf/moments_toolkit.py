@@ -2765,7 +2765,6 @@ class moments_toolkit(bulding_block):
         if moments:
             self.show_moments(True, verbose=verbose)
 
-
     #function used to analyze the irrep appearing in a given tensor product decomposition (useful when choosing operators)
     def decomposition_analysis(self, X: str, n_der: int) -> None:
         """
@@ -2791,6 +2790,102 @@ class moments_toolkit(bulding_block):
 
         #we return
         return None
+
+    #function used to select the 2 derivative operators that I'm personally proposing to use
+    def focus_2der_operators(self, which:str="all", verbose:bool=False) -> None:
+        """
+        Function used to focus the analysis the two derivative operators that I'd like to study in the future
+        (i.e. the operators I'm proposing we should use for the study).
+        
+        Input:
+            - which: str, either "all", "vector", "axial", "tensor", or "plots", depending on which operators one wants to select
+                     (with "plots" denoting the operator appearing in Figures 2 and 3 of the reference paper 2401.05360v3)
+            - verbose: bool, if True info are printed to screen after the function is called
+            
+        Output:
+            - None (the operators are selected)
+        """
+
+        #we check that the number of derivatives is not bigger than the number of derivatives in the available dataset, in that case we raise an error
+        if self.max_n < 3:
+            raise ValueError(f"The current instance of the dataset class has been initialized with max_n={self.max_n}, but to select two derivatives operators at least max_n=3 is required.")
+
+        #we make an input check
+        if which not in ["all", "vector", "axial", "tensor", "plots"]:
+            raise ValueError(f"Invalid value for 'which' parameter. Expected one of ['all', 'vector', 'axial', 'tensor', 'plots'], got {which}.")
+
+        #we take the operators that I'd like to study
+
+        #vector - irrep (4,2)
+        opV1 = self.get_operator(113)
+        opV2 = self.get_operator(114)
+        opV3 = self.get_operator(115)
+        opV4 = self.get_operator(116)
+
+        #axial - irrep (4,3)
+        opA1 = self.get_operator(165)
+        opA2 = self.get_operator(166)
+        opA3 = self.get_operator(167)
+        opA4 = self.get_operator(168)
+
+        #tensor - irrep (3,2)
+        opT1 = self.get_operator(262) - self.get_operator(268)
+        opT2 = self.get_operator(263) - self.get_operator(269)
+        #opTextra = self.get_operator(264) + self.get_operator(270) <-- that is an operator that could also be used
+
+        #tensor - irrep (3,3)
+        opT3 = self.get_operator(271) + self.get_operator(274)
+        opT4 = self.get_operator(272) + self.get_operator(275)
+
+        #we empty the list of the selected operators
+        self.deselect_operator()
+
+        #according to the choice of the user we select different operators (we append them to the list of selected operators that we just emptied)
+        match which:
+
+            #if "all" we select all the operators
+            case "all":
+                self.append_operator(opV1)
+                self.append_operator(opV2)
+                self.append_operator(opV3)
+                self.append_operator(opV4)
+                self.append_operator(opA1)
+                self.append_operator(opA2)
+                self.append_operator(opA3)
+                self.append_operator(opA4)
+                self.append_operator(opT1)
+                self.append_operator(opT2)
+                self.append_operator(opT3)
+                self.append_operator(opT4)
+
+            #if "vector" we select only the vector operators
+            case "vector":
+                self.append_operator(opV1)
+                self.append_operator(opV2)
+                self.append_operator(opV3)
+                self.append_operator(opV4)
+
+            #if "axial" we select only the axial operators
+            case "axial":
+                self.append_operator(opA1)
+                self.append_operator(opA2)
+                self.append_operator(opA3)
+                self.append_operator(opA4)
+
+            #if "tensor" we select only the tensor operators
+            case "tensor":
+                self.append_operator(opT1)
+                self.append_operator(opT2)
+                self.append_operator(opT3)
+                self.append_operator(opT4)
+
+            #if "plots" we select the operators shown in the ratio and summed ratio plots (Figures 2 and 3 of the reference paper 2401.05360v3)
+            case "plots":
+                raise ValueError("Sorry for the inconvenience, but I haven't yet selected the operators for the plots. Please select 'all' or one of the other options.")
+
+        #info print
+        if verbose:
+            print("\nThe best suited two derivative operators have been selected for the analysis.\n")
 
     ## Work in Progress Methods (stuff still in development)
     #
