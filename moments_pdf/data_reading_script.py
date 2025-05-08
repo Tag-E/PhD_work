@@ -81,3 +81,31 @@ opAnalyzer_coarse_2DER = moments_toolkit(p3fold, p2fold,
                                             tag_2p='hspectrum',
                                             max_n=3
                                             )
+
+
+#paths for the coarse lattice needed for 2der operators
+p3fold = os.environ['mount_point_path_newdataset'] + "64c64/binned20250502_hmz370_BMW_3.5_64c64_ml-0.05294_mh-0.006_connected_himom/3PointCorrelation/"
+p2fold = os.environ['mount_point_path_newdataset'] + "64c64/binned20250502_hmz370_BMW_3.5_64c64_ml-0.05294_mh-0.006_connected_himom/2PointCorrelation/"
+
+# coarse lattice - P = -2
+opAnalyzer_fine_2DER = moments_toolkit(p3fold, p2fold,
+                                            skip3p=False, skipop=False,
+                                            verbose=True,
+                                            fast_data_folder = "fast_data_2DERdataset_fine_p2",
+                                            operator_folder= "operator_database",
+                                            momentum='PX2_PY2_PZ2',
+                                            insertion_momentum = 'qx0_qy0_qz0',
+                                            smearing_index=1,
+                                            tag_2p='hspectrum',
+                                            max_n=3
+                                            )
+
+#we put all the class instances in one dictionary such that they can be accesed later
+dataset_analyzer_dict = {
+    "coarse_P0" : opAnalyzer_coarse_P0,
+    "coarse_Px" : opAnalyzer_coarse_Px,
+    "fine_P0" : opAnalyzer_fine_P0,
+    "fine_Px" : opAnalyzer_fine_Px,
+    "coarse_2der" : opAnalyzer_coarse_2DER,
+    "fine_2der" : opAnalyzer_fine_2DER,
+}
