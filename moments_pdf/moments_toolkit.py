@@ -1442,7 +1442,7 @@ class moments_toolkit(bulding_block):
         return Smean, Sstd
 
     #function used to extract the matrix elements from the summed ratios
-    def get_M_from_S(self, method:str="finite differences", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], scheme:str='central', renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
+    def get_M_from_S(self, method:str="finite differences", tskip_list:list[int] = [1,2,3], delta_list:list[int]=[1,2,3], scheme:str='forward', renormalize:bool=False, force_computation:bool=False) -> np.ndarray[gv._gvarcore.GVar]:
         """
         Function performing the extraction of the matrix element from the summed ratios using one of the two possible methods (finite differences or fit)
 
@@ -1656,8 +1656,8 @@ class moments_toolkit(bulding_block):
         self.pre_do_computations(verbose=verbose)
 
         #we collect the moments from the summed ratio method
-        x_from_S = self.get_M_from_S(method="finite differences", scheme='central', renormalize=False)
-        x_from_S_ren = self.get_M_from_S(method="finite differences", scheme='central', renormalize=True)
+        x_from_S = self.get_M_from_S(method="finite differences", scheme='forward', renormalize=False)
+        x_from_S_ren = self.get_M_from_S(method="finite differences", scheme='forward', renormalize=True)
 
         #we collect the moments from the fit ratio method
         x_from_R = self.get_M_from_R(renormalize=False)
@@ -2165,7 +2165,7 @@ class moments_toolkit(bulding_block):
         dE_mean = self.get_dE().mean
 
         #the mean value of the matrix element as estimated from the summed ratios
-        mat_ele_list = [ average_moments_over_T( self.get_M_from_S(method="finite differences", scheme='central')[iop], chi2=10 )[0] for iop in range(self.Nop) ]
+        mat_ele_list = [ average_moments_over_T( self.get_M_from_S(method="finite differences", scheme='forward')[iop], chi2=10 )[0] for iop in range(self.Nop) ]
         mat_ele_mean_list = [ mat_ele.mean for mat_ele in mat_ele_list ]
 
 
@@ -2850,7 +2850,7 @@ def sum_ratios_formula(ratio: np.ndarray, T:int, tskip: int, time_axis:int=-1) -
 
 
 #function used to extract the matrix element as the slop of the summed ratio function
-def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2], delta_list:list[int] = [1,2,3], scheme:str="central") -> np.ndarray:
+def MatEle_from_slope_formula(p3_corr:np.ndarray, p2_corr:np.ndarray, T_list:list[int],  tskip_list:list[int] = [1,2], delta_list:list[int] = [1,2,3], scheme:str="forward") -> np.ndarray:
     """
     Function implementing the extraction of the matrix element as the slope of the summed ratios
     
