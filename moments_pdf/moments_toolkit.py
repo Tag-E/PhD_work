@@ -2829,13 +2829,13 @@ class moments_toolkit(bulding_block):
         opA4 = self.get_operator(168)
 
         #tensor - irrep (3,2)
-        opT1 = self.get_operator(262) - self.get_operator(268)
-        opT2 = self.get_operator(263) - self.get_operator(269)
-        #opTextra = self.get_operator(264) + self.get_operator(270) <-- that is an operator that could also be used
+        #opTextra1 = self.get_operator(262) - self.get_operator(268) # <--- these two cannnot be used since they are proportional to px - py (and we have px=py)
+        #opTextra2 = self.get_operator(263) - self.get_operator(269)
+        opT1 = self.get_operator(264) + self.get_operator(270) 
 
         #tensor - irrep (3,3)
-        opT3 = self.get_operator(271) + self.get_operator(274)
-        opT4 = self.get_operator(272) + self.get_operator(275)
+        opT2 = self.get_operator(271) + self.get_operator(274)
+        opT3 = self.get_operator(272) + self.get_operator(275)
 
         #we empty the list of the selected operators
         self.deselect_operator()
@@ -2856,7 +2856,6 @@ class moments_toolkit(bulding_block):
                 self.append_operator(opT1)
                 self.append_operator(opT2)
                 self.append_operator(opT3)
-                self.append_operator(opT4)
 
             #if "vector" we select only the vector operators
             case "vector":
@@ -2877,7 +2876,6 @@ class moments_toolkit(bulding_block):
                 self.append_operator(opT1)
                 self.append_operator(opT2)
                 self.append_operator(opT3)
-                self.append_operator(opT4)
 
             #if "plots" we select the operators shown in the ratio and summed ratio plots (Figures 2 and 3 of the reference paper 2401.05360v3)
             case "plots":
